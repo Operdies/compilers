@@ -11,6 +11,7 @@ typedef struct {
 int main(void) {
   pair testcases[] = {
       // simple test cases
+      {"h+*", "hhh", false},
       {"h+", "h", true},
       {"h+", "", false},
       {"h+", "hh", true},

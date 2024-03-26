@@ -69,8 +69,9 @@ dfa *mk_state(parse_context *ctx, char accept) {
 dfa *match_symbol(parse_context *ctx) {
   if (finished(ctx))
     return NULL;
-  char ch = take(ctx);
+  char ch = peek(ctx);
   if (ch == '\\') {
+    advance(ctx);
     if (finished(ctx))
       return NULL;
     return mk_state(ctx, take(ctx));
@@ -88,9 +89,11 @@ dfa *match_symbol(parse_context *ctx) {
     return NULL;
     break;
   case '.':
+    advance(ctx);
     return mk_state(ctx, DOT);
     break;
   default:
+    advance(ctx);
     return mk_state(ctx, ch);
     break;
   }
@@ -186,7 +189,7 @@ dfa *build_automaton(parse_context *ctx) {
     }
 
     char ch = peek(ctx);
-    if (ch == KLEENE || ch == PLUS || ch == OPTIONAL){
+    if (ch == KLEENE || ch == PLUS || ch == OPTIONAL) {
       advance(ctx);
       dfa *loop_start = mk_state(ctx, EPSILON);
       dfa *loop_end = mk_state(ctx, EPSILON);
