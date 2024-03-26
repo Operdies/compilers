@@ -1,14 +1,13 @@
 #include "regex.h"
-#include "arena.h"
 #include "macros.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 // chars 0-10 are not printable and can be freely used as special tokens
 #define EPSILON 2
 #define DOT 1
 #define KLEENE '*'
+#define PLUS '+'
 #define OPTIONAL '?'
 
 #define finished(ctx) ((ctx)->c >= (ctx)->n)
@@ -20,53 +19,18 @@
 
 /* EBNF for regex syntax:
  * regex    = {( group | paren | symbol | union )} postfix regex | ε
- * group    = "[" { literal } "]"
+ * group    = "[" {( symbol | range )} "]"
  * paren    = "(" regex ")"
- * postfix  = kleene | optional | ε
+ * postfix  = kleene | plus | optional | ε
  * kleene   = *
+ * plus     = +
  * optional = ?
  * union    = regex "|" regex
+ * range    = symbol "-" symbol
  * symbol   = char | escaped
  * char     = any char not in [ []().* ]
  * escaped  = "\" [ []().* ]
  */
-
-typedef struct dfa dfa;
-
-typedef struct {
-  size_t n;
-  size_t cap;
-  dfa **arr;
-} dfalist;
-
-struct dfa {
-  // Possible transitions from this state
-  dfalist lst;
-  // Character accepted by this state
-  char accept;
-  // Index into the source string
-  size_t index;
-  // The end state of this dfa
-  // If NULL, the state itself is considered the end state
-  dfa *end;
-  // The progress the last time this state was visited.
-  // This is used to detect loops when traversing the automaton
-  ssize_t progress;
-};
-
-typedef struct {
-  // cursor
-  size_t c;
-  // length
-  size_t n;
-  // text being parsed
-  const char *src;
-  // A description of the parse error when a matcher returns NULL
-  char err[50];
-  // A scratch area to allocate parse constructs
-  arena *a;
-} parse_context;
-typedef parse_context match_context;
 
 dfa *build_automaton(parse_context *ctx);
 bool mk_dfalist(parse_context *ctx, dfalist *lst, size_t cap) {
@@ -117,6 +81,8 @@ dfa *match_symbol(parse_context *ctx) {
   case '(':
   case ')':
   case '|':
+  case '+':
+  case '*':
   case '?':
     sprintf(ctx->err, "Illegal literal %c", ch);
     return NULL;
@@ -138,8 +104,35 @@ dfa *match_class(parse_context *ctx) {
 
   while (peek(ctx) != ']') {
     dfa *new = match_symbol(ctx);
+    if (new == NULL)
+      return NULL;
+
     add_transition(new, final);
     add_transition(class, new);
+
+    if (peek(ctx) == '-') {
+      advance(ctx);
+      dfa *end = match_symbol(ctx);
+      if (end == NULL)
+        return NULL;
+      if (new->accept == DOT) {
+        sprintf(ctx->err, "Range cannot start with DOT.");
+        return NULL;
+      }
+      if (end->accept == DOT) {
+        sprintf(ctx->err, "Range cannot end with DOT.");
+        return NULL;
+      }
+      if (end->accept <= new->accept) {
+        sprintf(ctx->err, "Range contains no values.");
+        return NULL;
+      }
+      for (char ch = new->accept + 1; ch <= end->accept; ch++) {
+        dfa *range = mk_state(ctx, ch);
+        add_transition(range, final);
+        add_transition(class, range);
+      }
+    }
   }
   return class;
 }
@@ -192,26 +185,21 @@ dfa *build_automaton(parse_context *ctx) {
       break;
     }
 
-    if (peek(ctx) == KLEENE) {
+    char ch = peek(ctx);
+    if (ch == KLEENE || ch == PLUS || ch == OPTIONAL){
       advance(ctx);
-      dfa *loop = mk_state(ctx, EPSILON);
-      dfa *loop_exit = mk_state(ctx, EPSILON);
-      dfa *loop_end = end_state(new);
-      new->end = loop;
-      add_transition(loop_end, loop);
-      add_transition(next, loop);
-      add_transition(loop, new);
-      add_transition(loop, loop_exit);
-      next = loop_exit;
-    } else if (peek(ctx) == OPTIONAL) {
-      advance(ctx);
-      dfa *new_end = mk_state(ctx, EPSILON);
-      dfa *end = end_state(new);
-      add_transition(next, new);
-      add_transition(next, new_end);
-      add_transition(end, new_end);
-      next = new_end;
-      new->end = next;
+      dfa *loop_start = mk_state(ctx, EPSILON);
+      dfa *loop_end = mk_state(ctx, EPSILON);
+      dfa *new_end = end_state(new);
+
+      add_transition(next, loop_start);
+      add_transition(loop_start, new);
+      add_transition(new_end, loop_end);
+      if (ch != OPTIONAL)
+        add_transition(new_end, loop_start);
+      if (ch != PLUS)
+        add_transition(loop_start, loop_end);
+      next = loop_end;
     } else {
       add_transition(next, new);
       next = end_state(new);
@@ -284,31 +272,53 @@ bool match_dfa(dfa *d, match_context *ctx) {
 }
 
 // Reset the progress of all nodes in the dfa
-void reset(dfa *d){
-  if (d){
+void reset(dfa *d) {
+  if (d) {
     d->progress = -1;
     for (size_t i = 0; i < d->lst.n; i++) {
       dfa *next = d->lst.arr[i];
-      if (next->progress == -1) continue;
+      if (next->progress == -1)
+        continue;
       reset(next);
     }
   }
 }
 
-bool matches(char *pattern, char *string) {
-  parse_context ctx = {
-      .n = strlen(pattern), .c = 0, .src = pattern, .a = mk_arena()};
-  dfa *d = build_automaton(&ctx);
-  if (!finished((&ctx))) {
-    d = NULL;
+void destroy_regex(regex *r) {
+  if (r)
+    destroy_arena(r->ctx.a);
+}
+
+regex *mk_regex(const char *pattern) {
+  regex *r = NULL;
+  if (pattern) {
+    arena *a = mk_arena();
+    r = arena_alloc(a, 1, sizeof(regex));
+    size_t len = strlen(pattern);
+    char *src = arena_alloc(a, len + 1, 1);
+    strcpy(src, pattern);
+    r->ctx = (parse_context){.n = len, .c = 0, .src = src, .a = a};
+    r->start = build_automaton(&r->ctx);
+    if (!finished(&r->ctx)) {
+      destroy_regex(r);
+      return NULL;
+    }
   }
-  if (d == NULL) {
-    fprintf(stderr, "Failed to construct automata: %s\n", ctx.err);
+  return r;
+}
+
+bool regex_match(regex *r, const char *string) {
+  match_context m = {.n = strlen(string), .c = 0, .src = string};
+  reset(r->start);
+  return match_dfa(r->start, &m);
+}
+
+bool matches(const char *pattern, const char *string) {
+  regex *r = mk_regex(pattern);
+  if (r == NULL) {
     return false;
   }
-  match_context m = {.n = strlen(string), .c = 0, .src = string};
-  reset(d);
-  bool result = match_dfa(d, &m);
-  destroy_arena(ctx.a);
+  bool result = regex_match(r, string);
+  destroy_regex(r);
   return result;
 }

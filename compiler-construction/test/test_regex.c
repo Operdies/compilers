@@ -11,6 +11,19 @@ typedef struct {
 int main(void) {
   pair testcases[] = {
       // simple test cases
+      {"h+", "h", true},
+      {"h+", "", false},
+      {"h+", "hh", true},
+      {"h+", "hhh", true},
+      {"\\(", "(", true},
+      {"[a-e]", "a", true},
+      {"[a-e]", "e", true},
+      {"[a-e]", "f", false},
+      {"[a-e0-3]", "1", true},
+      {"[a-e0-3]", "a", true},
+      {"[a-e0-3]", "4", false},
+      {"[a-z][a-zA-Z]*[a-z]", "hHELLO", false},
+      {"[a-z][a-zA-Z]*[a-z]", "hHELLo", true},
       {"a?", "a", true},
       {"a?", "", true},
       {"a?", "aa", false},
