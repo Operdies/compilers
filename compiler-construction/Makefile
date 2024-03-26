@@ -1,15 +1,18 @@
-COMPILE_COMMANDS=compile_commands.json
+# This is pretty nice and generic, but there are a couple of small problems:
+# 1. All binary outputs link against all objects. How to link (and depend) only on required objects
+# 2. 
 
 # recursive wildcard 
 rwildcard = $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
 # remove duplicates from list
 uniq      = $(if $1,$(firstword $1) $(call uniq,$(filter-out $(firstword $1),$1)))
 
-BIN_DIR      = out
-INCLUDE_DIR  = include
-OBJ_DIR      = src
-TEST_DIR     = test
-CMD_DIR      = cmd
+COMPILE_COMMANDS = compile_commands.json
+BIN_DIR          = out
+INCLUDE_DIR      = include
+OBJ_DIR          = src
+TEST_DIR         = test
+CMD_DIR          = cmd
 
 OBJ_OUT_DIR  = $(BIN_DIR)/obj
 TEST_OUT_DIR = $(BIN_DIR)/test
@@ -50,7 +53,7 @@ $(CMD_OUT_DIR)%: $(CMD_DIR)%.c $(OBJ_OUT) | $(DIRECTORIES)
 
 .PHONY: clean
 clean:
-	rm -f $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT) $(COMPILE_COMMANDS)
+	rm -f $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT) $(MMD_FILES) $(TEST_RESULT) $(COMPILE_COMMANDS)
 
 $(COMPILE_COMMANDS): Makefile $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
 	bear -- make all -B
@@ -65,7 +68,7 @@ test: $(TEST_OUT)
 
 # Run tests if input changed
 $(TEST_OUT_DIR)%.log: $(TEST_OUT_DIR)%
-	./$< | tee $@
+	(set -o pipefail; ./$< |& tee $@)
 
 # Run tests where input changed
 .PHONY: incremental-test
