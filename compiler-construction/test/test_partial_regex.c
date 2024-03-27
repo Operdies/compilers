@@ -1,30 +1,39 @@
 // link: regex.o arena.o
+#include "macros.h"
 #include "regex.h"
 #include "unittest.h"
-#include "macros.h"
 
-int match(char *ex, char *str){
-  regex *r1 = mk_regex(ex);
-  int r = regex_pos(r1, str, 0);
+typedef struct {
+  char *pattern;
+  char *string;
+  int match_index;
+} testcase;
+
+int match(testcase *t) {
+  regex *r1 = mk_regex(t->pattern);
+  int r = regex_pos(r1, t->string, 0);
   destroy_regex(r1);
   return r;
 }
-void test_greed(void){
-  struct {
-    char *r;
-    int idx;
-  } testcases[] = {
-    { .r = "[0-9]+", .idx = 3},
-    { .r = "[0-9]*", .idx = 3},
-    { .r = "[0-9]+?", .idx = 1},
-    { .r = "[0-9]*?", .idx = 0},
+
+void test_greed(void) {
+  testcase testcases[] = {
+      {.pattern = "[0-9]+", .string = "123.456", .match_index = 3},
+      {.pattern = "[0-9]*", .string = "123.456", .match_index = 3},
+      {.pattern = "[0-9]+?", .string = "123.456", .match_index = 1},
+      {.pattern = "[0-9]*?", .string = "123.456", .match_index = 0},
+      {.pattern = "[0-9]*?", .string = "123.456", .match_index = 0},
+      {.pattern = ".*?ab", .string = "123123abab", .match_index = 8},
+      {.pattern = ".*?.*?ab", .string = "123123abab", .match_index = 8},
+      {.pattern = ".*ab", .string = "123123abab", .match_index = 10},
   };
 
   bool fail = false;
-  for (int i =0; i < LENGTH(testcases); i++){
-    int idx = match(testcases[i].r, "123.456");
-    if (idx != testcases[i].idx){
-      printf("test_greed failed: %s was %d, expected %d\n", testcases[i].r, idx, testcases[i].idx);
+  for (int i = 0; i < LENGTH(testcases); i++) {
+    testcase *t = &testcases[i];
+    int idx = match(t);
+    if (idx != t->match_index) {
+      printf("test_greed failed:\nmatch %s on %s yielded index %d, expected %d\n", t->pattern, t->string, idx, t->match_index);
       fail = true;
     }
   }
