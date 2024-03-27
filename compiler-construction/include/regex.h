@@ -39,6 +39,13 @@ typedef struct {
   // A scratch area to allocate parse constructs
   arena *a;
 } parse_context;
+
+typedef struct {
+  bool match;
+  size_t start;
+  size_t length;
+} regex_match;
+
 typedef parse_context match_context;
 
 typedef struct {
@@ -47,8 +54,9 @@ typedef struct {
 } regex;
 
 bool matches(const char *pattern, const char *string);
-ssize_t regex_pos(regex *r, const char *string, int len);
-bool regex_match(regex *r, const char *string);
+regex_match regex_pos(regex *r, const char *string, int len);
+bool regex_matches(regex *r, const char *string);
+regex_match regex_find(regex *r, const char *string);
 void destroy_regex(regex *r);
 regex *mk_regex(const char *pattern);
 #endif // REGEX_H

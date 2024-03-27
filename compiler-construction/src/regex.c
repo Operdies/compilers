@@ -369,21 +369,39 @@ regex *mk_regex(const char *pattern) {
   return r;
 }
 
-ssize_t regex_pos(regex *r, const char *string, int len) {
+regex_match regex_pos(regex *r, const char *string, int len) {
+  regex_match d = {0};
   if (!string)
-    return -1;
+    return d;
   if (len <= 0)
     len = strlen(string);
   match_context m = {.n = len, .c = 0, .src = string};
   reset(r->start);
   bool match = partial_match(r->start, &m);
-  return match ? (ssize_t)m.c : -1;
+  regex_match result = match ? (regex_match){.match = true, .start = 0, .length = m.c} : d;
+  return result;
 }
 
-bool regex_match(regex *r, const char *string) {
+bool regex_matches(regex *r, const char *string) {
   match_context m = {.n = strlen(string), .c = 0, .src = string};
   reset(r->start);
   return match_dfa(r->start, &m);
+}
+
+regex_match regex_find(regex *r, const char *string) {
+  match_context m = {.n = strlen(string), .c = 0, .src = string};
+  for (size_t i = 0; i < m.n; i++) {
+    reset(r->start);
+    m.c = i;
+    if (partial_match(r->start, &m)) {
+      return (regex_match){
+          .start = i,
+          .length = m.c - i,
+          .match = true,
+      };
+    }
+  }
+  return (regex_match){0};
 }
 
 bool matches(const char *pattern, const char *string) {
@@ -391,7 +409,7 @@ bool matches(const char *pattern, const char *string) {
   if (r == NULL) {
     return false;
   }
-  bool result = regex_match(r, string);
+  bool result = regex_matches(r, string);
   destroy_regex(r);
   return result;
 }

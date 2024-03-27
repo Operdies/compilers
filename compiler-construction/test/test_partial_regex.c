@@ -11,21 +11,21 @@ typedef struct {
 
 int match(testcase *t) {
   regex *r1 = mk_regex(t->pattern);
-  int r = regex_pos(r1, t->string, 0);
+  regex_match r = regex_pos(r1, t->string, 0);
   destroy_regex(r1);
-  return r;
+  return r.length;
 }
 
 void test_greed(void) {
   testcase testcases[] = {
-      {.pattern = "[0-9]+", .string = "123.456", .match_index = 3},
-      {.pattern = "[0-9]*", .string = "123.456", .match_index = 3},
-      {.pattern = "[0-9]+?", .string = "123.456", .match_index = 1},
-      {.pattern = "[0-9]*?", .string = "123.456", .match_index = 0},
-      {.pattern = "[0-9]*?", .string = "123.456", .match_index = 0},
-      {.pattern = ".*?ab", .string = "123123abab", .match_index = 8},
-      {.pattern = ".*?.*?ab", .string = "123123abab", .match_index = 8},
-      {.pattern = ".*ab", .string = "123123abab", .match_index = 10},
+      {.pattern = "[0-9]+",   .string = "123.456",    .match_index = 3 },
+      {.pattern = "[0-9]*",   .string = "123.456",    .match_index = 3 },
+      {.pattern = "[0-9]+?",  .string = "123.456",    .match_index = 1 },
+      {.pattern = "[0-9]*?",  .string = "123.456",    .match_index = 0 },
+      {.pattern = "[0-9]*?",  .string = "123.456",    .match_index = 0 },
+      {.pattern = ".*?ab",    .string = "123123abab", .match_index = 8 },
+      {.pattern = ".*?.*?ab", .string = "123123abab", .match_index = 8 },
+      {.pattern = ".*ab",     .string = "123123abab", .match_index = 10},
   };
 
   bool fail = false;
