@@ -63,10 +63,10 @@ $(OBJ_OUT_DIR)%.o: $(OBJ_DIR)%.c | $(DIRECTORIES)
 
 # TODO: tests and cmds link against all objects
 # Dream solution is to link against objects if the corresponding header is used
-$(TEST_OUT_DIR)%: $(TEST_DIR)%.c | $(DIRECTORIES) $(OBJ_OUT)
+$(TEST_OUT_DIR)%: $(TEST_DIR)%.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-$(CMD_OUT_DIR)%: $(CMD_DIR)%.c | $(DIRECTORIES) $(OBJ_OUT)
+$(CMD_OUT_DIR)%: $(CMD_DIR)%.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 .PHONY: clean
