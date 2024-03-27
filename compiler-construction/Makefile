@@ -86,7 +86,10 @@ test: $(TEST_OUT)
 
 # Run tests if input changed
 $(TEST_OUT_DIR)%.log: $(TEST_OUT_DIR)%
-	(set -o pipefail; ./$< |& tee $@)
+	@(set -o pipefail;         \
+		echo "====== $< ======"; \
+		./$< |& tee $@;          \
+		)
 
 # Run tests where input changed
 .PHONY: incremental-test
