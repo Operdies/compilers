@@ -1,7 +1,6 @@
 // link: regex.o arena.o
 #include "macros.h"
 #include "regex.h"
-#include "unittest.h"
 
 typedef struct {
   char *pattern;
@@ -16,7 +15,7 @@ int match(testcase *t) {
   return r.length;
 }
 
-void test_greed(void) {
+int main(void) {
   testcase testcases[] = {
       {.pattern = "[0-9]+",   .string = "123.456",    .match_index = 3 },
       {.pattern = "[0-9]*",   .string = "123.456",    .match_index = 3 },
@@ -37,10 +36,5 @@ void test_greed(void) {
       fail = true;
     }
   }
-  ASSERT(!fail);
-}
-
-int main(void) {
-  test_greed();
-  return 0;
+  return fail ? 1 : 0;
 }
