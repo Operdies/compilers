@@ -2,7 +2,7 @@
 #define __ARENA_H
 
 #ifndef ARENA_COMMIT
-#define ARENA_COMMIT (1l<<32)
+#define ARENA_COMMIT (1l<<30)
 #endif
 
 #include <stddef.h>

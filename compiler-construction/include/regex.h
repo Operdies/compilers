@@ -47,6 +47,7 @@ typedef struct {
 } regex;
 
 bool matches(const char *pattern, const char *string);
+ssize_t regex_pos(regex *r, const char *string, int len);
 bool regex_match(regex *r, const char *string);
 void destroy_regex(regex *r);
 regex *mk_regex(const char *pattern);

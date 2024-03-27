@@ -51,6 +51,8 @@ int main(void) {
       {"(a|b)*c", "ac", true},
       {"(a|b)*c", "bc", true},
       {"(a|b)*c", "c", true},
+      {"(a|b)*?c", "babbac", true},
+      {"(a|b)*?c", "babbab", false},
       {"(a|b)*c", "babbac", true},
       {"(a|b)*c", "babbab", false},
       {"", "", true},
@@ -81,6 +83,7 @@ int main(void) {
       {"(ab|cd)", "a", false},
       {"(ab|cd)", "bcd", false},
       {"((ab)*|cd)", "ababab", true},
+      {"((ab)*?|cd)", "ababab", true},
       {"((ab)*|cd)", "cd", true},
       {"a|b*", "a", true},
       {"a|b*", "", true},
@@ -91,7 +94,9 @@ int main(void) {
       {"a", ".", false},
       {"abc.def.*ghi", "abcidefasdfghi", true},
       {"abc.def.*ghi", "abcidefasdfghig", false},
+      {"abc.def.*?ghi", "abcidefasdfghig", false},
       {"a*b*c", "aaaaaaaac", true},
+      {"a*?b*?c", "aaaaaaaac", true},
   };
 
   int status = 0;

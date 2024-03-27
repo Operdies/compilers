@@ -194,18 +194,46 @@ dfa *build_automaton(parse_context *ctx) {
     char ch = peek(ctx);
     if (ch == KLEENE || ch == PLUS || ch == OPTIONAL) {
       advance(ctx);
+
+      bool greedy = true;
+      bool optional = ch == KLEENE || ch == OPTIONAL;
+      bool repeatable = ch == KLEENE || ch == PLUS;
+
+      if (repeatable && peek(ctx) == OPTIONAL) {
+        greedy = false;
+        advance(ctx);
+      }
+
       dfa *loop_start = mk_state(ctx, EPSILON);
       dfa *loop_end = mk_state(ctx, EPSILON);
       dfa *new_end = end_state(new);
 
       add_transition(next, loop_start);
-      add_transition(loop_start, new);
-      add_transition(new_end, loop_end);
-      if (ch != OPTIONAL)
-        add_transition(new_end, loop_start);
-      if (ch != PLUS)
-        add_transition(loop_start, loop_end);
       next = loop_end;
+
+      // The order of transitions is crucial because the matching algorithm
+      // traverses the automaton in a depth-first fashion. A greedy match is
+      // achieved by preferring to enter the loop again, and a non-greedy match
+      // is achieved by preferring to exit the loop as early as possible.
+      if (greedy) {
+        if (repeatable)
+          add_transition(new_end, loop_start);
+
+        add_transition(new_end, loop_end);
+        add_transition(loop_start, new);
+        if (optional)
+          add_transition(loop_start, loop_end);
+
+      } else {
+        add_transition(new_end, loop_end);
+        if (repeatable)
+          add_transition(new_end, loop_start);
+
+        if (optional)
+          add_transition(loop_start, loop_end);
+
+        add_transition(loop_start, new);
+      }
     } else {
       add_transition(next, new);
       next = end_state(new);
@@ -277,6 +305,33 @@ bool match_dfa(dfa *d, match_context *ctx) {
   return finished(ctx) && d->lst.n == 0;
 }
 
+bool partial_match(dfa *d, match_context *ctx) {
+  if (d == NULL)
+    return finished(ctx);
+  char ch;
+  if (d->accept != EPSILON) {
+    if (finished(ctx))
+      return false;
+    ch = take(ctx);
+    if (ch < d->accept || ch > d->accept_end)
+      return false;
+  }
+
+  for (size_t i = 0; i < d->lst.n; i++) {
+    dfa *next = d->lst.arr[i];
+    ssize_t pos = ctx->c;
+    // avoid infinite recursion if there is no progress
+    if (next->progress == pos)
+      continue;
+    next->progress = pos;
+    if (partial_match(next, ctx))
+      return true;
+    ctx->c = pos;
+  }
+
+  return d->lst.n == 0;
+}
+
 // Reset the progress of all nodes in the dfa
 void reset(dfa *d) {
   if (d) {
@@ -312,6 +367,17 @@ regex *mk_regex(const char *pattern) {
     }
   }
   return r;
+}
+
+ssize_t regex_pos(regex *r, const char *string, int len) {
+  if (!string)
+    return -1;
+  if (len <= 0)
+    len = strlen(string);
+  match_context m = {.n = len, .c = 0, .src = string};
+  reset(r->start);
+  bool match = partial_match(r->start, &m);
+  return match ? (ssize_t)m.c : -1;
 }
 
 bool regex_match(regex *r, const char *string) {
