@@ -16,9 +16,9 @@ struct dfa {
   // Possible transitions from this state
   dfalist lst;
   // Character accepted by this state
-  char accept;
-  // Index into the source string
-  size_t index;
+  unsigned char accept;
+  // If set and greater than accept, all characters in the range [accept-accept_end] (inclusive) are accepted
+  unsigned char accept_end;
   // The end state of this dfa
   // If NULL, the state itself is considered the end state
   dfa *end;

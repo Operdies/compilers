@@ -1,3 +1,4 @@
+// link: regex.o arena.o
 #include "regex.h"
 #include <stdio.h>
 

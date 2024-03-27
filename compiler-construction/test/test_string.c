@@ -1,3 +1,4 @@
+// link: collections.o
 #include "collections.h"
 #include <stdio.h>
 #include <stdlib.h>

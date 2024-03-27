@@ -26,6 +26,24 @@ OBJ_OUT  = $(patsubst $(OBJ_DIR)/%,  $(OBJ_OUT_DIR)/%, $(OBJ_SRC:.c=.o))
 TEST_OUT = $(patsubst $(TEST_DIR)/%, $(TEST_OUT_DIR)/%, $(TEST_SRC:.c=))
 CMD_OUT  = $(patsubst $(CMD_DIR)/%, $(CMD_OUT_DIR)/%, $(CMD_SRC:.c=))
 
+# $1: source file
+# $2: output file
+# grep the source files for lines of the form '// link: object.o' and add the link target as a make dependency
+define LINK_OBJECTS
+DEPS := $(shell grep '^// link: .*' < $(1) | cut -d' ' -f3- | xargs -d ' ' -I {} printf '$$(OBJ_OUT_DIR)/{}\n' )
+$(2): $$(DEPS)
+endef
+
+$(foreach test,$(TEST_SRC), $(eval $(call \
+	LINK_OBJECTS,\
+	$(test),\
+	$(patsubst $(TEST_DIR)/%, $(TEST_OUT_DIR)/%, $(test:.c=)))))
+
+$(foreach cmd,$(CMD_SRC), $(eval $(call \
+	LINK_OBJECTS,\
+	$(cmd),\
+	$(patsubst $(CMD_DIR)/%, $(CMD_OUT_DIR)/%, $(cmd:.c=)))))
+
 # This target exists mostly as a hack to make incremental builds that only run tests where the inputs changed
 TEST_RESULT = $(TEST_OUT:=.log)
 
@@ -45,10 +63,10 @@ $(OBJ_OUT_DIR)%.o: $(OBJ_DIR)%.c | $(DIRECTORIES)
 
 # TODO: tests and cmds link against all objects
 # Dream solution is to link against objects if the corresponding header is used
-$(TEST_OUT_DIR)%: $(TEST_DIR)%.c $(OBJ_OUT) | $(DIRECTORIES)
+$(TEST_OUT_DIR)%: $(TEST_DIR)%.c | $(DIRECTORIES) $(OBJ_OUT)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-$(CMD_OUT_DIR)%: $(CMD_DIR)%.c $(OBJ_OUT) | $(DIRECTORIES)
+$(CMD_OUT_DIR)%: $(CMD_DIR)%.c | $(DIRECTORIES) $(OBJ_OUT)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 .PHONY: clean

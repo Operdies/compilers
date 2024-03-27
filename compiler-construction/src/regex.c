@@ -16,6 +16,7 @@
 #define advance(ctx) ((ctx)->c++);
 #define add_transition(from, to) (push_dfa(ctx, &(from)->lst, (to)))
 #define end_state(state) ((state)->end ? (state)->end : (state))
+#define is_dot(state) ((state)->accept == 0)
 
 /* EBNF for regex syntax:
  * regex    = {( group | paren | symbol | union )} postfix regex | ε
@@ -61,8 +62,12 @@ void push_dfa(parse_context *ctx, dfalist *lst, dfa *d) {
 
 dfa *mk_state(parse_context *ctx, char accept) {
   dfa *d = arena_alloc(ctx->a, sizeof(dfa), 1);
-  d->index = ctx->c;
-  d->accept = accept;
+  if (accept == DOT) {
+    d->accept = 0;
+    d->accept_end = ~0;
+  } else {
+    d->accept = d->accept_end = accept;
+  }
   return d;
 }
 
@@ -76,6 +81,7 @@ dfa *match_symbol(parse_context *ctx) {
       return NULL;
     return mk_state(ctx, take(ctx));
   }
+  dfa *s = NULL;
   switch (ch) {
   case '[':
   case ']':
@@ -85,18 +91,19 @@ dfa *match_symbol(parse_context *ctx) {
   case '+':
   case '*':
   case '?':
-    sprintf(ctx->err, "Illegal literal %c", ch);
+    sprintf(ctx->err, "Unescaped literal %c", ch);
     return NULL;
     break;
   case '.':
+    s = mk_state(ctx, DOT);
     advance(ctx);
-    return mk_state(ctx, DOT);
     break;
   default:
+    s = mk_state(ctx, ch);
     advance(ctx);
-    return mk_state(ctx, ch);
     break;
   }
+  return s;
 }
 
 dfa *match_class(parse_context *ctx) {
@@ -118,11 +125,11 @@ dfa *match_class(parse_context *ctx) {
       dfa *end = match_symbol(ctx);
       if (end == NULL)
         return NULL;
-      if (new->accept == DOT) {
+      if (is_dot(new)) {
         sprintf(ctx->err, "Range cannot start with DOT.");
         return NULL;
       }
-      if (end->accept == DOT) {
+      if (is_dot(end)) {
         sprintf(ctx->err, "Range cannot end with DOT.");
         return NULL;
       }
@@ -130,11 +137,7 @@ dfa *match_class(parse_context *ctx) {
         sprintf(ctx->err, "Range contains no values.");
         return NULL;
       }
-      for (char ch = new->accept + 1; ch <= end->accept; ch++) {
-        dfa *range = mk_state(ctx, ch);
-        add_transition(range, final);
-        add_transition(class, range);
-      }
+      new->accept_end = end->accept;
     }
   }
   return class;
@@ -255,7 +258,7 @@ bool match_dfa(dfa *d, match_context *ctx) {
     if (finished(ctx))
       return false;
     ch = take(ctx);
-    if (d->accept != ch && d->accept != DOT)
+    if (ch < d->accept || ch > d->accept_end)
       return false;
   }
 
@@ -302,6 +305,7 @@ regex *mk_regex(const char *pattern) {
     strcpy(src, pattern);
     r->ctx = (parse_context){.n = len, .c = 0, .src = src, .a = a};
     r->start = build_automaton(&r->ctx);
+    reset(r->start);
     if (!finished(&r->ctx)) {
       destroy_regex(r);
       return NULL;
