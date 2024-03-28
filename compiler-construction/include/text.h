@@ -15,4 +15,7 @@ typedef struct {
   arena *a;
 } parse_context;
 
+// TODO: move this to a sensible location
+static const char string_regex[] = "\"([^\"\\\\]|\\\\.)*\"";
+
 #endif // TEXT_H
