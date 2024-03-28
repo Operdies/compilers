@@ -1,10 +1,12 @@
 #ifndef REGEX_H
 #define REGEX_H
 #include "arena.h"
+#include "text.h"
 #include <stdbool.h>
 #include <stdio.h>
 
 typedef struct dfa dfa;
+typedef unsigned char u8;
 
 typedef struct {
   size_t n;
@@ -16,9 +18,9 @@ struct dfa {
   // Possible transitions from this state
   dfalist lst;
   // Character accepted by this state
-  unsigned char accept;
+  u8 accept;
   // If set and greater than accept, all characters in the range [accept-accept_end] (inclusive) are accepted
-  unsigned char accept_end;
+  u8 accept_end;
   // The end state of this dfa
   // If NULL, the state itself is considered the end state
   dfa *end;
@@ -26,19 +28,6 @@ struct dfa {
   // This is used to detect loops when traversing the automaton
   ssize_t progress;
 };
-
-typedef struct {
-  // cursor
-  size_t c;
-  // length
-  size_t n;
-  // text being parsed
-  const char *src;
-  // A description of the parse error when a matcher returns NULL
-  char err[50];
-  // A scratch area to allocate parse constructs
-  arena *a;
-} parse_context;
 
 typedef struct {
   bool match;

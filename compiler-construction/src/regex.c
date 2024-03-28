@@ -1,5 +1,7 @@
 #include "regex.h"
 #include "macros.h"
+#include "text.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -9,6 +11,7 @@
 #define KLEENE '*'
 #define PLUS '+'
 #define OPTIONAL '?'
+#define RANGE '-'
 
 #define finished(ctx) ((ctx)->c >= (ctx)->n)
 #define peek(ctx) (finished((ctx)) ? -1 : (ctx)->src[(ctx)->c])
@@ -19,10 +22,10 @@
 #define is_dot(state) ((state)->accept == 0)
 
 /* EBNF for regex syntax:
- * regex    = {( group | paren | symbol | union )} postfix regex | ε
- * group    = "[" {( symbol | range )} "]"
+ * regex    = {( class | paren | symbol | union )} [ postfix ] regex | ε
+ * class    = "[" {( symbol | range )} "]"
  * paren    = "(" regex ")"
- * postfix  = kleene | plus | optional | ε
+ * postfix  = kleene | plus | optional
  * kleene   = *
  * plus     = +
  * optional = ?
@@ -60,7 +63,7 @@ void push_dfa(parse_context *ctx, dfalist *lst, dfa *d) {
   lst->arr[lst->n++] = d;
 }
 
-dfa *mk_state(parse_context *ctx, char accept) {
+dfa *mk_state(parse_context *ctx, u8 accept) {
   dfa *d = arena_alloc(ctx->a, sizeof(dfa), 1);
   if (accept == DOT) {
     d->accept = 0;
@@ -71,75 +74,133 @@ dfa *mk_state(parse_context *ctx, char accept) {
   return d;
 }
 
-dfa *match_symbol(parse_context *ctx) {
+u8 take_char(parse_context *ctx) {
+  if (finished(ctx))
+    return 0;
+  u8 ch = take(ctx);
+  if (ch == '\\') {
+    if (finished(ctx)) {
+      sprintf(ctx->err, "Escape character at end of expression.");
+      return 0;
+    }
+    return take(ctx);
+  }
+  return ch;
+}
+
+dfa *match_symbol(parse_context *ctx, bool class_match) {
   if (finished(ctx))
     return NULL;
-  char ch = peek(ctx);
-  if (ch == '\\') {
-    advance(ctx);
-    if (finished(ctx))
-      return NULL;
-    return mk_state(ctx, take(ctx));
-  }
-  dfa *s = NULL;
+  bool escaped = peek(ctx) == '\\';
+  u8 ch = take_char(ctx);
+  if (ch == 0)
+    return NULL;
+  if (escaped)
+    return mk_state(ctx, ch);
+
   switch (ch) {
-  case '[':
-  case ']':
   case '(':
   case ')':
   case '|':
   case '+':
   case '*':
   case '?':
+    if (class_match) {
+      return mk_state(ctx, ch);
+      break;
+    }
+    // else fall through
+  case '[':
+  case ']':
+    // put it back
+    ctx->c--;
     sprintf(ctx->err, "Unescaped literal %c", ch);
     return NULL;
     break;
   case '.':
-    s = mk_state(ctx, DOT);
-    advance(ctx);
+    return mk_state(ctx, class_match ? ch : DOT);
     break;
   default:
-    s = mk_state(ctx, ch);
-    advance(ctx);
+    return mk_state(ctx, ch);
     break;
   }
-  return s;
 }
 
 dfa *match_class(parse_context *ctx) {
   dfa *class, *final;
+  bool bitmap[UINT8_MAX] = {0};
+  bool negate = false;
+
+  // We can skip the rest of the u8acter class
+  // if the first symbol is a dot. We also don't need to mess
+  // with epsilon transitions since there is no need for branching
+  if (peek(ctx) == '.') {
+    while (peek(ctx) != ']' && finished(ctx) == false) {
+      advance(ctx);
+      if (peek(ctx) == '\\') {
+        advance(ctx);
+        advance(ctx);
+      }
+    }
+    return mk_state(ctx, DOT);
+  }
+
+  if (peek(ctx) == '^') {
+    negate = true;
+    advance(ctx);
+  }
+
+  if (peek(ctx) == ']') {
+    sprintf(ctx->err, "Empty character class.");
+    return NULL;
+  }
+
   class = mk_state(ctx, EPSILON);
   final = mk_state(ctx, EPSILON);
   class->end = final;
 
-  while (peek(ctx) != ']') {
-    dfa *new = match_symbol(ctx);
-    if (new == NULL)
+  while (peek(ctx) != ']' && finished(ctx) == false) {
+    u8 from = take_char(ctx);
+    if (from == 0)
       return NULL;
+    u8 to = from;
 
-    add_transition(new, final);
-    add_transition(class, new);
-
-    if (peek(ctx) == '-') {
+    if (peek(ctx) == RANGE) {
       advance(ctx);
-      dfa *end = match_symbol(ctx);
-      if (end == NULL)
+      to = take_char(ctx);
+      if (to == 0)
         return NULL;
-      if (is_dot(new)) {
-        sprintf(ctx->err, "Range cannot start with DOT.");
-        return NULL;
-      }
-      if (is_dot(end)) {
-        sprintf(ctx->err, "Range cannot end with DOT.");
-        return NULL;
-      }
-      if (end->accept <= new->accept) {
+      if (to < from) {
         sprintf(ctx->err, "Range contains no values.");
         return NULL;
       }
-      new->accept_end = end->accept;
+    }
+
+    for (u8 ch = from; ch <= to; ch++) {
+      bitmap[ch] = true;
     }
   }
+
+  if (negate) {
+    for (u8 i = 0; i < UINT8_MAX; i++) {
+      bitmap[i] = !bitmap[i];
+    }
+  }
+
+  for (int start = 0; start < UINT8_MAX; start++) {
+    if (bitmap[start]) {
+      int end;
+      for (end = start + 1; end < UINT8_MAX && bitmap[end]; end++) {
+      }
+      dfa *new = mk_state(ctx, start);
+      // accept_end is inclusive
+      new->accept_end = end - 1;
+      add_transition(new, final);
+      add_transition(class, new);
+      start = end;
+    }
+  }
+
   return class;
 }
 
@@ -147,7 +208,7 @@ typedef dfa *(*matcher)(parse_context *);
 
 dfa *next_match(parse_context *ctx) {
   dfa *result = NULL;
-  char ch = peek(ctx);
+  u8 ch = peek(ctx);
   switch (ch) {
   case '[':
     advance(ctx);
@@ -173,7 +234,7 @@ dfa *next_match(parse_context *ctx) {
     }
     break;
   default:
-    result = match_symbol(ctx);
+    result = match_symbol(ctx, false);
     break;
   }
   return result;
@@ -191,7 +252,7 @@ dfa *build_automaton(parse_context *ctx) {
       break;
     }
 
-    char ch = peek(ctx);
+    u8 ch = peek(ctx);
     if (ch == KLEENE || ch == PLUS || ch == OPTIONAL) {
       advance(ctx);
 
@@ -268,7 +329,7 @@ dfa *build_automaton(parse_context *ctx) {
  * Does the current state match the current character
  */
 bool accept(dfa *d, match_context *ctx) {
-  // If finished, there are no charactesr left, reject
+  // If finished, there are no character left, reject
   if (finished(ctx))
     return false;
   // If DOT, match anything
@@ -281,7 +342,7 @@ bool accept(dfa *d, match_context *ctx) {
 bool match_dfa(dfa *d, match_context *ctx) {
   if (d == NULL)
     return finished(ctx);
-  char ch;
+  u8 ch;
   if (d->accept != EPSILON) {
     if (finished(ctx))
       return false;
@@ -308,7 +369,7 @@ bool match_dfa(dfa *d, match_context *ctx) {
 bool partial_match(dfa *d, match_context *ctx) {
   if (d == NULL)
     return finished(ctx);
-  char ch;
+  u8 ch;
   if (d->accept != EPSILON) {
     if (finished(ctx))
       return false;
@@ -358,7 +419,7 @@ regex *mk_regex(const char *pattern) {
     size_t len = strlen(pattern);
     char *src = arena_alloc(a, len + 1, 1);
     strcpy(src, pattern);
-    r->ctx = (parse_context){.n = len, .c = 0, .src = src, .a = a};
+    r->ctx = (parse_context){.n = len, .c = 0, .src = src, .a = a, .err = arena_alloc(a, 100, 1)};
     r->start = build_automaton(&r->ctx);
     reset(r->start);
     if (!finished(&r->ctx)) {
