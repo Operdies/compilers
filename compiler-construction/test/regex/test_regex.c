@@ -116,6 +116,10 @@ int main(void) {
       {"abc.def.*?ghi",       "abcidefasdfghig", false},
       {"a*b*c",               "aaaaaaaac",       true },
       {"a*?b*?c",             "aaaaaaaac",       true },
+      {"ab*",                 "a",               true },
+      {"ab*",                 "ab",              true },
+      {"ab*",                 "abab",            false},
+      {"ab*",                 "abb",             true },
   };
 
   int status = 0;
@@ -135,6 +139,5 @@ int main(void) {
       status++;
     }
   }
-  // printf("%d / %d tests passing.\n", n - status, n);
   return status;
 }

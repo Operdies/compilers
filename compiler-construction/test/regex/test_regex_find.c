@@ -31,16 +31,8 @@ int main(void) {
       {.pattern = string_regex, .string = "empty \"\"", .match = true, .start = 6, .length = 2},
       {.pattern = string_regex, .string = "ab \"runaway string", .match = false},
       {.pattern = string_regex, .string = "ab \"runaway string \\\" 2", .match = false},
-      {.pattern = string_regex,
-       .string = "leading \"str \\\"escaped!\" rest",
-       .match = true,
-       .start = 8,
-       .length = 16},
-      {.pattern = string_regex,
-       .string = "ab \"str \\\"escaped!\" rest",
-       .match = true,
-       .start = 3,
-       .length = 16},
+      {.pattern = string_regex, .string = "leading \"str \\\"escaped!\" rest", .match = true, .start = 8, .length = 16},
+      {.pattern = string_regex, .string = "ab \"str \\\"escaped!\" rest", .match = true, .start = 3, .length = 16},
   };
   for (int i = 0; i < LENGTH(ts); i++) {
     testcase *t = &ts[i];
