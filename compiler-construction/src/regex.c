@@ -13,10 +13,6 @@
 #define OPTIONAL '?'
 #define RANGE '-'
 
-#define finished(ctx) ((ctx)->c >= (ctx)->n)
-#define peek(ctx) (finished((ctx)) ? -1 : (ctx)->src[(ctx)->c])
-#define take(ctx) (finished((ctx)) ? -1 : (ctx)->src[(ctx)->c++])
-#define advance(ctx) ((ctx)->c++);
 #define add_transition(from, to) (push_dfa(ctx, &(from)->lst, (to)))
 #define end_state(state) ((state)->end ? (state)->end : (state))
 #define is_dot(state) ((state)->accept == 0)
@@ -36,8 +32,8 @@
  * escaped  = "\" [ []().* ]
  */
 
-dfa *build_automaton(parse_context *ctx);
-bool mk_dfalist(parse_context *ctx, dfalist *lst, size_t cap) {
+static dfa *build_automaton(parse_context *ctx);
+static bool mk_dfalist(parse_context *ctx, dfalist *lst, size_t cap) {
   dfa **arr = arena_alloc(ctx->a, cap, sizeof(dfa *));
   if (arr) {
     lst->n = 0;
@@ -48,7 +44,7 @@ bool mk_dfalist(parse_context *ctx, dfalist *lst, size_t cap) {
   return false;
 }
 
-void push_dfa(parse_context *ctx, dfalist *lst, dfa *d) {
+static void push_dfa(parse_context *ctx, dfalist *lst, dfa *d) {
   if (lst->n >= lst->cap) {
     if (lst->arr == NULL)
       mk_dfalist(ctx, lst, 2);
@@ -63,7 +59,7 @@ void push_dfa(parse_context *ctx, dfalist *lst, dfa *d) {
   lst->arr[lst->n++] = d;
 }
 
-dfa *mk_state(parse_context *ctx, u8 accept) {
+static dfa *mk_state(parse_context *ctx, u8 accept) {
   dfa *d = arena_alloc(ctx->a, sizeof(dfa), 1);
   if (accept == DOT) {
     d->accept = 0;
@@ -74,7 +70,7 @@ dfa *mk_state(parse_context *ctx, u8 accept) {
   return d;
 }
 
-u8 take_char(parse_context *ctx) {
+static u8 take_char(parse_context *ctx) {
   if (finished(ctx))
     return 0;
   u8 ch = take(ctx);
@@ -83,12 +79,15 @@ u8 take_char(parse_context *ctx) {
       sprintf(ctx->err, "Escape character at end of expression.");
       return 0;
     }
-    return take(ctx);
+    ch = take(ctx);
+    if (ch == 'n') return '\n';
+    if (ch == 't') return '\t';
+    return ch;
   }
   return ch;
 }
 
-dfa *match_symbol(parse_context *ctx, bool class_match) {
+static dfa *match_symbol(parse_context *ctx, bool class_match) {
   if (finished(ctx))
     return NULL;
   bool escaped = peek(ctx) == '\\';
@@ -126,7 +125,7 @@ dfa *match_symbol(parse_context *ctx, bool class_match) {
   }
 }
 
-dfa *match_class(parse_context *ctx) {
+static dfa *match_class(parse_context *ctx) {
   dfa *class, *final;
   bool bitmap[UINT8_MAX] = {0};
   bool negate = false;
@@ -206,7 +205,7 @@ dfa *match_class(parse_context *ctx) {
 
 typedef dfa *(*matcher)(parse_context *);
 
-dfa *next_match(parse_context *ctx) {
+static dfa *next_match(parse_context *ctx) {
   dfa *result = NULL;
   u8 ch = peek(ctx);
   switch (ch) {
@@ -240,7 +239,7 @@ dfa *next_match(parse_context *ctx) {
   return result;
 }
 
-dfa *build_automaton(parse_context *ctx) {
+static dfa *build_automaton(parse_context *ctx) {
   dfa *left, *right;
   dfa *next, *start;
   start = next = mk_state(ctx, EPSILON);
@@ -325,21 +324,7 @@ dfa *build_automaton(parse_context *ctx) {
   return start;
 }
 
-/*
- * Does the current state match the current character
- */
-bool accept(dfa *d, match_context *ctx) {
-  // If finished, there are no character left, reject
-  if (finished(ctx))
-    return false;
-  // If DOT, match anything
-  if (d->accept == DOT)
-    return true;
-  // Otherwise, match if equal
-  return d->accept == peek(ctx);
-}
-
-bool match_dfa(dfa *d, match_context *ctx) {
+static bool match_dfa(dfa *d, match_context *ctx) {
   if (d == NULL)
     return finished(ctx);
   u8 ch;
@@ -366,7 +351,7 @@ bool match_dfa(dfa *d, match_context *ctx) {
   return finished(ctx) && d->lst.n == 0;
 }
 
-bool partial_match(dfa *d, match_context *ctx) {
+static bool partial_match(dfa *d, match_context *ctx) {
   if (d == NULL)
     return finished(ctx);
   u8 ch;
@@ -394,7 +379,7 @@ bool partial_match(dfa *d, match_context *ctx) {
 }
 
 // Reset the progress of all nodes in the dfa
-void reset(dfa *d) {
+static void reset(dfa *d) {
   if (d) {
     d->progress = -1;
     for (size_t i = 0; i < d->lst.n; i++) {
@@ -443,7 +428,21 @@ regex_match regex_pos(regex *r, const char *string, int len) {
   return result;
 }
 
-bool regex_matches(regex *r, const char *string) {
+regex_match regex_matches(regex *r, match_context *ctx){
+  size_t pos = ctx->c;
+  reset(r->start);
+  bool match = partial_match(r->start, ctx);
+  if (match){
+    regex_match result = { .match = true, .start = pos, .length = ctx->c - pos };
+    return result;
+  } else {
+    regex_match no_match = {0};
+    ctx->c = pos;
+    return no_match;
+  }
+}
+
+bool regex_matches_strict(regex *r, const char *string) {
   match_context m = {.n = strlen(string), .c = 0, .src = string};
   reset(r->start);
   return match_dfa(r->start, &m);
@@ -470,7 +469,7 @@ bool matches(const char *pattern, const char *string) {
   if (r == NULL) {
     return false;
   }
-  bool result = regex_matches(r, string);
+  bool result = regex_matches_strict(r, string);
   destroy_regex(r);
   return result;
 }

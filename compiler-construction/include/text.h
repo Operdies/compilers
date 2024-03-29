@@ -2,6 +2,11 @@
 #define TEXT_H
 #include "arena.h"
 
+#define finished(ctx) ((ctx)->c >= (ctx)->n)
+#define peek(ctx) (finished((ctx)) ? -1 : (ctx)->src[(ctx)->c])
+#define take(ctx) (finished((ctx)) ? -1 : (ctx)->src[(ctx)->c++])
+#define advance(ctx) ((ctx)->c++);
+
 typedef struct {
   // cursor
   size_t c;
@@ -16,6 +21,8 @@ typedef struct {
 } parse_context;
 
 // TODO: move this to a sensible location
-static const char string_regex[] = "\"([^\"\\\\]|\\\\.)*\"";
+#define SINGLETICK_STR  "'([^'\\\\]|\\\\.)*'"
+#define DOUBLETICK_STR "\"([^\"\\\\]|\\\\.)*\""
+static const char string_regex[] = SINGLETICK_STR "|" DOUBLETICK_STR;
 
 #endif // TEXT_H
