@@ -4,68 +4,18 @@
 #include <string.h>
 
 bool mk_string(string *s, int initial_capacity) {
-  char *data = calloc(1, initial_capacity);
-  if (data != NULL) {
-    s->length = 0;
-    s->capacity = initial_capacity;
-    s->data = data;
-    return true;
-  }
-  return false;
+  return mk_vec(&s->v, 1, initial_capacity);
 }
 
-void destroy_string(string *s) { free(s->data); }
-
-static int next_size(int capacity, int required) {
-  if (capacity == 0)
-    capacity = 1;
-  while (capacity < required)
-    capacity *= 2;
-  return capacity;
-}
-
-static bool ensure_size(string *s, int required) {
-  if (required > s->capacity) {
-    char *old = s->data;
-    int n = s->length;
-    if (!mk_string(s, next_size(s->capacity, required))) {
-      return false;
-    }
-    memcpy(s->data, old, n);
-    s->length = n;
-    free(old);
-  }
-  return true;
+void destroy_string(string *s) {
+  vec_destroy(&s->v);
 }
 
 bool push_str(string *s, int n, char data[static n]) {
   if (s == NULL)
     return false;
-  bool aliased, resize, realloc;
-  int required;
-
-  if (data == NULL)
-    return false;
-  required = s->length + n + 1;
-
-  aliased = data >= s->data && data <= s->data + s->length;
-  resize = s->capacity < required;
-  realloc = aliased && resize;
-
-  if (realloc)
-    data = strdup(data);
-  if (data == NULL)
-    return false;
-
-  bool success = ensure_size(s, required);
-  if (success) {
-    memcpy(s->data + s->length, data, n);
-    s->length += n;
-    s->data[s->length] = 0;
-  }
-  if (realloc)
-    free(data);
-  return true;
+  vslice vec = {.n = n, .sz = 1, .arr = data};
+  return vec_push_slice(&s->v, &vec);
 }
 
 bool mk_vec(vec *v, int elem_size, int initial_capacity) {
@@ -120,7 +70,7 @@ bool vec_push_slice(vec *v, const vslice *s) {
   return true;
 }
 
-int roll(int x, int n) {
+static int roll(int x, int n) {
   if (x < 0) {
     x = -x;
     x = n - x;
@@ -176,4 +126,16 @@ vec vec_select(const vslice *v, int elem_size, vec_selector s) {
     }
   }
   return result;
+}
+
+int slicecmp(string_slice s1, string_slice s2) {
+  int shortest = s1.n > s2.n ? s2.n : s1.n;
+  return strncmp(s1.str, s2.str, shortest);
+}
+
+static void *identity(void *v) {
+  return v;
+}
+vec vec_clone(const vec *v) {
+  return vec_select(&v->slice, v->sz, identity);
 }

@@ -1,23 +1,6 @@
 #include <stdbool.h>
 
 typedef struct {
-  int length;
-  int capacity;
-  char *data;
-} string;
-
-/* Initializes s on success.
- * On failure, do nothing
- */
-bool mk_string(string *s, int initial_capacity);
-/* Append data to string, resizing if needed
- */
-bool push_str(string *s, int n, char data[static n]);
-/* Free all data associated with the string
- */
-void destroy_string(string *s);
-
-typedef struct {
   int n;
   const char *str;
 } string_slice;
@@ -50,11 +33,23 @@ typedef struct {
   int c;
 } vec;
 
+typedef struct {
+  union {
+    vec v;
+    struct {
+      int length;
+      char *data;
+      int capacity;
+    };
+  };
+} string;
+
 typedef int (*comparer_t)(const void *a, const void *b);
+int slicecmp(string_slice s1, string_slice s2);
 bool mk_vec(vec *v, int elem_size, int initial_capacity);
 void vec_destroy(vec *v);
 bool vec_push(vec *v, void *elem);
-vec *vec_clone(const vec *v);
+vec vec_clone(const vec *v);
 void vec_clear(vec *v);
 void vec_sort(vec *v, comparer_t comp_fn);
 void vec_reverse(vec *v);
@@ -69,3 +64,15 @@ void vec_foreach(vslice *v, vec_fn f);
  * populated with elements returned from the selector function.
  */
 vec vec_select(const vslice *v, int elem_size, vec_selector s);
+
+/* Initializes s on success.
+ * On failure, do nothing
+ */
+bool mk_string(string *s, int initial_capacity);
+/* Append data to string, resizing if needed
+ */
+bool push_str(string *s, int n, char data[static n]);
+/* Free all data associated with the string
+ */
+void destroy_string(string *s);
+
