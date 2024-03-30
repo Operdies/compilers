@@ -82,11 +82,11 @@ bool mk_vec(vec *v, int elem_size, int initial_capacity) {
 static bool ensure_capacity(vec *v, int c) {
   if (v->c >= c)
     return true;
-  if (v->c == 0)
+  if (v->c <= 0)
     v->c = 1;
   while (v->c < c)
     v->c *= 2;
-  void *new_data = realloc(v->arr, c * v->sz);
+  void *new_data = reallocarray(v->arr, v->c, v->sz);
   if (!new_data)
     return false;
   v->arr = new_data;
@@ -94,7 +94,7 @@ static bool ensure_capacity(vec *v, int c) {
 }
 
 bool vec_push(vec *v, void *elem) {
-  if (!ensure_capacity(v, v->c + 1))
+  if (!ensure_capacity(v, v->n + 1))
     return false;
   char *addr = (char *)v->arr;
   memmove(addr + v->n * v->sz, elem, v->sz);
@@ -149,4 +149,31 @@ void *vec_nth(const vslice *v, int n) {
     return NULL;
   char *addr = (char *)v->arr;
   return addr + n * v->sz;
+}
+
+void vec_destroy(vec *v) {
+  free(v->arr);
+  *v = (vec){0};
+}
+
+void vec_foreach(vslice *v, vec_fn f) {
+  if (v) {
+    for (int i = 0; i < v->n; i++) {
+      void *elem = (char *)v->arr + i * v->sz;
+      f(elem);
+    }
+  }
+}
+
+vec vec_select(const vslice *v, int elem_size, vec_selector s) {
+  vec result = {0};
+  if (v) {
+    mk_vec(&result, elem_size, v->n);
+    for (int i = 0; i < v->n; i++) {
+      void *elem = (char *)v->arr + i * v->sz;
+      void *new_elem = s(elem);
+      vec_push(&result, new_elem);
+    }
+  }
+  return result;
 }
