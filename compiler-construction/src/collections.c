@@ -11,10 +11,10 @@ void destroy_string(string *s) {
   vec_destroy(&s->v);
 }
 
-bool push_str(string *s, int n, char data[static n]) {
+bool push_str(string *s, int n, const char data[static n]) {
   if (s == NULL)
     return false;
-  vslice vec = {.n = n, .sz = 1, .arr = data};
+  vslice vec = {.n = n, .sz = 1, .arr = (char *)data};
   return vec_push_slice(&s->v, &vec);
 }
 
@@ -25,7 +25,7 @@ bool mk_vec(vec *v, int elem_size, int initial_capacity) {
   v->n = 0;
   v->c = initial_capacity;
   v->sz = elem_size;
-  v->arr = data;
+  v->array = data;
   return true;
 }
 
@@ -36,17 +36,17 @@ static bool ensure_capacity(vec *v, int c) {
     v->c = 1;
   while (v->c < c)
     v->c *= 2;
-  void *new_data = reallocarray(v->arr, v->c, v->sz);
+  void *new_data = reallocarray(v->array, v->c, v->sz);
   if (!new_data)
     return false;
-  v->arr = new_data;
+  v->array = new_data;
   return true;
 }
 
 bool vec_push(vec *v, void *elem) {
   if (!ensure_capacity(v, v->n + 1))
     return false;
-  char *addr = (char *)v->arr;
+  char *addr = (char *)v->array;
   memmove(addr + v->n * v->sz, elem, v->sz);
   v->n++;
   return true;
@@ -60,7 +60,7 @@ bool vec_push_slice(vec *v, const vslice *s) {
   if (!ensure_capacity(v, v->n + s->n))
     return false;
 
-  char *dest = (char *)v->arr + v->n * v->sz;
+  char *dest = (char *)v->array + v->n * v->sz;
   char *src = (char *)s->arr;
   memmove(dest, src, s->n * s->sz);
 
@@ -86,7 +86,7 @@ vslice vec_slice(vec *v, int start, int end) {
     end = roll(end, v->n);
     if (start < 0 || end < 0 || start > end)
       return no_slice;
-    return (vslice){.sz = v->sz, .n = end - start, .arr = (char *)v->arr + start * v->sz};
+    return (vslice){.sz = v->sz, .n = end - start, .arr = (char *)v->array + start * v->sz};
   }
   return no_slice;
 }
@@ -101,8 +101,12 @@ void *vec_nth(const vslice *v, int n) {
   return addr + n * v->sz;
 }
 
+void vec_clear(vec *v) {
+  v->n = 0;
+}
+
 void vec_destroy(vec *v) {
-  free(v->arr);
+  free(v->array);
   *v = (vec){0};
 }
 
@@ -138,4 +142,21 @@ static void *identity(void *v) {
 }
 vec vec_clone(const vec *v) {
   return vec_select(&v->slice, v->sz, identity);
+}
+
+string string_from_chars(const char *src, int n) {
+  string s = {0};
+  mk_string(&s, n);
+  push_str(&s, n, src);
+  return s;
+}
+
+bool push_char(string *s, char ch) {
+  return vec_push(&s->v, &ch);
+}
+bool string_contains(const string *s, char ch) {
+  for (int i = 0; i < s->n; i++) {
+    if (s->chars[i] == ch) return true;
+  }
+  return false;
 }

@@ -15,6 +15,10 @@ typedef struct {
   int sz;
 } vslice;
 
+#define v_foreach(type, var, vec) \
+  type var;                     \
+  for (int idx_##var = 0; idx_##var < vec.n && (var = vec_nth(&vec.slice, idx_##var)); idx_##var++)
+
 // generically sized vector
 typedef struct {
   union {
@@ -24,7 +28,7 @@ typedef struct {
       // number of elements
       int n;
       // array
-      void *arr;
+      void *array;
       // size of each element
       int sz;
     };
@@ -37,9 +41,9 @@ typedef struct {
   union {
     vec v;
     struct {
-      int length;
-      char *data;
-      int capacity;
+      int n;
+      char *chars;
+      int c;
     };
   };
 } string;
@@ -71,8 +75,11 @@ vec vec_select(const vslice *v, int elem_size, vec_selector s);
 bool mk_string(string *s, int initial_capacity);
 /* Append data to string, resizing if needed
  */
-bool push_str(string *s, int n, char data[static n]);
+bool push_char(string *s, char ch);
+bool push_str(string *s, int n, const char data[static n]);
+bool string_contains(const string *s, char ch);
 /* Free all data associated with the string
  */
 void destroy_string(string *s);
-
+// Create a new string from an existing char array
+string string_from_chars(const char *src, int n);

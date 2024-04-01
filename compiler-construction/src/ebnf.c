@@ -1,8 +1,16 @@
 #include "ebnf.h"
 #include "regex.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
+#define PANIC(FMT)                                        \
+  {                                                       \
+    printf("%s:%d Error: %s\n", __FILE__, __LINE__, FMT); \
+    exit(1);                                              \
+  }
+
+// TODO: error reporting
 enum terminals {
   LETTER,
   DIGIT,
@@ -70,34 +78,15 @@ static regex *regexes[LAST_TERMINAL] = {0};
   }
 
 static void destroy_expression(expression_t *e);
-static bool match(grammar_t *g, int expr);
-static bool syntax(grammar_t *g);
-static bool production(grammar_t *g, production_t *p);
-static bool expression(grammar_t *g, expression_t *e);
-static bool term(grammar_t *g, term_t *t);
-static bool factor(grammar_t *g, factor_t *f);
-static bool identifier(grammar_t *g, string_slice *s);
+static bool match(parser_t *g, int expr);
+static bool syntax(parser_t *g);
+static bool production(parser_t *g, production_t *p);
+static bool expression(parser_t *g, expression_t *e);
+static bool term(parser_t *g, term_t *t);
+static bool factor(parser_t *g, factor_t *f);
+static bool identifier(parser_t *g, string_slice *s);
 
-// static char *factor_to_string(enum factor_switch f) {
-//   switch (f) {
-//   case F_ERROR:
-//     return "error";
-//   case F_OPTIONAL:
-//     return "optional";
-//   case F_REPEAT:
-//     return "repeat";
-//   case F_PARENS:
-//     return "parens";
-//   case F_IDENTIFIER:
-//     return "identifier";
-//   case F_STRING:
-//     return "string";
-//   default:
-//     return "unknown";
-//   }
-// }
-
-static bool match_literal(grammar_t *g, char literal) {
+static bool match_literal(parser_t *g, char literal) {
   if (finished(&g->ctx))
     return false;
   if (g->ctx.src[g->ctx.c] == literal) {
@@ -107,12 +96,12 @@ static bool match_literal(grammar_t *g, char literal) {
   return false;
 }
 
-static bool match(grammar_t *g, int expr) {
+static bool match(parser_t *g, int expr) {
   regex *r = regexes[expr];
   return regex_matches(r, &g->ctx).match;
 }
 
-static bool factor(grammar_t *g, factor_t *f) {
+static bool factor(parser_t *g, factor_t *f) {
   // first set:
   // letter -> identifier
   // """    -> string
@@ -127,7 +116,12 @@ static bool factor(grammar_t *g, factor_t *f) {
   case '"':
   case '\'':
     f->type = F_STRING;
-    MATCH_TERMINAL(STRING);
+    f->string.str = POINT;
+    if (!match(g, STRING)) {
+      fprintf(stderr, "Expected STRING\n");
+      return 0;
+    }
+    f->string.n = POINT - f->string.str;
     break;
   case '(':
     f->type = F_PARENS;
@@ -174,22 +168,22 @@ static bool factor(grammar_t *g, factor_t *f) {
   return true;
 }
 
-bool term(grammar_t *g, term_t *t) {
+bool term(parser_t *g, term_t *t) {
   factor_t f = {0};
   t->range.str = POINT;
   if (!factor(g, &f))
     return false;
-  mk_vec(&t->v, sizeof(factor_t), 1);
-  vec_push(&t->v, &f);
+  mk_vec(&t->factors_vec, sizeof(factor_t), 1);
+  vec_push(&t->factors_vec, &f);
   while (factor(g, &f)) {
-    vec_push(&t->v, &f);
+    vec_push(&t->factors_vec, &f);
   }
   t->range.n = POINT - t->range.str;
   return true;
 }
 
-bool expression(grammar_t *g, expression_t *e) {
-  mk_vec(&e->v, sizeof(term_t), 1);
+bool expression(parser_t *g, expression_t *e) {
+  mk_vec(&e->terms_vec, sizeof(term_t), 1);
 
   e->range.str = POINT;
   do {
@@ -198,21 +192,21 @@ bool expression(grammar_t *g, expression_t *e) {
       destroy_expression(e);
       return false;
     }
-    vec_push(&e->v, &t);
+    vec_push(&e->terms_vec, &t);
   } while (match(g, ALTERNATION));
   e->range.n = POINT - e->range.str;
 
   return true;
 }
 
-bool identifier(grammar_t *g, string_slice *s) {
+bool identifier(parser_t *g, string_slice *s) {
   s->str = POINT;
   MATCH_TERMINAL(IDENTIFIER);
   s->n = POINT - s->str;
   return true;
 }
 
-bool production(grammar_t *g, production_t *p) {
+bool production(parser_t *g, production_t *p) {
   MATCH_TERMINAL(WHITESPACE);
   string_slice s;
   if (!identifier(g, &s))
@@ -222,31 +216,208 @@ bool production(grammar_t *g, production_t *p) {
     return false;
   MATCH_TERMINAL(PERIOD);
   p->identifier = s;
-  p->rule = p->expr.range;
   return true;
 }
 
-static bool syntax(grammar_t *g) {
-  mk_vec(&g->v, sizeof(production_t), 0);
+bool syntax(parser_t *g) {
+  mk_vec(&g->productions_vec, sizeof(production_t), 0);
   while (!finished(&g->ctx)) {
-    int start = g->ctx.c;
     production_t p = {0};
     if (!production(g, &p)) {
       return false;
     }
-    int len = g->ctx.c - start;
-    string_slice s = {.str = g->ctx.src + start, .n = len};
-    p.src = s;
-    vec_push(&g->v, &p);
+    vec_push(&g->productions_vec, &p);
     MATCH_TERMINAL(WHITESPACE);
   }
   return true;
 }
 
-grammar_t parse_grammar(const char *text) {
-  grammar_t error = {0};
+production_t *find_production(parser_t *g, string_slice name) {
+  v_foreach(production_t *, p, g->productions_vec) {
+    if (p->identifier.n == name.n)
+      if (slicecmp(p->identifier, name) == 0)
+        return p;
+  }
+  return NULL;
+}
+
+static bool init_expressions(parser_t *g, expression_t *expr) {
+  v_foreach(term_t *, t, expr->terms_vec) {
+    v_foreach(factor_t *, f, t->factors_vec) {
+      switch (f->type) {
+
+      case F_OPTIONAL:
+      case F_REPEAT:
+      case F_PARENS: {
+        if (!init_expressions(g, &f->expression))
+          return false;
+        break;
+      }
+      case F_IDENTIFIER: {
+        string_slice name = f->identifier.name;
+        production_t *p = find_production(g, name);
+        if (p == NULL) {
+          fprintf(stderr, "Production '%.*s' not found\n", name.n, name.str);
+          return false;
+        }
+        f->identifier.production = p;
+        break;
+      }
+      case F_ERROR:
+      case F_STRING:
+        break;
+      }
+    }
+  }
+  return true;
+}
+
+static bool init_productions(parser_t *g) {
+  // Iterate through all factors that are identifiers
+  // and link back to the production with the matching name
+  v_foreach(production_t *, p, g->productions_vec) {
+    if (!init_expressions(g, &p->expr))
+      return false;
+  }
+  return true;
+}
+
+// #define NEWSYM() (arena_alloc(g->a, 1, sizeof(Symbol)))
+#define NEWSYM(empty, nonterminal) (mk_sym(g->a, empty, nonterminal))
+
+Symbol *mk_sym(arena *a, bool empty, bool nonterminal) {
+  Symbol *s = arena_alloc(a, 1, sizeof(Symbol));
+  *s = (Symbol){.empty = empty, .non_terminal = nonterminal};
+  return s;
+}
+
+static Symbol *expression_symbol(parser_t *g, expression_t *expr);
+
+static Symbol *factor_symbol(parser_t *g, factor_t *factor) {
+  // mk_vec(&factor_sym.next_vec, sizeof(Symbol), 1);
+  switch (factor->type) {
+  case F_OPTIONAL:
+  case F_REPEAT:
+  case F_PARENS: {
+    Symbol *subexpression = expression_symbol(g, &factor->expression);
+    if (factor->type == F_REPEAT) {
+      for (Symbol *alt = subexpression; alt; alt = alt->alt) {
+        for (Symbol *next = alt; next; next = next->next) {
+          if (next->next == subexpression || alt->alt == subexpression) {
+            // PANIC("circular reference.");
+            break;
+          }
+          if (next->next == NULL) {
+            next->next = subexpression;
+            break;
+          }
+        }
+      }
+    }
+
+    if (factor->type == F_OPTIONAL || factor->type == F_REPEAT) {
+      Symbol *empty = (mk_sym(g->a, true, false));
+      Symbol *tail = subexpression;
+      for (; tail->alt; tail = tail->alt)
+        ;
+      tail->alt = empty;
+    }
+    return subexpression;
+  }
+  case F_IDENTIFIER: {
+    production_t *p = factor->identifier.production;
+    if (!p) {
+      printf("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
+      return NULL;
+    }
+    Symbol *prod = NEWSYM(false, true);
+    prod->Nonterminal = p;
+    return prod;
+  }
+  case F_STRING: {
+    Symbol *s, *last;
+    s = last = NULL;
+    string_slice str = factor->string;
+    for (int i = 1; i < str.n - 1; i++) {
+      char ch = str.str[i];
+      Symbol *charsym = NEWSYM(false, false);
+      charsym->sym = ch;
+      if (s == NULL)
+        last = s = charsym;
+      else {
+        last->next = charsym;
+        last = charsym;
+      }
+    }
+    return s;
+  }
+  default:
+    printf("What??\n");
+    exit(1);
+  }
+}
+
+static Symbol *term_symbol(parser_t *g, term_t *term) {
+  Symbol *ts, *last;
+  ts = last = NULL;
+  // mk_vec(&term_sym.next_vec, sizeof(Symbol), 0);
+  v_foreach(factor_t *, f, term->factors_vec) {
+    Symbol *s = factor_symbol(g, f);
+    if (ts == NULL)
+      ts = last = s;
+    else {
+      for (Symbol *alt = last; alt; alt = alt->alt) {
+        for (Symbol *next = alt; next; next = next->next) {
+          if (next->next == alt) {
+            break;
+          }
+          if (next->next == NULL) {
+            next->next = s;
+            break;
+          }
+        }
+      }
+      last = s;
+    }
+  }
+  return ts;
+}
+
+static Symbol *expression_symbol(parser_t *g, expression_t *expr) {
+  Symbol *expr_s = NULL;
+  // mk_vec(&expr_sym.alt_vec, sizeof(Symbol), 1);
+  v_foreach(term_t *, t, expr->terms_vec) {
+    Symbol *ts = term_symbol(g, t);
+    if (!expr_s)
+      expr_s = ts;
+    else {
+      Symbol *tail = ts;
+      for (; tail->alt; tail = tail->alt)
+        ;
+      tail->alt = expr_s;
+      expr_s = ts;
+    }
+  }
+  return expr_s;
+}
+
+static void build_parse_table(parser_t *g) {
+  v_foreach(production_t *, prod, g->productions_vec) {
+    prod->header = arena_alloc(g->a, 1, sizeof(Header));
+    prod->header->prod = prod;
+  }
+
+  v_foreach((void), prod, g->productions_vec) {
+    prod->header->sym = expression_symbol(g, &prod->expr);
+  }
+}
+
+parser_t mk_parser(const char *text) {
+  parser_t g = {0};
   if (!text)
-    return error;
+    return g;
+  g.body = string_from_chars(text, strlen(text));
+  g.a = mk_arena();
 
   for (int i = 0; i < LAST_TERMINAL; i++) {
     if (regexes[i])
@@ -254,59 +425,111 @@ grammar_t parse_grammar(const char *text) {
     regexes[i] = mk_regex(patterns[i]);
     if (!regexes[i]) {
       fprintf(stderr, "Failed to compile regex %s\n", patterns[i]);
-      return error;
+      return g;
     }
   }
 
-  grammar_t g = {0};
-  g.ctx = (match_context){.src = text, .n = strlen(text)};
+  g.ctx = (match_context){.src = g.body.chars, .n = g.body.n};
   bool success = syntax(&g);
   if (!success)
-    return error;
+    return g;
 
-  printf("Alphabet:\n");
-  for (int i = 0; i < g.n; i++) {
-    production_t *p = g.productions + i;
-    char name[50];
-    snprintf(name, sizeof(name), "%.*s", p->identifier.n, p->identifier.str);
-    for (int j = 0; j < p->expr.n; j++) {
-      term_t *t = p->expr.terms + j;
-      for (int k = 0; k < t->n; k++) {
-        factor_t *f = t->factors + k;
-        if (f->type == F_STRING) {
-          printf("%.*s", f->range.n - 2, f->range.str + 1);
-          // const char *type = factor_to_string(f->type);
-          // printf(" [%s] %.*s", type, f->range.n, f->range.str);
-        }
-      }
-    }
-  }
-  puts("");
+  if (!init_productions(&g))
+    return g;
+
+  build_parse_table(&g);
+
   return g;
 }
 
+static void destroy_expression(expression_t *e);
+
 static void destroy_term(term_t *t) {
-  vec_destroy(&t->v);
+  v_foreach(factor_t *, f, t->factors_vec) {
+    if (f->type == F_OPTIONAL ||
+        f->type == F_REPEAT ||
+        f->type == F_PARENS)
+      destroy_expression(&f->expression);
+  }
+  vec_destroy(&t->factors_vec);
 }
 
 static void destroy_expression(expression_t *e) {
-  for (int i = 0; i < e->n; i++) {
-    destroy_term(e->terms + i);
+  v_foreach(term_t *, t, e->terms_vec) {
+    destroy_term(t);
   }
-  vec_destroy(&e->v);
+  vec_destroy(&e->terms_vec);
 }
 
 static void destroy_production(production_t *p) {
   destroy_expression(&p->expr);
 }
 
-void destroy_grammar(grammar_t *g) {
+void destroy_parser(parser_t *g) {
   if (g) {
-    for (int i = 0; i < g->n; i++) {
-      destroy_production(g->productions + i);
+    v_foreach(production_t *, p, g->productions_vec) {
+      destroy_production(p);
     }
-    vec_destroy(&g->v);
+    vec_destroy(&g->productions_vec);
+    destroy_string(&g->body);
+    destroy_arena(g->a);
   }
+}
+
+bool skip(char ch) {
+  return ch == ' ' || ch == '\t' || ch == '\n';
+}
+
+bool tokenize(Header *hd, parse_context *ctx, tokens *t) {
+  Symbol *x;
+  bool match;
+  x = hd->sym;
+  string_slice name = hd->prod->identifier;
+  int start = ctx->c;
+
+  while (x) {
+    if (!x->non_terminal) {
+      if (!finished(ctx) && x->sym == peek(ctx)) {
+        match = true;
+        advance(ctx);
+      } else {
+        match = x->empty;
+      }
+    } else {
+      int here = ctx->c;
+      int n_tokens = t->n_tokens;
+      match = tokenize(x->Nonterminal->header, ctx, t);
+      if (match) {
+      }
+      if (!match) {
+        // rewind
+        ctx->c = here;
+        t->n_tokens = n_tokens;
+      }
+    }
+    x = match ? x->next : x->alt;
+  }
+  if (match) {
+    string_slice range = {.str = ctx->src + start, .n = ctx->c - start};
+    struct token newtoken = {.name = name, .value = range};
+    vec_push(&t->tokens_vec, &newtoken);
+  }
+  return match;
+}
+
+tokens parse(parser_t *g, const char *program) {
+  tokens t = {0};
+  mk_vec(&t.tokens_vec, sizeof(struct token), 0);
+  printf("Parse program: %s\n", program);
+  parse_context ctx = {.n = strlen(program), .src = program};
+  Header *start = g->productions[0].header;
+  if (!tokenize(start, &ctx, &t)) {
+    printf("Failed to parse program\n");
+  }
+  if (!finished(&ctx)) {
+    printf("Parse ended prematurely\n");
+  }
+  return t;
 }
 
 position_t get_position(const char *source, string_slice place) {
@@ -322,8 +545,4 @@ position_t get_position(const char *source, string_slice place) {
       column++;
   }
   return (position_t){-1, -1};
-}
-parser_t tokenize(const grammar_t *g, const char *body) {
-  parser_t error = {0};
-  return error;
 }
