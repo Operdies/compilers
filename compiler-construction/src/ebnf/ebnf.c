@@ -272,7 +272,6 @@ static bool init_expressions(parser_t *g, expression_t *expr) {
         f->identifier.production = p;
         break;
       }
-      case F_ERROR:
       case F_STRING:
         break;
       }
@@ -570,3 +569,74 @@ position_t get_position(const char *source, string_slice place) {
   }
   return (position_t){-1, -1};
 }
+
+static void populate_terminals(terminal_list *terminals, expression_t *e) {
+  v_foreach(term_t *, t, e->terms_vec) {
+    v_foreach(factor_t *, f, t->factors_vec) {
+      if (f->type == F_PARENS || f->type == F_OPTIONAL || f->type == F_REPEAT) {
+        populate_terminals(terminals, &f->expression);
+      } else if (f->type == F_STRING) {
+        vec_push(&terminals->terminals_vec, (char *)f->string.str + 1);
+      }
+    }
+  }
+}
+
+terminal_list get_terminals(const parser_t *g) {
+  terminal_list t = {0};
+  mk_vec(&t.terminals_vec, sizeof(char), 0);
+  v_foreach(production_t *, p, g->productions_vec) {
+    populate_terminals(&t, &p->expr);
+  }
+  return t;
+}
+nonterminal_list get_nonterminals(const parser_t *g) {
+  nonterminal_list t = {0};
+  mk_vec(&t.nonterminals_vec, sizeof(Header), 0);
+  v_foreach(production_t *, p, g->productions_vec)
+      vec_push(&t.nonterminals_vec, p->header);
+  return t;
+}
+
+static void populate_first_expr(const parser_t *g, struct Header *h, expression_t *e);
+
+static void populate_first_term(const parser_t *g, struct Header *h, term_t *t) {
+  v_foreach(factor_t *, fac, t->factors_vec) {
+    switch (fac->type) {
+    case F_OPTIONAL:
+    case F_REPEAT:
+      // these can be skipped, so the next term must be included in the first set
+      populate_first_expr(g, h, &fac->expression);
+      continue;
+    case F_PARENS:
+      populate_first_expr(g, h, &fac->expression);
+      return;
+    case F_IDENTIFIER: {
+      // Add the first set of this production to this first set
+      struct Header *id = fac->identifier.production->header;
+      populate_first(g, id);
+      vec_push_slice(&h->first_vec, &id->first_vec.slice);
+      return;
+    }
+    case F_STRING:
+      vec_push(&h->first_vec, (char *)fac->string.str + 1);
+      return;
+    }
+  }
+}
+
+static void populate_first_expr(const parser_t *g, struct Header *h, expression_t *e) {
+  v_foreach(term_t *, t, e->terms_vec) {
+    populate_first_term(g, h, t);
+  }
+}
+
+void populate_first(const parser_t *g, struct Header *h) {
+  if (h->first) {
+    return;
+  }
+  mk_vec(&h->first_vec, sizeof(char), 0);
+  populate_first_expr(g, h, &h->prod->expr);
+}
+void populate_follow(const parser_t *g, struct Header *h);
+bool is_ll1(const parser_t *g);

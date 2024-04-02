@@ -6,7 +6,6 @@
 
 // * factor     = identifier | string | "(" expression ")" | "[" expression "]" | "{" expression "}".
 enum factor_switch {
-  F_ERROR,
   F_OPTIONAL, // [ expression ]
   F_REPEAT,   // { expression }
   F_PARENS,   // ( expression )

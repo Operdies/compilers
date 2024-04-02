@@ -16,8 +16,12 @@ typedef struct {
 } vslice;
 
 #define v_foreach(type, var, vec) \
-  type var;                     \
+  type var;                       \
   for (int idx_##var = 0; idx_##var < vec.n && (var = vec_nth(&vec.slice, idx_##var)); idx_##var++)
+
+#define v_rforeach(type, var, vec) \
+  type var;                        \
+  for (int idx_##var = vec.n - 1; idx_##var >= 0 && (var = vec_nth(&vec.slice, idx_##var)); idx_##var--)
 
 // generically sized vector
 typedef struct {
