@@ -4,9 +4,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define PANIC(FMT)                                        \
+#define __VA_REST__(A, ...) __VA_ARGS__
+#define __VA_FIRST__(A, ...) A
+
+#define panicf(fmt, ...)                                               \
+  {                                                                    \
+    printf("%s:%d Error: " fmt "\n", __FILE__, __LINE__, __VA_ARGS__); \
+    exit(1);                                                           \
+  }
+#define panic(fmt)                                        \
   {                                                       \
-    printf("%s:%d Error: %s\n", __FILE__, __LINE__, FMT); \
+    printf("%s:%d Error: " fmt "\n", __FILE__, __LINE__); \
     exit(1);                                              \
   }
 
@@ -31,6 +39,7 @@ enum nonterminals {
   LAST_NONTERMINAL,
 };
 
+// char pointer to the cursor in the parse context
 #define POINT (g->ctx.src + g->ctx.c)
 
 #define LETTERS "a-zA-Z"
@@ -293,6 +302,38 @@ Symbol *mk_sym(arena *a, bool empty, bool nonterminal) {
 
 static Symbol *expression_symbol(parser_t *g, expression_t *expr);
 
+Symbol *tail_alt(Symbol *s) {
+  Symbol *slow, *fast;
+  slow = fast = s;
+  for (;;) {
+    if (fast->alt == NULL)
+      return fast;
+    fast = fast->alt;
+    if (fast->alt == NULL)
+      return fast;
+    fast = fast->alt;
+    slow = slow->alt;
+    if (slow == fast)
+      return NULL;
+  }
+}
+
+Symbol *tail_next(Symbol *s) {
+  Symbol *slow, *fast;
+  slow = fast = s;
+  for (;;) {
+    if (fast->next == NULL)
+      return fast;
+    fast = fast->next;
+    if (fast->next == NULL)
+      return fast;
+    fast = fast->next;
+    slow = slow->next;
+    if (slow == fast)
+      return NULL;
+  }
+}
+
 static Symbol *factor_symbol(parser_t *g, factor_t *factor) {
   // mk_vec(&factor_sym.next_vec, sizeof(Symbol), 1);
   switch (factor->type) {
@@ -302,24 +343,18 @@ static Symbol *factor_symbol(parser_t *g, factor_t *factor) {
     Symbol *subexpression = expression_symbol(g, &factor->expression);
     if (factor->type == F_REPEAT) {
       for (Symbol *alt = subexpression; alt; alt = alt->alt) {
-        for (Symbol *next = alt; next; next = next->next) {
-          if (next->next == subexpression || alt->alt == subexpression) {
-            // PANIC("circular reference.");
-            break;
-          }
-          if (next->next == NULL) {
-            next->next = subexpression;
-            break;
-          }
-        }
+        Symbol *nt = tail_next(alt);
+        if (nt)
+          nt->next = subexpression;
       }
     }
 
     if (factor->type == F_OPTIONAL || factor->type == F_REPEAT) {
-      Symbol *empty = (mk_sym(g->a, true, false));
-      Symbol *tail = subexpression;
-      for (; tail->alt; tail = tail->alt)
-        ;
+      Symbol *empty = NEWSYM(true, false);
+      Symbol *tail = tail_alt(subexpression);
+      if (!tail) {
+        panic("Circular alt chain prevents loop exit.");
+      }
       tail->alt = empty;
     }
     return subexpression;
@@ -327,7 +362,7 @@ static Symbol *factor_symbol(parser_t *g, factor_t *factor) {
   case F_IDENTIFIER: {
     production_t *p = factor->identifier.production;
     if (!p) {
-      printf("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
+      panicf("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
       return NULL;
     }
     Symbol *prod = NEWSYM(false, true);
@@ -367,15 +402,9 @@ static Symbol *term_symbol(parser_t *g, term_t *term) {
       ts = last = s;
     else {
       for (Symbol *alt = last; alt; alt = alt->alt) {
-        for (Symbol *next = alt; next; next = next->next) {
-          if (next->next == alt) {
-            break;
-          }
-          if (next->next == NULL) {
-            next->next = s;
-            break;
-          }
-        }
+        Symbol *next = tail_next(alt);
+        if (next)
+          next->next = s;
       }
       last = s;
     }
@@ -446,18 +475,14 @@ static void destroy_expression(expression_t *e);
 
 static void destroy_term(term_t *t) {
   v_foreach(factor_t *, f, t->factors_vec) {
-    if (f->type == F_OPTIONAL ||
-        f->type == F_REPEAT ||
-        f->type == F_PARENS)
+    if (f->type == F_OPTIONAL || f->type == F_REPEAT || f->type == F_PARENS)
       destroy_expression(&f->expression);
   }
   vec_destroy(&t->factors_vec);
 }
 
 static void destroy_expression(expression_t *e) {
-  v_foreach(term_t *, t, e->terms_vec) {
-    destroy_term(t);
-  }
+  v_foreach(term_t *, t, e->terms_vec) { destroy_term(t); }
   vec_destroy(&e->terms_vec);
 }
 
@@ -467,18 +492,14 @@ static void destroy_production(production_t *p) {
 
 void destroy_parser(parser_t *g) {
   if (g) {
-    v_foreach(production_t *, p, g->productions_vec) {
-      destroy_production(p);
-    }
+    v_foreach(production_t *, p, g->productions_vec) { destroy_production(p); }
     vec_destroy(&g->productions_vec);
     destroy_string(&g->body);
     destroy_arena(g->a);
   }
 }
 
-bool skip(char ch) {
-  return ch == ' ' || ch == '\t' || ch == '\n';
-}
+bool skip(char ch) { return ch == ' ' || ch == '\t' || ch == '\n'; }
 
 bool tokenize(Header *hd, parse_context *ctx, tokens *t) {
   Symbol *x;
@@ -524,10 +545,13 @@ tokens parse(parser_t *g, const char *program) {
   parse_context ctx = {.n = strlen(program), .src = program};
   Header *start = g->productions[0].header;
   if (!tokenize(start, &ctx, &t)) {
-    printf("Failed to parse program\n");
+    panic("Failed to parse program\n");
   }
   if (!finished(&ctx)) {
-    printf("Parse ended prematurely\n");
+    panicf("Parse ended prematurely:\n"
+           "%.*s\n"
+           " %*s\n",
+           (int)(ctx.n), ctx.src, (int)ctx.c, "^");
   }
   return t;
 }
