@@ -1,4 +1,4 @@
-#include "ebnf.h"
+#include "ebnf/ebnf.h"
 #include "regex.h"
 #include <stdio.h>
 #include <stdlib.h>

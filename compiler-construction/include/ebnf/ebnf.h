@@ -86,11 +86,6 @@ struct Symbol {
   bool empty;
 };
 
-struct Header {
-  production_t *prod;
-  Symbol *sym;
-};
-
 struct position_t {
   int line;
   int column;
@@ -109,5 +104,35 @@ parser_t mk_parser(const char *grammar);
 void destroy_parser(parser_t *g);
 tokens parse(parser_t *g, const char *program);
 position_t get_position(const char *source, string_slice place);
+
+/* 5.4 exercise:
+ * 1. List of terminal symbols
+ * 2. List of nonterminal symbols
+ * 3. The sets of start and follow symbols for each nonterminal
+ *
+ * Determine whether a given grammar is LL(1)
+ * If not, show the conflicting productions
+ */
+
+typedef struct {
+  DECLARE_VEC(char, terminals);
+} terminal_list;
+
+typedef struct {
+  DECLARE_VEC(struct Header, nonterminals);
+} nonterminal_list;
+
+struct Header {
+  production_t *prod;
+  Symbol *sym;
+  DECLARE_VEC(char, first);
+  DECLARE_VEC(char, follow);
+};
+
+terminal_list get_terminals(const parser_t *g);
+nonterminal_list get_nonterminals(const parser_t *g);
+void populate_first(const parser_t *g, struct Header *h);
+void populate_follow(const parser_t *g, struct Header *h);
+bool is_ll1(const parser_t *g);
 
 #endif // !EBNF_H

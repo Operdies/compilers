@@ -1,5 +1,4 @@
 // link: regex.o arena.o
-#include "ebnf.h"
 #include "macros.h"
 #include "regex.h"
 #include "text.h"
