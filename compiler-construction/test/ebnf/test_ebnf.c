@@ -9,14 +9,9 @@ static const char text[] = {
     // "term   = factor | term '/' factor | term '*' factor.\n"
     // "factor = digit  | '(' expr ')'.\n"
     // "digits = digit { digit }.\n"
-    "expression = term {(plus | minus ) term } { 'yo' } .\n"
-    "term       = factor {(mult | div) factor } .\n"
-    "factor     = { whitespace } ( digits | '(' expression ')' ) [ '!' ] { whitespace }  .\n"
-    "plus       = '+'.\n"
-    "minus      = '-' .\n"
-    "mult       = '*'.\n"
-    "div        = '/'.\n"
-    "exlm       = '!'.\n"
+    "expression = term {('+' | '-' ) term } .\n"
+    "term       = factor {('*' | '/') factor } .\n"
+    "factor     = { whitespace } ( digits | '(' expression ')' ) { whitespace }  .\n"
     "digits     = digit { digit } .\n"
     "whitespace = ' ' | '\n' | '\t' .\n"
     "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
@@ -50,6 +45,22 @@ void print_first_sets(parser_t *g) {
   }
 }
 
+void print_follow_sets(parser_t *g) {
+  v_foreach(production_t *, p, g->productions_vec) {
+    Header *h = p->header;
+    populate_follow(g, h);
+    printf("follow(%.*s) %*c ", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
+    v_foreach(char *, chp, h->follow_vec) {
+      char ch = *chp;
+      if (isgraph(ch))
+        printf("%c ", ch);
+      else
+        printf("0x%02x ", (int)ch);
+    }
+    puts("");
+  }
+}
+
 void print_tokens(tokens tok) {
   v_foreach(struct token *, t, tok.tokens_vec) {
     printf("Token '%.*s': '%.*s'\n", t->name.n, t->name.str, t->value.n, t->value.str);
@@ -62,9 +73,9 @@ int main(void) {
     fprintf(stderr, "Failed to parse grammar.\n");
     return 1;
   }
-  print_first_sets(&p);
+  // print_first_sets(&p);
   // tokens tok = parse(&p, program);
-  // print_tokens(parse(&p, program));
+  print_tokens(parse(&p, program));
   // print_terminals(get_terminals(&p));
   destroy_parser(&p);
   return 0;

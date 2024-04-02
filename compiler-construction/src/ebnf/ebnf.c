@@ -125,12 +125,12 @@ static bool factor(parser_t *g, factor_t *f) {
   case '"':
   case '\'':
     f->type = F_STRING;
-    f->string.str = POINT;
+    f->string.str = POINT + 1;
     if (!match(g, STRING)) {
       fprintf(stderr, "Expected STRING\n");
       return 0;
     }
-    f->string.n = POINT - f->string.str;
+    f->string.n = POINT - f->string.str - 1;
     break;
   case '(':
     f->type = F_PARENS;
@@ -333,6 +333,20 @@ Symbol *tail_next(Symbol *s) {
   }
 }
 
+bool append_alt(Symbol *chain, Symbol *new_tail) {
+  chain = tail_alt(chain);
+  if (chain)
+    chain->alt = new_tail;
+  return chain ? true : false;
+}
+
+bool append_next(Symbol *chain, Symbol *new_tail) {
+  chain = tail_next(chain);
+  if (chain)
+    chain->next = new_tail;
+  return chain ? true : false;
+}
+
 static Symbol *factor_symbol(parser_t *g, factor_t *factor) {
   // mk_vec(&factor_sym.next_vec, sizeof(Symbol), 1);
   switch (factor->type) {
@@ -342,19 +356,16 @@ static Symbol *factor_symbol(parser_t *g, factor_t *factor) {
     Symbol *subexpression = expression_symbol(g, &factor->expression);
     if (factor->type == F_REPEAT) {
       for (Symbol *alt = subexpression; alt; alt = alt->alt) {
-        Symbol *nt = tail_next(alt);
-        if (nt)
-          nt->next = subexpression;
+        // TODO: do we also need to loop through the alts of each next here?
+        append_next(alt, subexpression);
       }
     }
 
     if (factor->type == F_OPTIONAL || factor->type == F_REPEAT) {
       Symbol *empty = NEWSYM(true, false);
-      Symbol *tail = tail_alt(subexpression);
-      if (!tail) {
+      if (!append_alt(subexpression, empty)) {
         panic("Circular alt chain prevents loop exit.");
       }
-      tail->alt = empty;
     }
     return subexpression;
   }
@@ -372,7 +383,7 @@ static Symbol *factor_symbol(parser_t *g, factor_t *factor) {
     Symbol *s, *last;
     s = last = NULL;
     string_slice str = factor->string;
-    for (int i = 1; i < str.n - 1; i++) {
+    for (int i = 0; i < str.n; i++) {
       char ch = str.str[i];
       Symbol *charsym = NEWSYM(false, false);
       charsym->sym = ch;
@@ -401,8 +412,11 @@ static Symbol *term_symbol(parser_t *g, term_t *term) {
       ts = last = s;
     else {
       for (Symbol *alt = last; alt; alt = alt->alt) {
+        // TODO: do we also need to loop through the alts of each next here?
+        // From cursory testing I could not produce a grammar where this was an issue
+        // Tried: Alternators in doubly nested parentheses
         Symbol *next = tail_next(alt);
-        if (next)
+        if (next && next != s)
           next->next = s;
       }
       last = s;
@@ -412,21 +426,19 @@ static Symbol *term_symbol(parser_t *g, term_t *term) {
 }
 
 static Symbol *expression_symbol(parser_t *g, expression_t *expr) {
-  Symbol *expr_s = NULL;
+  Symbol *new_expression;
+  new_expression = NULL;
   // mk_vec(&expr_sym.alt_vec, sizeof(Symbol), 1);
   v_foreach(term_t *, t, expr->terms_vec) {
-    Symbol *ts = term_symbol(g, t);
-    if (!expr_s)
-      expr_s = ts;
-    else {
-      Symbol *tail = ts;
-      for (; tail->alt; tail = tail->alt)
-        ;
-      tail->alt = expr_s;
-      expr_s = ts;
+    Symbol *new_term = term_symbol(g, t);
+    if (!new_expression) {
+      new_expression = new_term;
+    } else {
+      if (!append_alt(new_expression, new_term))
+        panic("Circular alt chain.");
     }
   }
-  return expr_s;
+  return new_expression;
 }
 
 static void build_parse_table(parser_t *g) {
@@ -576,7 +588,7 @@ static void populate_terminals(terminal_list *terminals, expression_t *e) {
       if (f->type == F_PARENS || f->type == F_OPTIONAL || f->type == F_REPEAT) {
         populate_terminals(terminals, &f->expression);
       } else if (f->type == F_STRING) {
-        vec_push(&terminals->terminals_vec, (char *)f->string.str + 1);
+        vec_push(&terminals->terminals_vec, (char *)f->string.str);
       }
     }
   }
@@ -619,7 +631,7 @@ static void populate_first_term(const parser_t *g, struct Header *h, term_t *t) 
       return;
     }
     case F_STRING:
-      vec_push(&h->first_vec, (char *)fac->string.str + 1);
+      vec_push(&h->first_vec, (char *)fac->string.str);
       return;
     }
   }
@@ -638,5 +650,28 @@ void populate_first(const parser_t *g, struct Header *h) {
   mk_vec(&h->first_vec, sizeof(char), 0);
   populate_first_expr(g, h, &h->prod->expr);
 }
-void populate_follow(const parser_t *g, struct Header *h);
+
+/* follow set
+ *
+ */
+
+void populate_follow_expr(const parser_t *g, Header *h, expression_t *e);
+
+void populate_follow_term(const parser_t *g, Header *h, term_t *t) {
+}
+
+void populate_follow_expr(const parser_t *g, Header *h, expression_t *e) {
+  v_foreach(term_t *, t, e->terms_vec) {
+    populate_follow_term(g, h, t);
+  }
+}
+
+void populate_follow(const parser_t *g, struct Header *h) {
+  if (h->follow) {
+    return;
+  }
+  mk_vec(&h->follow_vec, sizeof(char), 0);
+  populate_follow_expr(g, h, &h->prod->expr);
+}
+
 bool is_ll1(const parser_t *g);
