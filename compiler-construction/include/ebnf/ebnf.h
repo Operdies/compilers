@@ -23,15 +23,14 @@ enum factor_switch {
     };                             \
   }
 
-typedef struct Symbol Symbol;
-typedef struct Header Header;
+typedef struct symbol_t symbol_t;
+typedef struct header_t header_t;
 typedef struct factor_t factor_t;
 typedef struct production_t production_t;
 typedef struct term_t term_t;
 typedef struct expression_t expression_t;
 typedef struct identifier_t identifier_t;
 typedef struct parser_t parser_t;
-typedef struct token_t token_t;
 typedef struct position_t position_t;
 
 struct term_t {
@@ -65,7 +64,7 @@ struct production_t {
   // the parsed expression
   struct expression_t expr;
   // Header used in the parsing table
-  Header *header;
+  header_t *header;
 };
 
 struct parser_t {
@@ -76,12 +75,12 @@ struct parser_t {
   DECLARE_VEC(struct production_t, productions);
 };
 
-struct Symbol {
+struct symbol_t {
   char sym;
-  Symbol *next;
-  Symbol *alt;
-  production_t *Nonterminal;
-  bool non_terminal;
+  symbol_t *next;
+  symbol_t *alt;
+  production_t *nonterminal;
+  bool is_nonterminal;
   bool empty;
 };
 
@@ -90,13 +89,13 @@ struct position_t {
   int column;
 };
 
-struct token {
+struct token_t {
   string_slice name;
   string_slice value;
 };
 
 typedef struct {
-  DECLARE_VEC(struct token, tokens);
+  DECLARE_VEC(struct token_t, tokens);
 } tokens;
 
 parser_t mk_parser(const char *grammar);
@@ -118,20 +117,20 @@ typedef struct {
 } terminal_list;
 
 typedef struct {
-  DECLARE_VEC(struct Header, nonterminals);
+  DECLARE_VEC(struct header_t, nonterminals);
 } nonterminal_list;
 
-struct Header {
+struct header_t {
   production_t *prod;
-  Symbol *sym;
+  symbol_t *sym;
   DECLARE_VEC(char, first);
   DECLARE_VEC(char, follow);
 };
 
 terminal_list get_terminals(const parser_t *g);
 nonterminal_list get_nonterminals(const parser_t *g);
-void populate_first(const parser_t *g, struct Header *h);
-void populate_follow(const parser_t *g, struct Header *h);
+void populate_first(const parser_t *g, struct header_t *h);
+void populate_follow(const parser_t *g, struct header_t *h);
 bool is_ll1(const parser_t *g);
 
 #endif // !EBNF_H

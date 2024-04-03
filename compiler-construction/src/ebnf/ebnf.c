@@ -290,19 +290,19 @@ static bool init_productions(parser_t *g) {
   return true;
 }
 
-// #define NEWSYM() (arena_alloc(g->a, 1, sizeof(Symbol)))
+// #define NEWSYM() (arena_alloc(g->a, 1, sizeof(symbol_t)))
 #define NEWSYM(empty, nonterminal) (mk_sym(g->a, empty, nonterminal))
 
-Symbol *mk_sym(arena *a, bool empty, bool nonterminal) {
-  Symbol *s = arena_alloc(a, 1, sizeof(Symbol));
-  *s = (Symbol){.empty = empty, .non_terminal = nonterminal};
+symbol_t *mk_sym(arena *a, bool empty, bool nonterminal) {
+  symbol_t *s = arena_alloc(a, 1, sizeof(symbol_t));
+  *s = (symbol_t){.empty = empty, .is_nonterminal = nonterminal};
   return s;
 }
 
-static Symbol *expression_symbol(parser_t *g, expression_t *expr);
+static symbol_t *expression_symbol(parser_t *g, expression_t *expr);
 
-Symbol *tail_alt(Symbol *s) {
-  Symbol *slow, *fast;
+symbol_t *tail_alt(symbol_t *s) {
+  symbol_t *slow, *fast;
   slow = fast = s;
   for (;;) {
     if (fast->alt == NULL)
@@ -317,8 +317,8 @@ Symbol *tail_alt(Symbol *s) {
   }
 }
 
-Symbol *tail_next(Symbol *s) {
-  Symbol *slow, *fast;
+symbol_t *tail_next(symbol_t *s) {
+  symbol_t *slow, *fast;
   slow = fast = s;
   for (;;) {
     if (fast->next == NULL)
@@ -333,36 +333,36 @@ Symbol *tail_next(Symbol *s) {
   }
 }
 
-bool append_alt(Symbol *chain, Symbol *new_tail) {
+bool append_alt(symbol_t *chain, symbol_t *new_tail) {
   chain = tail_alt(chain);
   if (chain)
     chain->alt = new_tail;
   return chain ? true : false;
 }
 
-bool append_next(Symbol *chain, Symbol *new_tail) {
+bool append_next(symbol_t *chain, symbol_t *new_tail) {
   chain = tail_next(chain);
   if (chain)
     chain->next = new_tail;
   return chain ? true : false;
 }
 
-static Symbol *factor_symbol(parser_t *g, factor_t *factor) {
-  // mk_vec(&factor_sym.next_vec, sizeof(Symbol), 1);
+static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
+  // mk_vec(&factor_sym.next_vec, sizeof(symbol_t), 1);
   switch (factor->type) {
   case F_OPTIONAL:
   case F_REPEAT:
   case F_PARENS: {
-    Symbol *subexpression = expression_symbol(g, &factor->expression);
+    symbol_t *subexpression = expression_symbol(g, &factor->expression);
     if (factor->type == F_REPEAT) {
-      for (Symbol *alt = subexpression; alt; alt = alt->alt) {
+      for (symbol_t *alt = subexpression; alt; alt = alt->alt) {
         // TODO: do we also need to loop through the alts of each next here?
         append_next(alt, subexpression);
       }
     }
 
     if (factor->type == F_OPTIONAL || factor->type == F_REPEAT) {
-      Symbol *empty = NEWSYM(true, false);
+      symbol_t *empty = NEWSYM(true, false);
       if (!append_alt(subexpression, empty)) {
         panic("Circular alt chain prevents loop exit.");
       }
@@ -375,17 +375,17 @@ static Symbol *factor_symbol(parser_t *g, factor_t *factor) {
       panicf("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
       return NULL;
     }
-    Symbol *prod = NEWSYM(false, true);
-    prod->Nonterminal = p;
+    symbol_t *prod = NEWSYM(false, true);
+    prod->nonterminal = p;
     return prod;
   }
   case F_STRING: {
-    Symbol *s, *last;
+    symbol_t *s, *last;
     s = last = NULL;
     string_slice str = factor->string;
     for (int i = 0; i < str.n; i++) {
       char ch = str.str[i];
-      Symbol *charsym = NEWSYM(false, false);
+      symbol_t *charsym = NEWSYM(false, false);
       charsym->sym = ch;
       if (s == NULL)
         last = s = charsym;
@@ -402,20 +402,20 @@ static Symbol *factor_symbol(parser_t *g, factor_t *factor) {
   }
 }
 
-static Symbol *term_symbol(parser_t *g, term_t *term) {
-  Symbol *ts, *last;
+static symbol_t *term_symbol(parser_t *g, term_t *term) {
+  symbol_t *ts, *last;
   ts = last = NULL;
-  // mk_vec(&term_sym.next_vec, sizeof(Symbol), 0);
+  // mk_vec(&term_sym.next_vec, sizeof(symbol_t), 0);
   v_foreach(factor_t *, f, term->factors_vec) {
-    Symbol *s = factor_symbol(g, f);
+    symbol_t *s = factor_symbol(g, f);
     if (ts == NULL)
       ts = last = s;
     else {
-      for (Symbol *alt = last; alt; alt = alt->alt) {
+      for (symbol_t *alt = last; alt; alt = alt->alt) {
         // TODO: do we also need to loop through the alts of each next here?
         // From cursory testing I could not produce a grammar where this was an issue
         // Tried: Alternators in doubly nested parentheses
-        Symbol *next = tail_next(alt);
+        symbol_t *next = tail_next(alt);
         if (next && next != s)
           next->next = s;
       }
@@ -425,12 +425,12 @@ static Symbol *term_symbol(parser_t *g, term_t *term) {
   return ts;
 }
 
-static Symbol *expression_symbol(parser_t *g, expression_t *expr) {
-  Symbol *new_expression;
+static symbol_t *expression_symbol(parser_t *g, expression_t *expr) {
+  symbol_t *new_expression;
   new_expression = NULL;
-  // mk_vec(&expr_sym.alt_vec, sizeof(Symbol), 1);
+  // mk_vec(&expr_sym.alt_vec, sizeof(symbol_t), 1);
   v_foreach(term_t *, t, expr->terms_vec) {
-    Symbol *new_term = term_symbol(g, t);
+    symbol_t *new_term = term_symbol(g, t);
     if (!new_expression) {
       new_expression = new_term;
     } else {
@@ -443,7 +443,7 @@ static Symbol *expression_symbol(parser_t *g, expression_t *expr) {
 
 static void build_parse_table(parser_t *g) {
   v_foreach(production_t *, prod, g->productions_vec) {
-    prod->header = arena_alloc(g->a, 1, sizeof(Header));
+    prod->header = arena_alloc(g->a, 1, sizeof(header_t));
     prod->header->prod = prod;
   }
 
@@ -512,15 +512,15 @@ void destroy_parser(parser_t *g) {
 
 bool skip(char ch) { return ch == ' ' || ch == '\t' || ch == '\n'; }
 
-bool tokenize(Header *hd, parse_context *ctx, tokens *t) {
-  Symbol *x;
+bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
+  symbol_t *x;
   bool match;
   x = hd->sym;
   string_slice name = hd->prod->identifier;
   int start = ctx->c;
 
   while (x) {
-    if (!x->non_terminal) {
+    if (!x->is_nonterminal) {
       if (!finished(ctx) && x->sym == peek(ctx)) {
         match = true;
         advance(ctx);
@@ -530,7 +530,7 @@ bool tokenize(Header *hd, parse_context *ctx, tokens *t) {
     } else {
       int here = ctx->c;
       int n_tokens = t->n_tokens;
-      match = tokenize(x->Nonterminal->header, ctx, t);
+      match = tokenize(x->nonterminal->header, ctx, t);
       if (match) {
       }
       if (!match) {
@@ -543,7 +543,7 @@ bool tokenize(Header *hd, parse_context *ctx, tokens *t) {
   }
   if (match) {
     string_slice range = {.str = ctx->src + start, .n = ctx->c - start};
-    struct token newtoken = {.name = name, .value = range};
+    struct token_t newtoken = {.name = name, .value = range};
     vec_push(&t->tokens_vec, &newtoken);
   }
   return match;
@@ -551,10 +551,10 @@ bool tokenize(Header *hd, parse_context *ctx, tokens *t) {
 
 tokens parse(parser_t *g, const char *program) {
   tokens t = {0};
-  mk_vec(&t.tokens_vec, sizeof(struct token), 0);
+  mk_vec(&t.tokens_vec, sizeof(struct token_t), 0);
   printf("Parse program: %s\n", program);
   parse_context ctx = {.n = strlen(program), .src = program};
-  Header *start = g->productions[0].header;
+  header_t *start = g->productions[0].header;
   if (!tokenize(start, &ctx, &t)) {
     panic("Failed to parse program\n");
   }
@@ -604,15 +604,15 @@ terminal_list get_terminals(const parser_t *g) {
 }
 nonterminal_list get_nonterminals(const parser_t *g) {
   nonterminal_list t = {0};
-  mk_vec(&t.nonterminals_vec, sizeof(Header), 0);
+  mk_vec(&t.nonterminals_vec, sizeof(header_t), 0);
   v_foreach(production_t *, p, g->productions_vec)
       vec_push(&t.nonterminals_vec, p->header);
   return t;
 }
 
-static void populate_first_expr(const parser_t *g, struct Header *h, expression_t *e);
+static void populate_first_expr(const parser_t *g, struct header_t *h, expression_t *e);
 
-static void populate_first_term(const parser_t *g, struct Header *h, term_t *t) {
+static void populate_first_term(const parser_t *g, struct header_t *h, term_t *t) {
   v_foreach(factor_t *, fac, t->factors_vec) {
     switch (fac->type) {
     case F_OPTIONAL:
@@ -625,7 +625,9 @@ static void populate_first_term(const parser_t *g, struct Header *h, term_t *t) 
       return;
     case F_IDENTIFIER: {
       // Add the first set of this production to this first set
-      struct Header *id = fac->identifier.production->header;
+      // TODO: if two productions recursively depend on each other,
+      // this will not work. Both might get only a partial first set.
+      struct header_t *id = fac->identifier.production->header;
       populate_first(g, id);
       vec_push_slice(&h->first_vec, &id->first_vec.slice);
       return;
@@ -637,13 +639,13 @@ static void populate_first_term(const parser_t *g, struct Header *h, term_t *t) 
   }
 }
 
-static void populate_first_expr(const parser_t *g, struct Header *h, expression_t *e) {
+static void populate_first_expr(const parser_t *g, struct header_t *h, expression_t *e) {
   v_foreach(term_t *, t, e->terms_vec) {
     populate_first_term(g, h, t);
   }
 }
 
-void populate_first(const parser_t *g, struct Header *h) {
+void populate_first(const parser_t *g, struct header_t *h) {
   if (h->first) {
     return;
   }
@@ -655,23 +657,59 @@ void populate_first(const parser_t *g, struct Header *h) {
  *
  */
 
-void populate_follow_expr(const parser_t *g, Header *h, expression_t *e);
+void populate_follow_expr(const parser_t *g, header_t *h, expression_t *e);
 
-void populate_follow_term(const parser_t *g, Header *h, term_t *t) {
+void populate_follow_term(const parser_t *g, header_t *h, term_t *t) {
 }
 
-void populate_follow_expr(const parser_t *g, Header *h, expression_t *e) {
+void populate_follow_expr(const parser_t *g, header_t *h, expression_t *e) {
   v_foreach(term_t *, t, e->terms_vec) {
     populate_follow_term(g, h, t);
   }
 }
 
-void populate_follow(const parser_t *g, struct Header *h) {
+void populate_follow_from_sym(const parser_t *g, symbol_t *s) {
+  if (s->is_nonterminal) {
+
+  }
+}
+
+void populate_follow_set(const parser_t *g) {
+  production_t *start = g->productions;
+  populate_follow_from_sym(g, start->header->sym);
+}
+
+void populate_follow(const parser_t *g, struct header_t *h) {
+  // The set of characters that can follow a given production is:
+  // 1. Wherever the production occurs, the symbol that follows it is included. If a non-terminal production
+  // follows, the first set of that production is included in this symbol's follow set
+  // 2. If the production occurs at the end of a { repeat }, the symol at the start of the repeat is included
+  // 3. If the production occurs at the end of another production, the follow set of the owning production is included
   if (h->follow) {
     return;
   }
   mk_vec(&h->follow_vec, sizeof(char), 0);
-  populate_follow_expr(g, h, &h->prod->expr);
+  v_foreach(production_t *, p, g->productions_vec) {
+    if (p == h->prod)
+      continue;
+    v_foreach(term_t *, t, p->expr.terms_vec) {
+      for (int i = 0; i < t->n_factors; i++) {
+        factor_t *f = &t->factors[i];
+        if (f->type == F_IDENTIFIER && f->identifier.production == h->prod) {
+          int next = i + 1;
+          if (next < t->n_factors) {
+            // rule 1
+            factor_t *follow = &t->factors[next];
+          } else {
+            // rule 3
+            populate_follow(g, p->header);
+            vec_push_slice(&h->follow_vec, &p->header->follow_vec.slice);
+          }
+        }
+      }
+    }
+  }
+  // populate_follow_expr(g, h, &h->prod->expr);
 }
 
 bool is_ll1(const parser_t *g);

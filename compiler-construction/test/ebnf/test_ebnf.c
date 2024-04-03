@@ -31,7 +31,7 @@ void print_terminals(terminal_list tl) {
 
 void print_first_sets(parser_t *g) {
   v_foreach(production_t *, p, g->productions_vec) {
-    Header *h = p->header;
+    header_t *h = p->header;
     populate_first(g, h);
     printf("First(%.*s) %*c ", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
     v_foreach(char *, chp, h->first_vec) {
@@ -47,7 +47,7 @@ void print_first_sets(parser_t *g) {
 
 void print_follow_sets(parser_t *g) {
   v_foreach(production_t *, p, g->productions_vec) {
-    Header *h = p->header;
+    header_t *h = p->header;
     populate_follow(g, h);
     printf("follow(%.*s) %*c ", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
     v_foreach(char *, chp, h->follow_vec) {
@@ -62,7 +62,7 @@ void print_follow_sets(parser_t *g) {
 }
 
 void print_tokens(tokens tok) {
-  v_foreach(struct token *, t, tok.tokens_vec) {
+  v_foreach(struct token_t *, t, tok.tokens_vec) {
     printf("Token '%.*s': '%.*s'\n", t->name.n, t->name.str, t->value.n, t->value.str);
   }
 }
