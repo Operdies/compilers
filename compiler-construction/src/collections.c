@@ -156,7 +156,17 @@ bool push_char(string *s, char ch) {
 }
 bool string_contains(const string *s, char ch) {
   for (int i = 0; i < s->n; i++) {
-    if (s->chars[i] == ch) return true;
+    if (s->chars[i] == ch)
+      return true;
+  }
+  return false;
+}
+
+bool vec_contains(const vslice *v, const void *elem) {
+  for (int i = 0; i < v->n; i++) {
+    const void *item = vec_nth(v, i);
+    if (memcmp(item, elem, v->sz) == 0)
+      return true;
   }
   return false;
 }

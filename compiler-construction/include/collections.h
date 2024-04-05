@@ -62,6 +62,7 @@ void vec_clear(vec *v);
 void vec_sort(vec *v, comparer_t comp_fn);
 void vec_reverse(vec *v);
 void *vec_nth(const vslice *v, int n);
+bool vec_contains(const vslice *v, const void *elem);
 bool vec_push_slice(vec *v, const vslice *s);
 vslice vec_slice(vec *v, int start, int end);
 typedef void (*vec_fn)(void *v);
