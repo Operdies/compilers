@@ -120,17 +120,30 @@ typedef struct {
   DECLARE_VEC(struct header_t, nonterminals);
 } nonterminal_list;
 
+enum follow_type {
+  FOLLOW_SYMBOL,
+  FOLLOW_FIRST,
+  FOLLOW_FOLLOW,
+};
+
+struct follow_t {
+  enum follow_type type;
+  char symbol;
+  production_t *prod;
+};
+
 struct header_t {
   production_t *prod;
   symbol_t *sym;
   DECLARE_VEC(char, first);
-  DECLARE_VEC(char, follow);
+  DECLARE_VEC(struct follow_t, follow);
 };
 
 terminal_list get_terminals(const parser_t *g);
 nonterminal_list get_nonterminals(const parser_t *g);
 void populate_first(const parser_t *g, struct header_t *h);
-void populate_follow(const parser_t *g, struct header_t *h);
+void populate_follow(const parser_t *g);
 bool is_ll1(const parser_t *g);
+void graph_walk(symbol_t *start, vec *all);
 
 #endif // !EBNF_H

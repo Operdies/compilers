@@ -1,5 +1,6 @@
 #include "ebnf/ebnf.h"
 #include "regex.h"
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -657,59 +658,147 @@ void populate_first(const parser_t *g, struct header_t *h) {
  *
  */
 
-void populate_follow_expr(const parser_t *g, header_t *h, expression_t *e);
+void graph_walk(symbol_t *start, vec *all) {
+  for (symbol_t *alt = start; alt; alt = alt->alt) {
+    symbol_t *slow, *fast;
+    slow = alt;
+    fast = alt;
+    while (true) {
+      if (!slow)
+        break;
 
-void populate_follow_term(const parser_t *g, header_t *h, term_t *t) {
-}
+      if (!vec_contains(&all->slice, slow)) {
+        vec_push(all, slow);
+        graph_walk(slow, all);
+        if (slow->is_nonterminal) {
+          production_t *prod = slow->nonterminal->header->prod;
+          graph_walk(prod->header->sym, all);
+        }
+      }
 
-void populate_follow_expr(const parser_t *g, header_t *h, expression_t *e) {
-  v_foreach(term_t *, t, e->terms_vec) {
-    populate_follow_term(g, h, t);
+      slow = slow->next;
+      if (fast)
+        fast = fast->next;
+      if (fast)
+        fast = fast->next;
+      if (slow == fast)
+        break;
+    }
   }
 }
 
-void populate_follow_from_sym(const parser_t *g, symbol_t *s) {
-  if (s->is_nonterminal) {
-
+// Walk the graph and add all symbols within k steps to the follow set
+void add_symbols(symbol_t *start, int k, vec *follows) {
+  if (k > 0) {
+    for (symbol_t *alt = start; alt; alt = alt->alt) {
+      // If the symbol is empty, we should include its continuation
+      if (alt->empty) {
+        add_symbols(alt->next, k, follows);
+        // Otherwise, the symbol is either a literal or a production.
+        // We include the continuation, and
+      } else {
+        struct follow_t f = {0};
+        if (alt->is_nonterminal) {
+          f.type = FOLLOW_FIRST;
+          f.prod = alt->nonterminal;
+        } else {
+          f.type = FOLLOW_SYMBOL;
+          f.symbol = alt->sym;
+        }
+        // struct follow_t f = { .type = alt->is_nonterminal ? FOLLOW_FOLLOW : , .prod = owner };
+        if (!vec_contains(&follows->slice, &f)) {
+          vec_push(follows, &f);
+          add_symbols(alt->next, k - 1, follows);
+        }
+      }
+    }
   }
 }
 
-void populate_follow_set(const parser_t *g) {
-  production_t *start = g->productions;
-  populate_follow_from_sym(g, start->header->sym);
+// Walk the graph to determine if the end of the production that a given symbol occurs in
+// is reachable within k steps
+bool symbol_at_end(symbol_t *start, int k) {
+  if (k < 0)
+    return false;
+  if (start == NULL)
+    return true;
+  // TODO: this is not quite right.
+  // If a production is encountered, we need to check the shortest number of steps through that production
+  // e.g. if a production can be completed in 0 steps (e.g. it contains a single repeat)
+  // if (alt->is_nonterminal) symbol_at_end(alt->next, k - min_steps(alt->nonterminal))
+  for (symbol_t *alt = start; alt; alt = alt->alt) {
+    // if (alt->next == NULL)
+    //   return true;
+    if (symbol_at_end(alt->next, alt->empty ? k : k - 1))
+      return true;
+  }
+  return false;
 }
 
-void populate_follow(const parser_t *g, struct header_t *h) {
+void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, production_t *owner) {
+  const int k = 1;
+  for (symbol_t *alt = start; alt; alt = alt->alt) {
+    symbol_t *slow, *fast;
+    slow = fast = alt;
+    while (true) {
+      if (!slow)
+        break;
+
+      if (!vec_contains(&seen->slice, slow)) {
+        vec_push(seen, slow);
+        mega_follow_walker(g, slow, seen, owner);
+        // It this is a nontermninal, we should add all the symbols that
+        // could follow it to its follow set.
+        if (slow->is_nonterminal) {
+          production_t *prod = slow->nonterminal->header->prod;
+          { // apply rule 1 and 2
+            if (!prod->header->follow)
+              mk_vec(&prod->header->follow_vec, sizeof(struct follow_t), 0);
+            // Rule 1 is applied by walking the graph k symbols forward from where
+            // this production was referenced. This also applies rule 2
+            // since a { repeat } expression links back with an empty transition.
+            add_symbols(slow->next, k, &prod->header->follow_vec);
+
+            // The production instance itself should also be walked.
+            mega_follow_walker(g, prod->header->sym, seen, prod);
+          }
+          { // apply rule 3
+            // Now, we need to determine if this rule is at the end of the current production
+            // If this is the case, the follow set of the production that contains this nonterminal
+            // must be added to the follow set as well.
+            if (symbol_at_end(slow, k)) {
+              struct follow_t f = {.type = FOLLOW_FOLLOW, .prod = owner};
+              // if (!vec_contains(&prod->header->follow_vec.slice, &f))
+              vec_push(&prod->header->follow_vec, &f);
+            }
+          }
+        }
+      }
+
+      slow = slow->next;
+      if (fast)
+        fast = fast->next;
+      if (fast)
+        fast = fast->next;
+      if (slow == fast) // loop detected
+        break;
+    }
+  }
+}
+
+void populate_follow(const parser_t *g) {
   // The set of characters that can follow a given production is:
   // 1. Wherever the production occurs, the symbol that follows it is included. If a non-terminal production
   // follows, the first set of that production is included in this symbol's follow set
   // 2. If the production occurs at the end of a { repeat }, the symol at the start of the repeat is included
   // 3. If the production occurs at the end of another production, the follow set of the owning production is included
-  if (h->follow) {
-    return;
-  }
-  mk_vec(&h->follow_vec, sizeof(char), 0);
+  vec seen = {0};
+  mk_vec(&seen, sizeof(symbol_t), 0);
   v_foreach(production_t *, p, g->productions_vec) {
-    if (p == h->prod)
-      continue;
-    v_foreach(term_t *, t, p->expr.terms_vec) {
-      for (int i = 0; i < t->n_factors; i++) {
-        factor_t *f = &t->factors[i];
-        if (f->type == F_IDENTIFIER && f->identifier.production == h->prod) {
-          int next = i + 1;
-          if (next < t->n_factors) {
-            // rule 1
-            factor_t *follow = &t->factors[next];
-          } else {
-            // rule 3
-            populate_follow(g, p->header);
-            vec_push_slice(&h->follow_vec, &p->header->follow_vec.slice);
-          }
-        }
-      }
-    }
+    symbol_t *start = p->header->sym;
+    mega_follow_walker(g, start, &seen, p);
   }
-  // populate_follow_expr(g, h, &h->prod->expr);
+  vec_destroy(&seen);
 }
 
 bool is_ll1(const parser_t *g);
