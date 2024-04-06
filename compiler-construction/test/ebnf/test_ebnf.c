@@ -13,7 +13,9 @@ static const char text[] = {
     "expression = term {('+' | '-' ) term } .\n"
     "term       = factor {('*' | '/') factor } .\n"
     "factor     = ( digits | '(' expression ')' ) .\n"
-    "digits     = digit { digit } .\n"
+    "digits     = digit { opt [ '!' ] hash digit } .\n"
+    "opt        = [ '?' ] .\n"
+    "hash       = [ '#' ] .\n"
     "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
 // "digit  = [0-9].\n"};
 
@@ -25,6 +27,33 @@ static const char text[] = {
  * digit: first(digit) follow(digits)
  */
 static const char program[] = {"12-34+(3*(4+2)-1)/1-23"};
+
+static void print_tokens(tokens tok) {
+  v_foreach(struct token_t *, t, tok.tokens_vec) {
+    printf("Token '%.*s': '%.*s'\n", t->name.n, t->name.str, t->value.n, t->value.str);
+  }
+}
+
+void test_parser(void) {
+  char *programs[] = {
+      "12?!#1",
+      "1?",
+      "1?2",
+      "23",
+      "45*67",
+      "1?1",
+      "1+1",
+      "(1+1)",
+  };
+
+  parser_t p = mk_parser(text);
+  for (int i = 0; i < LENGTH(programs); i++) {
+    char *program = programs[i];
+    tokens t = parse(&p, program);
+    (void)t;
+    // print_tokens(t);
+  }
+}
 void print_terminals(terminal_list tl) {
   for (int i = 0; i < tl.n_terminals; i++) {
     char ch = tl.terminals[i];
@@ -63,7 +92,6 @@ void print_first_sets(parser_t *g) {
 }
 
 void print_follow_sets(parser_t *g) {
-  puts("\n\n\n");
   populate_follow(g);
   v_foreach(production_t *, p, g->productions_vec) {
     header_t *h = p->header;
@@ -84,13 +112,6 @@ void print_follow_sets(parser_t *g) {
         break;
       }
     }
-    puts("");
-  }
-}
-
-void print_tokens(tokens tok) {
-  v_foreach(struct token_t *, t, tok.tokens_vec) {
-    printf("Token '%.*s': '%.*s'\n", t->name.n, t->name.str, t->value.n, t->value.str);
   }
 }
 
@@ -102,7 +123,7 @@ void print_enumerated_graph(vec all) {
   }
 }
 
-int main(void) {
+int prev_test(void) {
   parser_t p = mk_parser(text);
   if (p.n_productions == 0) {
     fprintf(stderr, "Failed to parse grammar.\n");
@@ -118,8 +139,12 @@ int main(void) {
   // print_first_sets(&p);
   print_follow_sets(&p);
   // populate_follow(&p);
-  // print_tokens(parse(&p, program));
+  print_tokens(parse(&p, program));
   // print_terminals(get_terminals(&p));
   destroy_parser(&p);
+  return 0;
+}
+int main(void) {
+  test_parser();
   return 0;
 }
