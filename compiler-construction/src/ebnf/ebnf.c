@@ -290,14 +290,7 @@ static bool init_productions(parser_t *g) {
   return true;
 }
 
-// #define NEWSYM() (arena_alloc(g->a, 1, sizeof(symbol_t)))
-#define NEWSYM(empty, nonterminal) (mk_sym(g->a, empty, nonterminal))
-
-symbol_t *mk_sym(arena *a, bool empty, bool nonterminal) {
-  symbol_t *s = arena_alloc(a, 1, sizeof(symbol_t));
-  *s = (symbol_t){.empty = empty, .is_nonterminal = nonterminal};
-  return s;
-}
+#define MKSYM() (symbol_t *)arena_alloc(g->a, 1, sizeof(symbol_t))
 
 static symbol_t *expression_symbol(parser_t *g, expression_t *expr);
 
@@ -367,21 +360,28 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
   case F_PARENS: {
     symbol_t *subexpression = expression_symbol(g, &factor->expression);
     if (factor->type == F_REPEAT) {
-      if (1) {
+      symbol_t *loop = MKSYM();
+      *loop = (symbol_t){.empty = true};
+      if (0) {
+        // TODO:  is this needed or can we keep the other variant
         vec seen = {0};
         mk_vec(&seen, sizeof(symbol_t), 0);
-        append_all_nexts(subexpression, subexpression, &seen);
+        append_all_nexts(subexpression, loop, &seen);
         vec_destroy(&seen);
       } else {
         for (symbol_t *alt = subexpression; alt; alt = alt->alt) {
           // TODO: do we also need to loop through the alts of each next here?
-          append_next(alt, subexpression);
+          append_next(alt, loop);
         }
       }
-    }
-
-    if (factor->type == F_OPTIONAL || factor->type == F_REPEAT) {
-      symbol_t *empty = NEWSYM(true, false);
+      loop->next = subexpression;
+      subexpression = loop;
+      symbol_t *empty = MKSYM();
+      *empty = (symbol_t){.empty = true};
+      loop->alt = empty;
+    } else if (factor->type == F_OPTIONAL) {
+      symbol_t *empty = MKSYM();
+      *empty = (symbol_t){.empty = true};
       if (!append_alt(subexpression, empty)) {
         panic("Circular alt chain prevents loop exit.");
       }
@@ -394,8 +394,8 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
       panicf("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
       return NULL;
     }
-    symbol_t *prod = NEWSYM(false, true);
-    prod->nonterminal = p;
+    symbol_t *prod = MKSYM();
+    *prod = (symbol_t){.is_nonterminal = true, .nonterminal = p};
     return prod;
   }
   case F_STRING: {
@@ -404,8 +404,8 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
     string_slice str = factor->string;
     for (int i = 0; i < str.n; i++) {
       char ch = str.str[i];
-      symbol_t *charsym = NEWSYM(false, false);
-      charsym->sym = ch;
+      symbol_t *charsym = MKSYM();
+      *charsym = (symbol_t){.sym = ch};
       if (s == NULL)
         last = s = charsym;
       else {
@@ -529,11 +529,18 @@ void destroy_parser(parser_t *g) {
   }
 }
 
-bool skip(char ch) { return ch == ' ' || ch == '\t' || ch == '\n'; }
-
 bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
   symbol_t *x;
   bool match;
+  struct parse_frame {
+    size_t source_cursor;
+    int token_cursor;
+    symbol_t *symbol;
+  };
+
+  vec alt_stack = {0};
+  mk_vec(&alt_stack, sizeof(struct parse_frame), 1);
+
   x = hd->sym;
   string_slice name = hd->prod->identifier;
   int start = ctx->c;
@@ -551,20 +558,73 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
       // int here = ctx->c;
       // int n_tokens = t->n_tokens;
       match = tokenize(x->nonterminal->header, ctx, t);
-      // TODO: rewind needed? If rewinding is allowed, we can no longer
-      // guarantee linear parsing if (!match) {
-      //   // rewind
-      //   ctx->c = here;
-      //   t->n_tokens = n_tokens;
-      // }
     }
-    x = match ? x->next : x->alt;
+
+    /* NOTE: alt_stack is not really ideal.
+     * It solves an issue arising from e.g. this production rule:
+     * digits = digit { ['?'] digit } // digits optionally interspersed with '?' symbol
+     * The generated graph for this rule looks something like this:
+     *
+     * WARN:                 ____________________________
+     *                      /                            \
+     *                     \|/                           |
+     * digits -> digit -> repeat -> optional -> '?' -> digit
+     *                      |                    |      /|\
+     *                     \|/                  \|/      |
+     *                 [exit loop]            [skip]-----/
+     * WARN: alternate:
+     * optional -> '?' -> [ done ]
+     *              |       /|\
+     *             \|/       |
+     *            [skip]-----/
+     * WARN:                 _______________________
+     *                      /                       \
+     *                     \|/                      |
+     * digits -> digit -> repeat -> <optional> -> digit
+     *                      |
+     *                     \|/
+     *                 [exit loop]
+     * NOTE: When a digit is terminated, 'optional' will always match due to the 'skip' option.
+     * Without special care, 'x' is assigned to next (<optional>), and then we can no longer exit the loop.
+     * By storing the branch, we can backtrack later to pick that instead, but we must ensure no progress was made.
+     *
+     * TODO: Figure out if this can be solved by changing the way we construct the graph
+     * TODO: Alternatively just maintain a local stack for the current symbol so it can be popped
+     * at any point before a non-empty match
+     * 1. Construct the graph such that this is not an issue
+     * 2. Maintain a local stack for backtracking
+     */
+
+    { // pick next state, and potentially store the alt option for later
+      symbol_t *next = x->next;
+      symbol_t *alt = x->alt;
+      if (match && alt) {
+        struct parse_frame f = {.source_cursor = ctx->c, .token_cursor = t->n_tokens, .symbol = alt};
+        vec_push(&alt_stack, &f);
+      }
+      x = match ? next : alt;
+    }
+
+    // backtracking
+    if (x == NULL && match == false) {
+      struct parse_frame *f = NULL;
+      // Discard frames if the cursor has moved. A frame could potentially be used
+      // to allow arbitrary lookahead, but this is maybe not a desirable property.
+      while ((f = vec_pop(&alt_stack))) {
+        if (f->source_cursor == ctx->c) {
+          x = f->symbol;
+          break;
+        }
+      }
+    }
   }
+
   if (match) {
     string_slice range = {.str = ctx->src + start, .n = ctx->c - start};
     struct token_t newtoken = {.name = name, .value = range};
     vec_push(&t->tokens_vec, &newtoken);
   }
+  vec_destroy(&alt_stack);
   return match;
 }
 
@@ -574,11 +634,8 @@ tokens parse(parser_t *g, const char *program) {
   printf("Parse program: %s\n", program);
   parse_context ctx = {.n = strlen(program), .src = program};
   header_t *start = g->productions[0].header;
-  if (!tokenize(start, &ctx, &t)) {
-    // panic("Failed to parse program\n");
-  }
-  if (!finished(&ctx)) {
-    panicf("Parse ended prematurely:\n"
+  if (!tokenize(start, &ctx, &t) || !finished(&ctx)) {
+    printf("Parse error at:\n"
            "%.*s\n"
            " %*s\n",
            (int)(ctx.n), ctx.src, (int)ctx.c, "^");
