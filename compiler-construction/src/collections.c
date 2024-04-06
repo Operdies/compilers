@@ -45,6 +45,13 @@ void vec_push(vec *v, void *elem) {
   v->n++;
 }
 
+void *vec_pop(vec *v) {
+  if (v->n <= 0) return NULL;
+  void *val = vec_nth(&v->slice, v->n - 1);
+  v->n -= 1;
+  return val;
+}
+
 bool vec_push_slice(vec *v, const vslice *s) {
   if (!v || !s)
     return false;

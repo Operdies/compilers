@@ -58,6 +58,7 @@ int slicecmp(string_slice s1, string_slice s2);
 void mk_vec(vec *v, int elem_size, int initial_capacity);
 void vec_destroy(vec *v);
 void vec_push(vec *v, void *elem);
+void *vec_pop(vec *v);
 vec vec_clone(const vec *v);
 void vec_clear(vec *v);
 void vec_sort(vec *v, comparer_t comp_fn);
