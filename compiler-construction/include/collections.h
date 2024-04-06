@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stdlib.h>
 
 typedef struct {
   int n;
@@ -54,15 +55,16 @@ typedef struct {
 
 typedef int (*comparer_t)(const void *a, const void *b);
 int slicecmp(string_slice s1, string_slice s2);
-bool mk_vec(vec *v, int elem_size, int initial_capacity);
+void mk_vec(vec *v, int elem_size, int initial_capacity);
 void vec_destroy(vec *v);
-bool vec_push(vec *v, void *elem);
+void vec_push(vec *v, void *elem);
 vec vec_clone(const vec *v);
 void vec_clear(vec *v);
 void vec_sort(vec *v, comparer_t comp_fn);
 void vec_reverse(vec *v);
 void *vec_nth(const vslice *v, int n);
-bool vec_contains(const vslice *v, const void *elem);
+bool vslice_contains(const vslice *v, const void *elem);
+bool vec_contains(const vec *v, const void *elem);
 bool vec_push_slice(vec *v, const vslice *s);
 vslice vec_slice(vec *v, int start, int end);
 typedef void (*vec_fn)(void *v);
@@ -77,14 +79,17 @@ vec vec_select(const vslice *v, int elem_size, vec_selector s);
 /* Initializes s on success.
  * On failure, do nothing
  */
-bool mk_string(string *s, int initial_capacity);
+void mk_string(string *s, int initial_capacity);
 /* Append data to string, resizing if needed
  */
-bool push_char(string *s, char ch);
-bool push_str(string *s, int n, const char data[static n]);
+void push_char(string *s, char ch);
+void push_str(string *s, int n, const char data[static n]);
 bool string_contains(const string *s, char ch);
 /* Free all data associated with the string
  */
 void destroy_string(string *s);
 // Create a new string from an existing char array
 string string_from_chars(const char *src, int n);
+
+void die(const char *fmt, ...);
+void * ecalloc(size_t nmemb, size_t size);

@@ -1,55 +1,48 @@
 #include "collections.h"
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-bool mk_string(string *s, int initial_capacity) {
-  return mk_vec(&s->v, 1, initial_capacity);
+void mk_string(string *s, int initial_capacity) {
+  mk_vec(&s->v, 1, initial_capacity);
 }
 
-void destroy_string(string *s) {
-  vec_destroy(&s->v);
+void destroy_string(string *s) { vec_destroy(&s->v); }
+
+void push_str(string *s, int n, const char data[static n]) {
+  if (s) {
+    vslice vec = {.n = n, .sz = 1, .arr = (char *)data};
+    vec_push_slice(&s->v, &vec);
+  }
 }
 
-bool push_str(string *s, int n, const char data[static n]) {
-  if (s == NULL)
-    return false;
-  vslice vec = {.n = n, .sz = 1, .arr = (char *)data};
-  return vec_push_slice(&s->v, &vec);
-}
-
-bool mk_vec(vec *v, int elem_size, int initial_capacity) {
-  void *data = calloc(initial_capacity, elem_size);
-  if (!data)
-    return false;
+void mk_vec(vec *v, int elem_size, int initial_capacity) {
+  void *data = ecalloc(initial_capacity, elem_size);
   v->n = 0;
   v->c = initial_capacity;
   v->sz = elem_size;
   v->array = data;
-  return true;
 }
 
-static bool ensure_capacity(vec *v, int c) {
+static void ensure_capacity(vec *v, int c) {
   if (v->c >= c)
-    return true;
+    return;
   if (v->c <= 0)
     v->c = 1;
   while (v->c < c)
     v->c *= 2;
   void *new_data = reallocarray(v->array, v->c, v->sz);
   if (!new_data)
-    return false;
+    die("reallocarray:");
   v->array = new_data;
-  return true;
 }
 
-bool vec_push(vec *v, void *elem) {
-  if (!ensure_capacity(v, v->n + 1))
-    return false;
+void vec_push(vec *v, void *elem) {
+  ensure_capacity(v, v->n + 1);
   char *addr = (char *)v->array;
   memmove(addr + v->n * v->sz, elem, v->sz);
   v->n++;
-  return true;
 }
 
 bool vec_push_slice(vec *v, const vslice *s) {
@@ -57,8 +50,7 @@ bool vec_push_slice(vec *v, const vslice *s) {
     return false;
   if (v->sz != s->sz)
     return false;
-  if (!ensure_capacity(v, v->n + s->n))
-    return false;
+  ensure_capacity(v, v->n + s->n);
 
   char *dest = (char *)v->array + v->n * v->sz;
   char *src = (char *)s->arr;
@@ -86,7 +78,8 @@ vslice vec_slice(vec *v, int start, int end) {
     end = roll(end, v->n);
     if (start < 0 || end < 0 || start > end)
       return no_slice;
-    return (vslice){.sz = v->sz, .n = end - start, .arr = (char *)v->array + start * v->sz};
+    return (vslice){
+        .sz = v->sz, .n = end - start, .arr = (char *)v->array + start * v->sz};
   }
   return no_slice;
 }
@@ -101,9 +94,7 @@ void *vec_nth(const vslice *v, int n) {
   return addr + n * v->sz;
 }
 
-void vec_clear(vec *v) {
-  v->n = 0;
-}
+void vec_clear(vec *v) { v->n = 0; }
 
 void vec_destroy(vec *v) {
   free(v->array);
@@ -137,12 +128,8 @@ int slicecmp(string_slice s1, string_slice s2) {
   return strncmp(s1.str, s2.str, shortest);
 }
 
-static void *identity(void *v) {
-  return v;
-}
-vec vec_clone(const vec *v) {
-  return vec_select(&v->slice, v->sz, identity);
-}
+static void *identity(void *v) { return v; }
+vec vec_clone(const vec *v) { return vec_select(&v->slice, v->sz, identity); }
 
 string string_from_chars(const char *src, int n) {
   string s = {0};
@@ -151,9 +138,7 @@ string string_from_chars(const char *src, int n) {
   return s;
 }
 
-bool push_char(string *s, char ch) {
-  return vec_push(&s->v, &ch);
-}
+void push_char(string *s, char ch) { vec_push(&s->v, &ch); }
 bool string_contains(const string *s, char ch) {
   for (int i = 0; i < s->n; i++) {
     if (s->chars[i] == ch)
@@ -162,11 +147,40 @@ bool string_contains(const string *s, char ch) {
   return false;
 }
 
-bool vec_contains(const vslice *v, const void *elem) {
+bool vec_contains(const vec *v, const void *elem) {
+  return vslice_contains(&v->slice, elem);
+}
+
+bool vslice_contains(const vslice *v, const void *elem) {
   for (int i = 0; i < v->n; i++) {
     const void *item = vec_nth(v, i);
     if (memcmp(item, elem, v->sz) == 0)
       return true;
   }
   return false;
+}
+
+void die(const char *fmt, ...) {
+  va_list ap;
+
+  va_start(ap, fmt);
+  vfprintf(stderr, fmt, ap);
+  va_end(ap);
+
+  if (fmt[0] && fmt[strlen(fmt) - 1] == ':') {
+    fputc(' ', stderr);
+    perror(NULL);
+  } else {
+    fputc('\n', stderr);
+  }
+
+  exit(1);
+}
+
+void *ecalloc(size_t nmemb, size_t size) {
+  void *p;
+
+  if (!(p = calloc(nmemb, size)))
+    die("calloc:");
+  return p;
 }

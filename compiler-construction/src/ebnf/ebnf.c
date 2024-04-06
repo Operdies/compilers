@@ -1,6 +1,5 @@
 #include "ebnf/ebnf.h"
 #include "regex.h"
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -521,8 +520,9 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
   int start = ctx->c;
 
   while (x) {
+    char ch = peek(ctx);
     if (!x->is_nonterminal) {
-      if (!finished(ctx) && x->sym == peek(ctx)) {
+      if (!finished(ctx) && x->sym == ch) {
         match = true;
         advance(ctx);
       } else {
@@ -532,13 +532,12 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
       int here = ctx->c;
       int n_tokens = t->n_tokens;
       match = tokenize(x->nonterminal->header, ctx, t);
-      if (match) {
-      }
-      if (!match) {
-        // rewind
-        ctx->c = here;
-        t->n_tokens = n_tokens;
-      }
+      // TODO: rewind needed? If rewinding is allowed, we can no longer
+      // guarantee linear parsing if (!match) {
+      //   // rewind
+      //   ctx->c = here;
+      //   t->n_tokens = n_tokens;
+      // }
     }
     x = match ? x->next : x->alt;
   }
@@ -667,7 +666,7 @@ void graph_walk(symbol_t *start, vec *all) {
       if (!slow)
         break;
 
-      if (!vec_contains(&all->slice, slow)) {
+      if (!vec_contains(all, slow)) {
         vec_push(all, slow);
         graph_walk(slow, all);
         if (slow->is_nonterminal) {
@@ -705,8 +704,7 @@ void add_symbols(symbol_t *start, int k, vec *follows) {
           f.type = FOLLOW_SYMBOL;
           f.symbol = alt->sym;
         }
-        // struct follow_t f = { .type = alt->is_nonterminal ? FOLLOW_FOLLOW : , .prod = owner };
-        if (!vec_contains(&follows->slice, &f)) {
+        if (!vec_contains(follows, &f)) {
           vec_push(follows, &f);
           add_symbols(alt->next, k - 1, follows);
         }
@@ -744,7 +742,7 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
       if (!slow)
         break;
 
-      if (!vec_contains(&seen->slice, slow)) {
+      if (!vec_contains(seen, slow)) {
         vec_push(seen, slow);
         mega_follow_walker(g, slow, seen, owner);
         // It this is a nontermninal, we should add all the symbols that
@@ -768,7 +766,6 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
             // must be added to the follow set as well.
             if (symbol_at_end(slow, k)) {
               struct follow_t f = {.type = FOLLOW_FOLLOW, .prod = owner};
-              // if (!vec_contains(&prod->header->follow_vec.slice, &f))
               vec_push(&prod->header->follow_vec, &f);
             }
           }

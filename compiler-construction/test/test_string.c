@@ -20,12 +20,10 @@ void add_one(int *v) {
 int test_vec(void) {
   vec v = {0};
   int payload[] = {7, 9, 13};
-  if (!mk_vec(&v, sizeof(int), 1))
-    return 1;
+  mk_vec(&v, sizeof(int), 1);
 
   for (int i = 0; i < LENGTH(payload); i++)
-    if (!vec_push(&v, &payload[i]))
-      return 1;
+    vec_push(&v, &payload[i]);
 
   int doublings = 3;
   for (int n = 0; n < doublings; n++) {
