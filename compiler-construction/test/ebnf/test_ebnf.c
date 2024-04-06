@@ -1,4 +1,5 @@
-// link: ebnf/ebnf.o regex.o arena.o collections.o
+// link ebnf/ebnf.o ebnf/analysis.o
+// link regex.o arena.o collections.o
 #include "ebnf/ebnf.h"
 #include "macros.h"
 #include <ctype.h>

@@ -1,6 +1,4 @@
-# This is pretty nice and generic, but there are a couple of small problems:
-# 1. All binary outputs link against all objects. How to link (and depend) only on required objects
-# 2. 
+# TODO: Object dependencies must be manually specified in the source files. A more automatic solution would be nice
 
 # recursive wildcard 
 rwildcard = $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
@@ -28,9 +26,9 @@ CMD_OUT  = $(patsubst $(CMD_DIR)/%, $(CMD_OUT_DIR)/%, $(CMD_SRC:.c=))
 
 # $1: source file
 # $2: output file
-# grep the source files for lines of the form '// link: object.o' and add the link target as a make dependency
+# awk: for each line starting with '// link', print each following argument, separated by whitespace, prepended with the obj out dir
 define LINK_OBJECTS
-DEPS := $(shell grep '^// link: .*' < $(1) | cut -d' ' -f3- | xargs -d ' ' -I {} printf '$$(OBJ_OUT_DIR)/{}\n' )
+DEPS := $(shell awk '$$0 ~ /^\/\/ *link/ { for (i = 3; i <= NF; i++) print "$$(OBJ_OUT_DIR)/" $$i  }' $(1))
 $(2): $$(DEPS)
 endef
 
