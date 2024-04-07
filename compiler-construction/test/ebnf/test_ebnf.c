@@ -109,52 +109,43 @@ static void print_sym(symbol_t *sym) {
     printf("symbol 0x%02x\n", (int)sym->sym);
 }
 
+static void print_follow_set(vec *v) {
+  v_foreach(struct follow_t *, sym, (*v)) {
+    switch (sym->type) {
+    case FOLLOW_SYMBOL:
+      if (isgraph(sym->symbol))
+        printf("%c, ", sym->symbol);
+      else
+        printf("0x%x, ", sym->symbol);
+      break;
+    case FOLLOW_FIRST:
+      printf("First(%.*s), ", sym->prod->identifier.n, sym->prod->identifier.str);
+      break;
+    case FOLLOW_FOLLOW:
+      printf("Follow(%.*s), ", sym->prod->identifier.n, sym->prod->identifier.str);
+      break;
+    }
+  }
+}
+
 static void print_first_sets(parser_t *g) {
   v_foreach(production_t *, p, g->productions_vec) {
     header_t *h = p->header;
     populate_first(g, h);
     printf("First(%.*s)  %*c ", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
-    v_foreach(struct follow_t *, sym, h->first_vec) {
-      switch (sym->type) {
-      case FOLLOW_SYMBOL:
-        if (isgraph(sym->symbol))
-          printf("%c, ", sym->symbol);
-        else
-          printf("0x%x, ", sym->symbol);
-        break;
-      case FOLLOW_FIRST:
-        printf("First(%.*s), ", sym->prod->identifier.n, sym->prod->identifier.str);
-        break;
-      default:
-        debug("Invalid case");
-        break;
-      }
-    }
+    print_follow_set(&h->first_vec);
     puts("");
   }
 }
 
 static void print_follow_sets(parser_t *g) {
   populate_follow(g);
+  puts("");
   v_foreach(production_t *, p, g->productions_vec) {
     header_t *h = p->header;
-    printf("Follow(%.*s) %*c\n", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
-    v_foreach(struct follow_t *, sym, h->follow_vec) {
-      switch (sym->type) {
-      case FOLLOW_SYMBOL:
-        if (isgraph(sym->symbol))
-          printf("Symbol('%c')\n", sym->symbol);
-        else
-          printf("Symbol(0x%x)\n", sym->symbol);
-        break;
-      case FOLLOW_FIRST:
-        printf("First(%.*s)\n", sym->prod->identifier.n, sym->prod->identifier.str);
-        break;
-      case FOLLOW_FOLLOW:
-        printf("Follow(%.*s)\n", sym->prod->identifier.n, sym->prod->identifier.str);
-        break;
-      }
-    }
+    printf("Follow(%.*s) %*c ", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
+    print_follow_set(&h->follow_vec);
+    puts("");
   }
 }
 
@@ -166,20 +157,28 @@ static void print_enumerated_graph(vec all) {
   }
 }
 
-static int prev_test(bool diag) {
-  static const char calc_grammar[] = {
-      "expression = term {('+' | '-' ) term } .\n"
-      "term       = factor {('*' | '/') factor } .\n"
-      "factor     = ( digits | '(' expression ')' ) .\n"
-      "digits     = digit { digit } .\n"
-      "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
-  /* Follow:
-   * expression: ')'
-   * term: '+' '-' follow(expression)
-   * factor: '*' '/' follow(term)
-   * Digits: follow(factor)
-   * digit: first(digit) follow(digits)
-   */
+static const char calc_grammar[] = {
+    "expression = term {('+' | '-' ) term } .\n"
+    "term       = factor {('*' | '/') factor } .\n"
+    "factor     = ( digits | '(' expression ')' ) .\n"
+    "digits     = digit { digit } .\n"
+    "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
+/* Follow:
+ * expression: ')'
+ * term: '+' '-' follow(expression)
+ * factor: '*' '/' follow(term)
+ * Digits: follow(factor)
+ * digit: first(digit) follow(digits)
+ */
+
+void test_ll1(void) {
+  parser_t p = mk_parser(calc_grammar);
+  print_first_sets(&p);
+  print_follow_sets(&p);
+  destroy_parser(&p);
+}
+
+static int prev_test(void) {
 
   parser_t p = mk_parser(calc_grammar);
   if (p.n_productions == 0) {
@@ -187,29 +186,10 @@ static int prev_test(bool diag) {
     return 1;
   }
 
-  if (diag) {
-    vec all = {0};
-    mk_vec(&all, sizeof(symbol_t), 0);
-    graph_walk(p.productions[0].header->sym, &all);
-    v_foreach(production_t *, prod, p.productions_vec) {
-      graph_walk(prod->header->sym, &all);
-    }
-    // print_enumerated_graph(all);
-    print_first_sets(&p);
-    // print_follow_sets(&p);
-    // populate_follow(&p);
-    vec_destroy(&all);
-  }
   tokens t = {0};
   if (!parse(&p, program, &t)) {
     printf("Error parsing program %s:\n", program);
     printf("%s", t.error.error);
-  }
-
-  if (diag) {
-    // print_tokens(t);
-    // puts("\n\nTERMINALS:");
-    // print_terminals(get_terminals(&p));
   }
 
   destroy_parser(&p);
@@ -220,6 +200,7 @@ int main(void) {
   setup_crash_stacktrace_logger();
   test_parser();
   test_lookahead();
-  prev_test(true);
+  prev_test();
+  test_ll1();
   return 0;
 }
