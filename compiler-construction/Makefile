@@ -48,7 +48,7 @@ TEST_RESULT = $(TEST_OUT:=.log)
 MMD_FILES = $(call rwildcard,$(BIN_DIR),*.d)
 DIRECTORIES = $(call uniq,$(dir $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)))
 
-CFLAGS += -std=c1x -pedantic -Wall -Wextra -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -I$(INCLUDE_DIR) -rdynamic -O0 -g -MMD -MF $@.d
+CFLAGS += -std=c1x -pedantic -Wall -Wextra -Wno-unused-function -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -I$(INCLUDE_DIR) -rdynamic -O0 -g -MMD -MF $@.d
 
 .PHONY: all
 all: $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)

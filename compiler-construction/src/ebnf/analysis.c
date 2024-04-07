@@ -1,6 +1,5 @@
 #include "ebnf/ebnf.h"
 
-
 position_t get_position(const char *source, string_slice place) {
   int line, column;
   line = column = 1;
@@ -11,7 +10,7 @@ position_t get_position(const char *source, string_slice place) {
       line++;
       column = 1;
     } else
-    column++;
+      column++;
   }
   return (position_t){-1, -1};
 }
@@ -40,7 +39,7 @@ nonterminal_list get_nonterminals(const parser_t *g) {
   nonterminal_list t = {0};
   mk_vec(&t.nonterminals_vec, sizeof(header_t), 0);
   v_foreach(production_t *, p, g->productions_vec)
-  vec_push(&t.nonterminals_vec, p->header);
+      vec_push(&t.nonterminals_vec, p->header);
   return t;
 }
 
@@ -49,26 +48,28 @@ static void populate_first_expr(const parser_t *g, struct header_t *h, expressio
 static void populate_first_term(const parser_t *g, struct header_t *h, term_t *t) {
   v_foreach(factor_t *, fac, t->factors_vec) {
     switch (fac->type) {
-      case F_OPTIONAL:
-      case F_REPEAT:
-        // these can be skipped, so the next term must be included in the first set
-        populate_first_expr(g, h, &fac->expression);
-        continue;
-      case F_PARENS:
-        populate_first_expr(g, h, &fac->expression);
-        return;
-      case F_IDENTIFIER: {
-        // Add the first set of this production to this first set
-        // TODO: if two productions recursively depend on each other,
-        // this will not work. Both might get only a partial first set.
-        struct header_t *id = fac->identifier.production->header;
-        populate_first(g, id);
-        vec_push_slice(&h->first_vec, &id->first_vec.slice);
-        return;
-      }
-      case F_STRING:
-        vec_push(&h->first_vec, (char *)fac->string.str);
-        return;
+    case F_OPTIONAL:
+    case F_REPEAT:
+      // these can be skipped, so the next term must be included in the first set
+      populate_first_expr(g, h, &fac->expression);
+      continue;
+    case F_PARENS:
+      populate_first_expr(g, h, &fac->expression);
+      return;
+    case F_IDENTIFIER: {
+      // Add the first set of this production to this first set
+      // TODO: if two productions recursively depend on each other,
+      // this will not work. Both might get only a partial first set.
+      struct header_t *id = fac->identifier.production->header;
+      struct follow_t fst = {.type = FOLLOW_FIRST, .prod = id->prod};
+      vec_push(&h->first_vec, &fst);
+      return;
+    }
+    case F_STRING: {
+      struct follow_t fst = {.type = FOLLOW_SYMBOL, .symbol = *(char *)fac->string.str};
+      vec_push(&h->first_vec, &fst);
+      return;
+    }
     }
   }
 }
@@ -83,7 +84,7 @@ void populate_first(const parser_t *g, struct header_t *h) {
   if (h->first) {
     return;
   }
-  mk_vec(&h->first_vec, sizeof(char), 0);
+  mk_vec(&h->first_vec, sizeof(struct follow_t), 0);
   populate_first_expr(g, h, &h->prod->expr);
 }
 

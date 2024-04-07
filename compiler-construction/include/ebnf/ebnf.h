@@ -143,7 +143,7 @@ struct follow_t {
 struct header_t {
   production_t *prod;
   symbol_t *sym;
-  DECLARE_VEC(char, first);
+  DECLARE_VEC(struct follow_t, first);
   DECLARE_VEC(struct follow_t, follow);
 };
 

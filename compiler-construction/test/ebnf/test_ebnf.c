@@ -1,10 +1,10 @@
 // link ebnf/ebnf.o ebnf/analysis.o
 // link regex.o arena.o collections.o logging.o
 #include "ebnf/ebnf.h"
+#include "logging.h"
 #include "macros.h"
 #include <ctype.h>
 #include <stdio.h>
-#include "logging.h"
 
 static const char program[] = {"12-34+(3*(4+2)-1)/1-23"};
 
@@ -65,6 +65,8 @@ static void test_parser(void) {
   struct testcase testcases[] = {
       {"12?!#1", true },
       {"1?",     false},
+      {"",       false},
+      {"()",     false},
       {"1?2",    true },
       {"23",     true },
       {"45*67",  true },
@@ -112,12 +114,21 @@ static void print_first_sets(parser_t *g) {
     header_t *h = p->header;
     populate_first(g, h);
     printf("First(%.*s)  %*c ", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
-    v_foreach(char *, chp, h->first_vec) {
-      char ch = *chp;
-      if (isgraph(ch))
-        printf("%c ", ch);
-      else
-        printf("0x%02x ", (int)ch);
+    v_foreach(struct follow_t *, sym, h->first_vec) {
+      switch (sym->type) {
+      case FOLLOW_SYMBOL:
+        if (isgraph(sym->symbol))
+          printf("%c, ", sym->symbol);
+        else
+          printf("0x%x, ", sym->symbol);
+        break;
+      case FOLLOW_FIRST:
+        printf("First(%.*s), ", sym->prod->identifier.n, sym->prod->identifier.str);
+        break;
+      default:
+        debug("Invalid case");
+        break;
+      }
     }
     puts("");
   }
@@ -183,10 +194,10 @@ static int prev_test(bool diag) {
     v_foreach(production_t *, prod, p.productions_vec) {
       graph_walk(prod->header->sym, &all);
     }
-    print_enumerated_graph(all);
+    // print_enumerated_graph(all);
     print_first_sets(&p);
-    print_follow_sets(&p);
-    populate_follow(&p);
+    // print_follow_sets(&p);
+    // populate_follow(&p);
     vec_destroy(&all);
   }
   tokens t = {0};
@@ -196,9 +207,9 @@ static int prev_test(bool diag) {
   }
 
   if (diag) {
-    print_tokens(t);
-    puts("\n\nTERMINALS:");
-    print_terminals(get_terminals(&p));
+    // print_tokens(t);
+    // puts("\n\nTERMINALS:");
+    // print_terminals(get_terminals(&p));
   }
 
   destroy_parser(&p);
@@ -209,6 +220,6 @@ int main(void) {
   setup_crash_stacktrace_logger();
   test_parser();
   test_lookahead();
-  prev_test(false);
+  prev_test(true);
   return 0;
 }
