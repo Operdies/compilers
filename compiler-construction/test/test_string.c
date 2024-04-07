@@ -1,4 +1,4 @@
-// link: collections.o
+// link: collections.o logging.o
 #include "collections.h"
 #include "macros.h"
 #include <stdio.h>

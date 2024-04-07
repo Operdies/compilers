@@ -1,9 +1,10 @@
 // link ebnf/ebnf.o ebnf/analysis.o
-// link regex.o arena.o collections.o
+// link regex.o arena.o collections.o logging.o
 #include "ebnf/ebnf.h"
 #include "macros.h"
 #include <ctype.h>
 #include <stdio.h>
+#include "logging.h"
 
 static const char program[] = {"12-34+(3*(4+2)-1)/1-23"};
 

@@ -92,5 +92,4 @@ void destroy_string(string *s);
 // Create a new string from an existing char array
 string string_from_chars(const char *src, int n);
 
-void die(const char *fmt, ...);
 void * ecalloc(size_t nmemb, size_t size);
