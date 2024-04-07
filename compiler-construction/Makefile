@@ -54,7 +54,7 @@ CFLAGS += -std=c1x -pedantic -Wall -Wextra -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE 
 all: $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
 
 $(DIRECTORIES):
-	mkdir -p $(DIRECTORIES)
+	@mkdir -p $(DIRECTORIES)
 
 $(OBJ_OUT_DIR)%.o: $(OBJ_DIR)%.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) -c -o $@ $<
