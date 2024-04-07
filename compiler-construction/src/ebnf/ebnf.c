@@ -619,8 +619,9 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
     }
   }
 
-  if (match) {
-    string_slice range = {.str = ctx->src + start, .n = ctx->c - start};
+  int len = ctx->c - start;
+  if (match && len > 0) {
+    string_slice range = {.str = ctx->src + start, .n = len};
     struct token_t newtoken = {.name = name, .value = range};
     vec_push(&t->tokens_vec, &newtoken);
   }
