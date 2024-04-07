@@ -72,6 +72,7 @@ struct parser_t {
   arena *a;
   string body;
   string error;
+  bool backtrack;
   DECLARE_VEC(struct production_t, productions);
 };
 

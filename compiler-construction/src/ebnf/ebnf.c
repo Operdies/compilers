@@ -1,4 +1,5 @@
 #include "ebnf/ebnf.h"
+#include "logging.h"
 #include "regex.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -526,7 +527,7 @@ void destroy_parser(parser_t *g) {
   }
 }
 
-bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
+bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
   symbol_t *x;
   bool match;
   struct parse_frame {
@@ -551,7 +552,17 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
         match = x->empty;
       }
     } else {
-      match = tokenize(x->nonterminal->header, ctx, t);
+      if (backtrack) {
+        int here = ctx->c;
+        int n_tokens = t->n_tokens;
+        match = tokenize(x->nonterminal->header, ctx, t, backtrack);
+        if (!match) {
+          ctx->c = here;
+          t->n_tokens = n_tokens;
+        }
+      } else {
+        match = tokenize(x->nonterminal->header, ctx, t, backtrack);
+      }
     }
 
     /* NOTE: alt_stack is not really ideal.
@@ -592,22 +603,26 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
     { // pick next state, and potentially store the alt option for later
       symbol_t *next = x->next;
       symbol_t *alt = x->alt;
-      if (match && alt) {
+      // If the 'next' option is used, push a frame so the alt option can be tried instead.
+      if (alt && match) {
         struct parse_frame f = {.source_cursor = ctx->c, .token_cursor = t->n_tokens, .symbol = alt};
         vec_push(&alt_stack, &f);
       }
       x = match ? next : alt;
     }
 
-    // backtracking
+    // If an end symbol was reached without a match, check if a suitable frame can be restored
     if (x == NULL && match == false) {
       struct parse_frame *f = NULL;
-      // Discard frames if the cursor has moved. A frame could potentially be used
-      // to allow arbitrary lookahead, but this is maybe not a desirable property.
-      while ((f = vec_pop(&alt_stack))) {
-        if (f->source_cursor == ctx->c) {
+      if ((f = vec_pop(&alt_stack))) {
+        if (backtrack) {
+          // If backtracking is enabled, rewind the cursors to the stored frame
           x = f->symbol;
-          break;
+          ctx->c = f->source_cursor;
+          t->n_tokens = f->token_cursor;
+        } else if (f->source_cursor == ctx->c && f->token_cursor == t->n_tokens) {
+          // Otherwise restore the symbol from the frame unless progress was made
+          x = f->symbol;
         }
       }
     }
@@ -633,7 +648,7 @@ bool parse(parser_t *g, const char *program, tokens *result) {
   }
   parse_context ctx = {.n = strlen(program), .src = program};
   header_t *start = g->productions[0].header;
-  result->success = tokenize(start, &ctx, result) && finished(&ctx);
+  result->success = tokenize(start, &ctx, result, g->backtrack) && finished(&ctx);
   result->error.ctx = ctx;
   if (!result->success) {
     snprintf(result->error.error, sizeof(result->error.error),
