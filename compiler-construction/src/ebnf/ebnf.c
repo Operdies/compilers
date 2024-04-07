@@ -544,6 +544,9 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
 
   while (x) {
     char ch = peek(ctx);
+    int start_pos = ctx->c;
+    int start_tokens = t->n_tokens;
+
     if (!x->is_nonterminal) {
       if (!finished(ctx) && x->sym == ch) {
         match = true;
@@ -552,16 +555,11 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
         match = x->empty;
       }
     } else {
-      if (backtrack) {
-        int here = ctx->c;
-        int n_tokens = t->n_tokens;
-        match = tokenize(x->nonterminal->header, ctx, t, backtrack);
-        if (!match) {
-          ctx->c = here;
-          t->n_tokens = n_tokens;
-        }
-      } else {
-        match = tokenize(x->nonterminal->header, ctx, t, backtrack);
+      match = tokenize(x->nonterminal->header, ctx, t, backtrack);
+      if (backtrack && !match) {
+        // rewind
+        ctx->c = start_pos;
+        t->n_tokens = start_tokens;
       }
     }
 
@@ -605,7 +603,7 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
       symbol_t *alt = x->alt;
       // If the 'next' option is used, push a frame so the alt option can be tried instead.
       if (alt && match) {
-        struct parse_frame f = {.source_cursor = ctx->c, .token_cursor = t->n_tokens, .symbol = alt};
+        struct parse_frame f = {.source_cursor = start_pos, .token_cursor = t->n_tokens, .symbol = alt};
         vec_push(&alt_stack, &f);
       }
       x = match ? next : alt;
@@ -620,7 +618,7 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
           x = f->symbol;
           ctx->c = f->source_cursor;
           t->n_tokens = f->token_cursor;
-        } else if (f->source_cursor == ctx->c && f->token_cursor == t->n_tokens) {
+        } else if (f->source_cursor == ctx->c && f->token_cursor == start_tokens) {
           // Otherwise restore the symbol from the frame unless progress was made
           x = f->symbol;
         }
