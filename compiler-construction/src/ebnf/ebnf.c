@@ -628,17 +628,25 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
   return match;
 }
 
-tokens parse(parser_t *g, const char *program) {
-  tokens t = {0};
-  mk_vec(&t.tokens_vec, sizeof(struct token_t), 0);
-  printf("Parse program: %s\n", program);
+bool parse(parser_t *g, const char *program, tokens *result) {
+  if (result == NULL)
+    return false;
+  if (result->tokens) {
+    vec_clear(&result->tokens_vec);
+  } else {
+    mk_vec(&result->tokens_vec, sizeof(struct token_t), 0);
+  }
   parse_context ctx = {.n = strlen(program), .src = program};
   header_t *start = g->productions[0].header;
-  if (!tokenize(start, &ctx, &t) || !finished(&ctx)) {
-    printf("Parse error at:\n"
-           "%.*s\n"
-           " %*s\n",
-           (int)(ctx.n), ctx.src, (int)ctx.c, "^");
+  result->success = tokenize(start, &ctx, result) && finished(&ctx);
+  result->error.ctx = ctx;
+  if (!result->success) {
+    snprintf(result->error.error, sizeof(result->error.error),
+             "Parse error at:\n"
+             "%.*s\n"
+             " %*s\n",
+             (int)(ctx.n), ctx.src, (int)ctx.c, "^");
+    return false;
   }
-  return t;
+  return true;
 }

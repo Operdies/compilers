@@ -95,12 +95,19 @@ struct token_t {
 };
 
 typedef struct {
+  parse_context ctx;
+  char error[200];
+} parse_error;
+
+typedef struct {
   DECLARE_VEC(struct token_t, tokens);
+  bool success;
+  parse_error error;
 } tokens;
 
 parser_t mk_parser(const char *grammar);
 void destroy_parser(parser_t *g);
-tokens parse(parser_t *g, const char *program);
+bool parse(parser_t *g, const char *program, tokens *result);
 position_t get_position(const char *source, string_slice place);
 
 /* 5.4 exercise:

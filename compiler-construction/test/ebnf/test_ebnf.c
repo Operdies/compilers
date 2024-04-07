@@ -5,17 +5,11 @@
 #include <ctype.h>
 #include <stdio.h>
 
-static const char text[] = {
-    // "expr   = term   | expr '+' term | expr '-' term .\n"
-    // "term   = factor | term '/' factor | term '*' factor.\n"
-    // "factor = digit  | '(' expr ')'.\n"
-    // "digits = digit { digit }.\n"
+static const char calc_grammar[] = {
     "expression = term {('+' | '-' ) term } .\n"
     "term       = factor {('*' | '/') factor } .\n"
     "factor     = ( digits | '(' expression ')' ) .\n"
-    "digits     = digit { opt [ '!' ] hash digit } .\n"
-    "opt        = [ '?' ] .\n"
-    "hash       = [ '#' ] .\n"
+    "digits     = digit { digit } .\n"
     "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
 // "digit  = [0-9].\n"};
 
@@ -35,23 +29,38 @@ static void print_tokens(tokens tok) {
 }
 
 void test_parser(void) {
-  char *programs[] = {
-      "12?!#1",
-      "1?",
-      "1?2",
-      "23",
-      "45*67",
-      "1?1",
-      "1+1",
-      "(1+1)",
+  const char grammar[] = {
+      "expression = term {('+' | '-' ) term } .\n"
+      "term       = factor {('*' | '/') factor } .\n"
+      "factor     = ( digits | '(' expression ')' ) .\n"
+      "digits     = digit { opt [ '!' ] hash digit } .\n"
+      "opt        = [ '?' ] .\n"
+      "hash       = [ '#' ] .\n"
+      "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
+
+  struct {
+    char *src;
+    bool expected;
+  } testcases[] = {
+      {"12?!#1", true },
+      {"1?",     false},
+      {"1?2",    true },
+      {"23",     true },
+      {"45*67",  true },
+      {"1?1",    true },
+      {"1+1",    true },
+      {"(1+1)",  true },
   };
 
-  parser_t p = mk_parser(text);
-  for (int i = 0; i < LENGTH(programs); i++) {
-    char *program = programs[i];
-    tokens t = parse(&p, program);
-    (void)t;
-    // print_tokens(t);
+  parser_t p = mk_parser(grammar);
+  for (int i = 0; i < LENGTH(testcases); i++) {
+    tokens t = {0};
+    bool success = parse(&p, testcases[i].src, &t);
+    if (success != testcases[i].expected) {
+      print_tokens(t);
+      printf("Error parsing program %s:\n", program);
+      printf("%s", t.error.error);
+    }
   }
 }
 void print_terminals(terminal_list tl) {
@@ -124,7 +133,7 @@ void print_enumerated_graph(vec all) {
 }
 
 int prev_test(void) {
-  parser_t p = mk_parser(text);
+  parser_t p = mk_parser(calc_grammar);
   if (p.n_productions == 0) {
     fprintf(stderr, "Failed to parse grammar.\n");
     return 1;
@@ -139,7 +148,12 @@ int prev_test(void) {
   // print_first_sets(&p);
   print_follow_sets(&p);
   // populate_follow(&p);
-  print_tokens(parse(&p, program));
+  tokens t = {0};
+  if (!parse(&p, program, &t)) {
+    printf("Error parsing program %s:\n", program);
+    printf("%s", t.error.error);
+  }
+  print_tokens(t);
   // print_terminals(get_terminals(&p));
   destroy_parser(&p);
   return 0;
