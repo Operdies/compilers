@@ -12,3 +12,4 @@ void warn(const char *fmt, ...);
 void error(const char *fmt, ...);
 void die(const char *fmt, ...);
 void set_loglevel(enum loglevel level);
+void setup_crash_stacktrace_logger(void);

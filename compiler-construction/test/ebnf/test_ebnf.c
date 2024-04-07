@@ -205,6 +205,7 @@ static int prev_test(bool diag) {
 }
 
 int main(void) {
+  setup_crash_stacktrace_logger();
   test_parser();
   test_lookahead();
   prev_test(false);

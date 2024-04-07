@@ -1,10 +1,13 @@
 #include <errno.h>
+#include <execinfo.h>
+#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "logging.h"
+#include "macros.h"
 
 #define WARN_COLOR "\033[1;33m"
 #define ERROR_COLOR "\033[1;31m"
@@ -93,5 +96,46 @@ void die(const char *fmt, ...) {
     colored_log(stderr, FATAL, strerror(errno), NULL);
   }
 
+  { // print stacktrace
+    void *array[10];
+    char **strings;
+    int size, i;
+
+    size = backtrace(array, LENGTH(array));
+    strings = backtrace_symbols(array, size);
+    for (i = 0; i < size; i++) {
+      char *str = strings[i];
+      str = strrchr(str, '/') + 1;
+      debug(str);
+    }
+  }
+
   exit(1);
+}
+
+static void handler(int sig) {
+  const char *signal = strsignal(sig);
+  error(signal);
+  { // print stacktrace
+    void *array[10];
+    char **strings;
+    int size, i;
+
+    size = backtrace(array, LENGTH(array));
+    strings = backtrace_symbols(array, size);
+    // skip 2 entries:
+    // 0: handler (this)
+    // 1: signal handler from libc
+    for (i = 2; i < size; i++) {
+      char *str = strings[i];
+      str = strrchr(str, '/') + 1;
+      debug(str);
+    }
+  }
+  exit(sig);
+}
+
+void setup_crash_stacktrace_logger(void) {
+  signal(SIGSEGV, handler);
+  signal(SIGINT, handler);
 }

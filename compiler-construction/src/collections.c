@@ -1,8 +1,8 @@
 #include "collections.h"
+#include "logging.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "logging.h"
 
 void mk_string(string *s, int initial_capacity) {
   mk_vec(&s->v, 1, initial_capacity);
@@ -25,17 +25,20 @@ void mk_vec(vec *v, int elem_size, int initial_capacity) {
   v->array = data;
 }
 
-static void ensure_capacity(vec *v, int c) {
+void ensure_capacity(vec *v, int c) {
+  if (v->sz == 0)
+    die("realloacing vector with element size 0.");
   if (v->c >= c)
     return;
   if (v->c <= 0)
     v->c = 1;
   while (v->c < c)
     v->c *= 2;
-  void *new_data = reallocarray(v->array, v->c, v->sz);
-  if (!new_data)
-    die("reallocarray:");
-  v->array = new_data;
+  if (v->array) {
+    v->array = ereallocarray(v->array, v->c, v->sz);
+  } else {
+    v->array = ecalloc(v->c, v->sz);
+  }
 }
 
 void vec_push(vec *v, void *elem) {
@@ -46,7 +49,8 @@ void vec_push(vec *v, void *elem) {
 }
 
 void *vec_pop(vec *v) {
-  if (v->n <= 0) return NULL;
+  if (v->n <= 0)
+    return NULL;
   void *val = vec_nth(&v->slice, v->n - 1);
   v->n -= 1;
   return val;
@@ -172,5 +176,13 @@ void *ecalloc(size_t nmemb, size_t size) {
 
   if (!(p = calloc(nmemb, size)))
     die("calloc:");
+  return p;
+}
+
+void *ereallocarray(void *array, size_t nmemb, size_t size) {
+  void *p;
+
+  if (!(p = reallocarray(array, nmemb, size)))
+    die("realloc:");
   return p;
 }

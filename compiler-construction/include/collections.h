@@ -93,3 +93,4 @@ void destroy_string(string *s);
 string string_from_chars(const char *src, int n);
 
 void * ecalloc(size_t nmemb, size_t size);
+void *ereallocarray(void *array, size_t nmemb, size_t size);

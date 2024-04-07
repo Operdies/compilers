@@ -229,7 +229,7 @@ bool production(parser_t *g, production_t *p) {
 }
 
 bool syntax(parser_t *g) {
-  mk_vec(&g->productions_vec, sizeof(production_t), 0);
+  mk_vec(&g->productions_vec, sizeof(production_t), 1);
   while (!finished(&g->ctx)) {
     production_t p = {0};
     if (!production(g, &p)) {
@@ -353,7 +353,6 @@ void append_all_nexts(symbol_t *head, symbol_t *tail, vec *seen) {
 }
 
 static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
-  // mk_vec(&factor_sym.next_vec, sizeof(symbol_t), 1);
   switch (factor->type) {
   case F_OPTIONAL:
   case F_REPEAT:
@@ -365,7 +364,7 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
       if (0) {
         // TODO:  is this needed or can we keep the other variant
         vec seen = {0};
-        mk_vec(&seen, sizeof(symbol_t), 0);
+        mk_vec(&seen, sizeof(symbol_t), 1);
         append_all_nexts(subexpression, loop, &seen);
         vec_destroy(&seen);
       } else {
@@ -424,7 +423,6 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
 static symbol_t *term_symbol(parser_t *g, term_t *term) {
   symbol_t *ts, *last;
   ts = last = NULL;
-  // mk_vec(&term_sym.next_vec, sizeof(symbol_t), 0);
   v_foreach(factor_t *, f, term->factors_vec) {
     symbol_t *s = factor_symbol(g, f);
     if (ts == NULL)
@@ -447,7 +445,6 @@ static symbol_t *term_symbol(parser_t *g, term_t *term) {
 static symbol_t *expression_symbol(parser_t *g, expression_t *expr) {
   symbol_t *new_expression;
   new_expression = NULL;
-  // mk_vec(&expr_sym.alt_vec, sizeof(symbol_t), 1);
   v_foreach(term_t *, t, expr->terms_vec) {
     symbol_t *new_term = term_symbol(g, t);
     if (!new_expression) {
@@ -538,8 +535,7 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
     symbol_t *symbol;
   };
 
-  vec alt_stack = {0};
-  mk_vec(&alt_stack, sizeof(struct parse_frame), 1);
+  vec alt_stack = {.sz = sizeof(struct parse_frame)};
 
   x = hd->sym;
   string_slice name = hd->prod->identifier;
@@ -555,8 +551,6 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t) {
         match = x->empty;
       }
     } else {
-      // int here = ctx->c;
-      // int n_tokens = t->n_tokens;
       match = tokenize(x->nonterminal->header, ctx, t);
     }
 
