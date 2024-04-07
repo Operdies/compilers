@@ -5,21 +5,6 @@
 #include <ctype.h>
 #include <stdio.h>
 
-static const char calc_grammar[] = {
-    "expression = term {('+' | '-' ) term } .\n"
-    "term       = factor {('*' | '/') factor } .\n"
-    "factor     = ( digits | '(' expression ')' ) .\n"
-    "digits     = digit { digit } .\n"
-    "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
-// "digit  = [0-9].\n"};
-
-/* Follow:
- * expression: ')'
- * term: '+' '-' follow(expression)
- * factor: '*' '/' follow(term)
- * Digits: follow(factor)
- * digit: first(digit) follow(digits)
- */
 static const char program[] = {"12-34+(3*(4+2)-1)/1-23"};
 
 static void print_tokens(tokens tok) {
@@ -28,7 +13,44 @@ static void print_tokens(tokens tok) {
   }
 }
 
-void test_parser(void) {
+static void test_lookahead(void) {
+  struct testcase {
+    char *grammar;
+    int lookahead;
+  };
+
+  struct testcase testcases[] = {
+      {
+       .lookahead = 1,
+       .grammar = "A = { B | C } .\n"
+                     "B = 'b' .\n"
+                     "C = 'c' .\n",
+       },
+      {
+       .lookahead = 2,
+       .grammar = "A = B | C .\n"
+                     "B = 'bb' .\n"
+                     "C = 'bc' .\n",
+       },
+  };
+
+  for (int i = 0; i < LENGTH(testcases); i++) {
+    struct testcase *test = &testcases[i];
+    parser_t p = mk_parser(test->grammar);
+    tokens t = {0};
+    if (!parse(&p, "bc", &t)) {
+      printf("Error parsing program %s:\n", "bc");
+      printf("%s", t.error.error);
+      printf("With grammar %s\n", test->grammar);
+    }
+  }
+}
+
+static void test_parser(void) {
+  struct testcase {
+    char *src;
+    bool expected;
+  };
   const char grammar[] = {
       "expression = term {('+' | '-' ) term } .\n"
       "term       = factor {('*' | '/') factor } .\n"
@@ -38,10 +60,7 @@ void test_parser(void) {
       "hash       = [ '#' ] .\n"
       "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
 
-  struct {
-    char *src;
-    bool expected;
-  } testcases[] = {
+  struct testcase testcases[] = {
       {"12?!#1", true },
       {"1?",     false},
       {"1?2",    true },
@@ -55,15 +74,17 @@ void test_parser(void) {
   parser_t p = mk_parser(grammar);
   for (int i = 0; i < LENGTH(testcases); i++) {
     tokens t = {0};
-    bool success = parse(&p, testcases[i].src, &t);
-    if (success != testcases[i].expected) {
+    struct testcase *test = &testcases[i];
+    bool success = parse(&p, test->src, &t);
+    if (success != test->expected) {
       print_tokens(t);
       printf("Error parsing program %s:\n", program);
       printf("%s", t.error.error);
     }
   }
 }
-void print_terminals(terminal_list tl) {
+
+static void print_terminals(terminal_list tl) {
   for (int i = 0; i < tl.n_terminals; i++) {
     char ch = tl.terminals[i];
     if (isgraph(ch))
@@ -84,7 +105,7 @@ static void print_sym(symbol_t *sym) {
     printf("symbol 0x%02x\n", (int)sym->sym);
 }
 
-void print_first_sets(parser_t *g) {
+static void print_first_sets(parser_t *g) {
   v_foreach(production_t *, p, g->productions_vec) {
     header_t *h = p->header;
     populate_first(g, h);
@@ -100,7 +121,7 @@ void print_first_sets(parser_t *g) {
   }
 }
 
-void print_follow_sets(parser_t *g) {
+static void print_follow_sets(parser_t *g) {
   populate_follow(g);
   v_foreach(production_t *, p, g->productions_vec) {
     header_t *h = p->header;
@@ -124,7 +145,7 @@ void print_follow_sets(parser_t *g) {
   }
 }
 
-void print_enumerated_graph(vec all) {
+static void print_enumerated_graph(vec all) {
   v_foreach(symbol_t *, sym, all) {
     int idx = idx_sym;
     printf("%2d) ", idx);
@@ -132,33 +153,59 @@ void print_enumerated_graph(vec all) {
   }
 }
 
-int prev_test(void) {
+static int prev_test(bool diag) {
+  static const char calc_grammar[] = {
+      "expression = term {('+' | '-' ) term } .\n"
+      "term       = factor {('*' | '/') factor } .\n"
+      "factor     = ( digits | '(' expression ')' ) .\n"
+      "digits     = digit { digit } .\n"
+      "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
+  /* Follow:
+   * expression: ')'
+   * term: '+' '-' follow(expression)
+   * factor: '*' '/' follow(term)
+   * Digits: follow(factor)
+   * digit: first(digit) follow(digits)
+   */
+
   parser_t p = mk_parser(calc_grammar);
   if (p.n_productions == 0) {
     fprintf(stderr, "Failed to parse grammar.\n");
     return 1;
   }
-  vec all = {0};
-  mk_vec(&all, sizeof(symbol_t), 0);
-  graph_walk(p.productions[0].header->sym, &all);
-  // v_foreach(production_t *, prod, p.productions_vec) {
-  //   graph_walk(prod->header->sym, &all);
-  // }
-  // print_enumerated_graph(all);
-  // print_first_sets(&p);
-  print_follow_sets(&p);
-  // populate_follow(&p);
+
+  if (diag) {
+    vec all = {0};
+    mk_vec(&all, sizeof(symbol_t), 0);
+    graph_walk(p.productions[0].header->sym, &all);
+    v_foreach(production_t *, prod, p.productions_vec) {
+      graph_walk(prod->header->sym, &all);
+    }
+    print_enumerated_graph(all);
+    print_first_sets(&p);
+    print_follow_sets(&p);
+    populate_follow(&p);
+    vec_destroy(&all);
+  }
   tokens t = {0};
   if (!parse(&p, program, &t)) {
     printf("Error parsing program %s:\n", program);
     printf("%s", t.error.error);
   }
-  print_tokens(t);
-  // print_terminals(get_terminals(&p));
+
+  if (diag) {
+    print_tokens(t);
+    puts("\n\nTERMINALS:");
+    print_terminals(get_terminals(&p));
+  }
+
   destroy_parser(&p);
   return 0;
 }
+
 int main(void) {
   test_parser();
+  test_lookahead();
+  prev_test(false);
   return 0;
 }
