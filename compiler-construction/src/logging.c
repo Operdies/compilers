@@ -2,6 +2,7 @@
 #include <execinfo.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,21 +10,24 @@
 #include "logging.h"
 #include "macros.h"
 
-#define WARN_COLOR "\033[1;33m"
-#define ERROR_COLOR "\033[1;31m"
-#define FATAL_COLOR "\033[1;31m"
-#define INFO_COLOR "\033[1;34m"
-#define DEBUG_COLOR "\033[1;36m"
 #define RESET_COLOR "\033[0m"
 
 enum loglevel loglevel = DEBUG;
 
+static const char *log_headers[] = {
+    [WARN] = "\033[1;30;43m",
+    [DEBUG] = "\033[1;30;46m",
+    [INFO] = "\033[1;30;44m",
+    [ERROR] = "\033[1;30;41m",
+    [FATAL] = "\033[1;30;41m",
+};
+
 static const char *log_colors[] = {
-    [DEBUG] = DEBUG_COLOR,
-    [INFO] = INFO_COLOR,
-    [WARN] = WARN_COLOR,
-    [ERROR] = ERROR_COLOR,
-    [FATAL] = FATAL_COLOR,
+    [DEBUG] = "\033[1;36m",
+    [INFO] = "\033[1;34m",
+    [WARN] = "\033[1;33m",
+    [ERROR] = "\033[1;31m",
+    [FATAL] = "\033[1;31m",
 };
 
 static const char *headers[] = {
@@ -34,23 +38,61 @@ static const char *headers[] = {
     [FATAL] = "FATAL",
 };
 
-static void
-colored_log(FILE *fp, enum loglevel level, const char *fmt, va_list ap) {
-  if (loglevel >= level) {
+static char default_log_name[] = "log.txt";
+
+static FILE *log = NULL;
+void set_loglevel(enum loglevel level) {
+  loglevel = level;
+}
+
+bool set_log_location(const char *filename) {
+  if (log)
+    fclose(log);
+  log = fopen(filename, "w");
+  return log != NULL;
+}
+
+static bool add_colors(FILE *fp) {
+  // NOTE: it would be cleaner to use isatty() here, but this call returns
+  // false in the pseudoterminal I use for develpment.
+  return fp->_fileno == stdout->_fileno || fp->_fileno == stderr->_fileno;
+}
+static bool should_log(FILE *fp, enum loglevel level) {
+  if (fp->_fileno == stdout->_fileno || fp->_fileno == stderr->_fileno)
+    return loglevel >= level;
+  return true;
+}
+
+void colored_log(FILE *fp, enum loglevel level, const char *fmt, va_list ap) {
+  setup_crash_stacktrace_logger();
+  if (!fp)
+    return;
+  if (!log)
+    set_log_location(default_log_name);
+  if (fp != log)
+    colored_log(log, level, fmt, ap);
+
+  if (should_log(fp, level)) {
     const char *color = log_colors[level];
     const char *header = headers[level];
-    fprintf(fp, "%s[ %-*s ] ", color, 5, header);
+
+    if (add_colors(fp))
+      fprintf(fp, "%s %-*s %s %s", log_headers[level], 5, header, RESET_COLOR, color);
+    else
+      fprintf(fp, "[%-*s] ", 5, header);
+
     if (ap)
       vfprintf(fp, fmt, ap);
     else
       fputs(fmt, fp);
-    fprintf(fp, RESET_COLOR);
-    fputs("\n", fp);
-  }
-}
+    if (add_colors(fp))
+      fprintf(fp, RESET_COLOR);
 
-void set_loglevel(enum loglevel level) {
-  loglevel = level;
+    fputs("\n", fp);
+    // flush to ensure correct ordering between stdout and stderr to avoid confusion
+    // also probably a good idea to ensure files are written to disk before program exit
+    fflush(fp);
+  }
 }
 
 void debug(const char *fmt, ...) {
@@ -110,6 +152,8 @@ void die(const char *fmt, ...) {
     }
   }
 
+  if (log)
+    fclose(log);
   exit(1);
 }
 
@@ -132,10 +176,17 @@ static void handler(int sig) {
       debug(str);
     }
   }
+  if (log)
+    fclose(log);
   exit(sig);
 }
 
+static bool init = false;
 void setup_crash_stacktrace_logger(void) {
-  signal(SIGSEGV, handler);
-  signal(SIGINT, handler);
+  if (!init) {
+    init = true;
+    int signals[] = {SIGINT, SIGSEGV, SIGTERM, SIGHUP, SIGQUIT};
+    for (int i = 0; i < LENGTH(signals); i++)
+      sigaction(signals[i], &(struct sigaction){.sa_handler = handler}, NULL);
+  }
 }
