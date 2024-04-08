@@ -543,9 +543,8 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
   int start = ctx->c;
 
   while (x) {
+    struct parse_frame frame = {.source_cursor = ctx->c, .token_cursor = t->n_tokens};
     char ch = peek(ctx);
-    int start_pos = ctx->c;
-    int start_tokens = t->n_tokens;
 
     if (!x->is_nonterminal) {
       if (!finished(ctx) && x->sym == ch) {
@@ -558,53 +557,18 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
       match = tokenize(x->nonterminal->header, ctx, t, backtrack);
       if (backtrack && !match) {
         // rewind
-        ctx->c = start_pos;
-        t->n_tokens = start_tokens;
+        ctx->c = frame.source_cursor;
+        t->n_tokens = frame.token_cursor;
       }
     }
-
-    /* NOTE: alt_stack is not really ideal.
-     * It solves an issue arising from e.g. this production rule:
-     * digits = digit { ['?'] digit } // digits optionally interspersed with '?' symbol
-     * The generated graph for this rule looks something like this:
-     *
-     * WARN:                 ____________________________
-     *                      /                            \
-     *                     \|/                           |
-     * digits -> digit -> repeat -> optional -> '?' -> digit
-     *                      |                    |      /|\
-     *                     \|/                  \|/      |
-     *                 [exit loop]            [skip]-----/
-     * WARN: alternate:
-     * optional -> '?' -> [ done ]
-     *              |       /|\
-     *             \|/       |
-     *            [skip]-----/
-     * WARN:                 _______________________
-     *                      /                       \
-     *                     \|/                      |
-     * digits -> digit -> repeat -> <optional> -> digit
-     *                      |
-     *                     \|/
-     *                 [exit loop]
-     * NOTE: When a digit is terminated, 'optional' will always match due to the 'skip' option.
-     * Without special care, 'x' is assigned to next (<optional>), and then we can no longer exit the loop.
-     * By storing the branch, we can backtrack later to pick that instead, but we must ensure no progress was made.
-     *
-     * TODO: Figure out if this can be solved by changing the way we construct the graph
-     * TODO: Alternatively just maintain a local stack for the current symbol so it can be popped
-     * at any point before a non-empty match
-     * 1. Construct the graph such that this is not an issue
-     * 2. Maintain a local stack for backtracking
-     */
 
     { // pick next state, and potentially store the alt option for later
       symbol_t *next = x->next;
       symbol_t *alt = x->alt;
       // If the 'next' option is used, push a frame so the alt option can be tried instead.
       if (alt && match) {
-        struct parse_frame f = {.source_cursor = start_pos, .token_cursor = t->n_tokens, .symbol = alt};
-        vec_push(&alt_stack, &f);
+        frame.symbol = alt;
+        vec_push(&alt_stack, &frame);
       }
       x = match ? next : alt;
     }
@@ -618,7 +582,7 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
           x = f->symbol;
           ctx->c = f->source_cursor;
           t->n_tokens = f->token_cursor;
-        } else if (f->source_cursor == ctx->c && f->token_cursor == start_tokens) {
+        } else if (f->source_cursor == ctx->c && f->token_cursor == t->n_tokens) {
           // Otherwise restore the symbol from the frame unless progress was made
           x = f->symbol;
         }
