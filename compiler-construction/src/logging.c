@@ -38,8 +38,6 @@ static const char *headers[] = {
     [FATAL] = "FATAL",
 };
 
-static char default_log_name[] = "log.txt";
-
 static FILE *log = NULL;
 void set_loglevel(enum loglevel level) {
   loglevel = level;
@@ -67,9 +65,7 @@ void colored_log(FILE *fp, enum loglevel level, const char *fmt, va_list ap) {
   setup_crash_stacktrace_logger();
   if (!fp)
     return;
-  if (!log)
-    set_log_location(default_log_name);
-  if (fp != log)
+  if (log && fp != log)
     colored_log(log, level, fmt, ap);
 
   if (should_log(fp, level)) {

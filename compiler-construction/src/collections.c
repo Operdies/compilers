@@ -1,5 +1,6 @@
 #include "collections.h"
 #include "logging.h"
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -185,4 +186,23 @@ void *ereallocarray(void *array, size_t nmemb, size_t size) {
   if (!(p = reallocarray(array, nmemb, size)))
     die("realloc:");
   return p;
+}
+
+int vec_write(vec *v, const char *fmt, ...) {
+  va_list ap;
+  int limit = v->c - v->n;
+#define wrt() (char *)v->array + v->n * v->sz
+
+  va_start(ap, fmt);
+  int written = vsnprintf(wrt(), limit, fmt, ap);
+  va_end(ap);
+  if (written > limit) {
+    ensure_capacity(v, v->n + written);
+    va_start(ap, fmt);
+    vsnprintf(wrt(), written + 1, fmt, ap);
+    va_end(ap);
+  }
+  v->n += written;
+  return written;
+#undef wrt
 }

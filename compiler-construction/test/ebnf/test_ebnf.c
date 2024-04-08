@@ -88,14 +88,28 @@ static void test_parser(void) {
   }
 }
 
+static void print_nonterminals(nonterminal_list ntl) {
+  vec buf = {0};
+  buf.sz = sizeof(char);
+  v_foreach(header_t *, h, ntl.nonterminals_vec) {
+    production_t *p = h->prod;
+    vec_write(&buf, "%.*s, ", p->identifier.n, p->identifier.str);
+  }
+  info("Nonterminals: %.*s", buf.n, buf.array);
+  vec_destroy(&buf);
+}
 static void print_terminals(terminal_list tl) {
+  vec buf = {0};
+  buf.sz = sizeof(char);
   for (int i = 0; i < tl.n_terminals; i++) {
     char ch = tl.terminals[i];
     if (isgraph(ch))
-      printf("%2d) %4c\n", i, ch);
+      vec_write(&buf, "%c, ", ch);
     else
-      printf("%2d) 0x%02x\n", i, (int)ch);
+      vec_write(&buf, "%02x, ", (int)ch);
   }
+  info("Terminals: %.*s", buf.n, buf.array);
+  vec_destroy(&buf);
 }
 
 static void print_sym(symbol_t *sym) {
@@ -140,7 +154,6 @@ static void print_first_sets(parser_t *g) {
 
 static void print_follow_sets(parser_t *g) {
   populate_follow(g);
-  puts("");
   v_foreach(production_t *, p, g->productions_vec) {
     header_t *h = p->header;
     printf("Follow(%.*s) %*c ", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
@@ -172,9 +185,21 @@ static const char calc_grammar[] = {
  */
 
 void test_ll1(void) {
-  parser_t p = mk_parser(calc_grammar);
+  static const char grammar[] = {
+      "expression = term {('+' | '-' ) term } .\n"
+      "term       = factor {('*' | '/') factor } .\n"
+      "factor     = ( digits | '(' expression ')' ) .\n"
+      "digits     = digit { digit } .\n"
+      "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
+  parser_t p = mk_parser(grammar);
+  info("First Set");
   print_first_sets(&p);
+  info("Follow Set");
   print_follow_sets(&p);
+  terminal_list t = get_terminals(&p);
+  nonterminal_list nt = get_nonterminals(&p);
+  print_terminals(t);
+  print_nonterminals(nt);
   destroy_parser(&p);
 }
 

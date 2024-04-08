@@ -1,6 +1,7 @@
 // link: collections.o logging.o
 #include "collections.h"
 #include "macros.h"
+#include "logging.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -66,7 +67,16 @@ int test_vec(void) {
   return 0;
 }
 
+void test_vec_write(void) {
+  vec v = {0};
+  v.sz = sizeof(char);
+  vec_write(&v, "Hello %d %s\n", 1, "guy");
+  vec_write(&v, "Hello %d %s\n", 2, "bro");
+  printf("%s\n", (char*)v.array);
+}
+
 int main(void) {
+  setup_crash_stacktrace_logger();
   string s = {0};
   char *something = "something";
   mk_string(&s, 1);
@@ -77,6 +87,8 @@ int main(void) {
   for (int j = 0; j < 10; j++) {
     push_str(&s, s.n, s.chars);
   }
+
+  test_vec_write();
   destroy_string(&s);
 
   return test_vec();

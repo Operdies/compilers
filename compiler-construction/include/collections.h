@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 typedef struct {
@@ -94,3 +95,4 @@ string string_from_chars(const char *src, int n);
 
 void * ecalloc(size_t nmemb, size_t size);
 void *ereallocarray(void *array, size_t nmemb, size_t size);
+int vec_write(vec *v, const char *fmt, ...);
