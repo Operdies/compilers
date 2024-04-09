@@ -45,6 +45,8 @@ static void test_lookahead(void) {
       printf("%s", t.error.error);
       printf("With grammar %s\n", test->grammar);
     }
+    vec_destroy(&t.tokens_vec);
+    destroy_parser(&p);
   }
 }
 
@@ -85,7 +87,9 @@ static void test_parser(void) {
       printf("Error parsing program %s:\n", program);
       printf("%s", t.error.error);
     }
+    vec_destroy(&t.tokens_vec);
   }
+  destroy_parser(&p);
 }
 
 static void print_nonterminals(nonterminal_list ntl) {
@@ -149,6 +153,7 @@ static void print_first_sets(parser_t *g) {
     printf("First(%.*s)  %*c ", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
     print_follow_set(&h->first_vec);
     puts("");
+    vec_destroy(&h->first_vec);
   }
 }
 
@@ -159,6 +164,7 @@ static void print_follow_sets(parser_t *g) {
     printf("Follow(%.*s) %*c ", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
     print_follow_set(&h->follow_vec);
     puts("");
+    vec_destroy(&h->follow_vec);
   }
 }
 
@@ -200,6 +206,8 @@ void test_ll1(void) {
   nonterminal_list nt = get_nonterminals(&p);
   print_terminals(t);
   print_nonterminals(nt);
+  vec_destroy(&t.terminals_vec);
+  vec_destroy(&nt.nonterminals_vec);
   destroy_parser(&p);
 }
 
@@ -216,6 +224,7 @@ static int prev_test(void) {
     printf("Error parsing program %s:\n", program);
     printf("%s", t.error.error);
   }
+  vec_destroy(&t.tokens_vec);
 
   destroy_parser(&p);
   return 0;

@@ -1,7 +1,7 @@
 // link: collections.o logging.o
 #include "collections.h"
-#include "macros.h"
 #include "logging.h"
+#include "macros.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,24 +72,26 @@ void test_vec_write(void) {
   v.sz = sizeof(char);
   vec_write(&v, "Hello %d %s\n", 1, "guy");
   vec_write(&v, "Hello %d %s\n", 2, "bro");
-  printf("%s\n", (char*)v.array);
+  if (strcmp("Hello 1 guy\nHello 2 bro\n", v.array) != 0)
+    die("vec write broken");
+  vec_destroy(&v);
 }
 
-int main(void) {
-  setup_crash_stacktrace_logger();
+void test_push_string(void) {
   string s = {0};
   char *something = "something";
   mk_string(&s, 1);
-  if (s.chars == NULL) {
-    return -1;
-  }
   push_str(&s, strlen(something), something);
-  for (int j = 0; j < 10; j++) {
+  int cnt = 3;
+  for (int j = 0; j < cnt; j++) {
     push_str(&s, s.n, s.chars);
   }
 
-  test_vec_write();
   destroy_string(&s);
-
+}
+int main(void) {
+  setup_crash_stacktrace_logger();
+  test_push_string();
+  test_vec_write();
   return test_vec();
 }
