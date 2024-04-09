@@ -51,6 +51,21 @@ void vec_push(vec *v, void *elem) {
   v->n++;
 }
 
+void vec_insert(vec *v, int index, void *elem) {
+  if (index < 0 || index > v->n)
+    die("vec_insert index out of range.");
+  ensure_capacity(v, v->n + 1);
+
+  char *arr = (char *)v->array;
+  int insert_at = index * v->sz;
+  int moved_bytes = (v->n - index) * v->sz;
+  // Shift everyting after the insertion point by one
+  memmove(arr + insert_at + v->sz, arr + insert_at, moved_bytes);
+  // Insert the new value
+  memmove(arr + insert_at, elem, v->sz);
+  v->n++;
+}
+
 void *vec_pop(vec *v) {
   if (v->n <= 0)
     return NULL;

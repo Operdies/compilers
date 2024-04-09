@@ -89,9 +89,41 @@ void test_push_string(void) {
 
   destroy_string(&s);
 }
+
+void test_vec_insert(void) {
+  vec v = {0};
+  v.sz = sizeof(int);
+  vec_insert(&v, 0, &(int){1});
+  vec_insert(&v, 1, &(int){4});
+  vec_insert(&v, 1, &(int){3});
+  vec_insert(&v, 1, &(int){2});
+  vec_insert(&v, 0, &(int){0});
+
+  if (v.n != 5)
+    die("vec insert failed: expected 5 elements");
+  v_foreach(int *, val, v) {
+    if (*val != idx_val)
+      die("vec insert failed: expected %d, got %d", idx_val, *val);
+  }
+  vec_clear(&v);
+
+  for (int i = 0; i <= 1000; i++) {
+    vec_insert(&v, 0, &i);
+  }
+  v_foreach((void), val, v) {
+    int expected = 1000 - idx_val;
+    if (*val != (expected))
+      die("vec insert failed: expected %d, got %d", expected, *val);
+  }
+
+  vec_destroy(&v);
+}
+
 int main(void) {
   setup_crash_stacktrace_logger();
-  test_push_string();
-  test_vec_write();
-  return test_vec();
+  // test_push_string();
+  // test_vec_write();
+  // return test_vec();
+  test_vec_insert();
+  return 0;
 }
