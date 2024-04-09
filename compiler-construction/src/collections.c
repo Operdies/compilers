@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+static void *identity(void *v) { return v; }
+
 void mk_string(string *s, int initial_capacity) {
   mk_vec(&s->v, 1, initial_capacity);
 }
@@ -57,20 +59,26 @@ void *vec_pop(vec *v) {
   return (char *)v->array + offset;
 }
 
-bool vec_push_slice(vec *v, const vslice *s) {
-  if (!v || !s)
+bool vec_push_slice(vec *destination, const vslice *source) {
+  if (!destination || !source)
     return false;
-  if (v->sz != s->sz)
+  if (destination->sz != source->sz)
     return false;
-  ensure_capacity(v, v->n + s->n);
 
-  char *dest = (char *)v->array + v->n * v->sz;
-  char *src = (char *)s->arr;
-  memmove(dest, src, s->n * s->sz);
+  // we need to create a copy of source before re-allocating
+  // because source and destinatin might overlap
+  vec copy = vec_select(source, source->sz, identity);
+  source = &copy.slice;
+  ensure_capacity(destination, destination->n + source->n);
+
+  char *dest = (char *)destination->array + destination->n * destination->sz;
+  char *src = (char *)source->arr;
+  memmove(dest, src, source->n * source->sz);
 
   // Optimization: Copy non-overlapping memory regions with memcpy
 
-  v->n += s->n;
+  destination->n += source->n;
+  vec_destroy(&copy);
   return true;
 }
 
@@ -140,7 +148,6 @@ int slicecmp(string_slice s1, string_slice s2) {
   return strncmp(s1.str, s2.str, shortest);
 }
 
-static void *identity(void *v) { return v; }
 vec vec_clone(const vec *v) { return vec_select(&v->slice, v->sz, identity); }
 
 string string_from_chars(const char *src, int n) {
@@ -184,7 +191,8 @@ void *ereallocarray(void *array, size_t nmemb, size_t size) {
   void *p;
 
   if (!(p = reallocarray(array, nmemb, size)))
-    die("realloc:");
+    die("reallocarray:");
+
   return p;
 }
 
