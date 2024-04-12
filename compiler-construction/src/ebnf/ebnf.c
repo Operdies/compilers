@@ -79,22 +79,22 @@ static regex *regexes[LAST_TERMINAL] = {0};
  * the symbol in the syntax is translated into a call of the corresponding procedure.
  */
 
-#define MATCH_TERMINAL(terminal)                   \
-  {                                                \
-    if (!match(g, terminal)) {                     \
-      fprintf(stderr, "Expected " #terminal "\n"); \
-      return false;                                \
-    }                                              \
+#define MATCH_TERMINAL(terminal)       \
+  {                                    \
+    if (!match(g, terminal)) {         \
+      die("Expected " #terminal "\n"); \
+      return false;                    \
+    }                                  \
   }
 
-static void destroy_expression(expression_t *e);
-static bool match(parser_t *g, int expr);
-static bool syntax(parser_t *g);
-static bool production(parser_t *g, production_t *p);
-static bool expression(parser_t *g, expression_t *e);
-static bool term(parser_t *g, term_t *t);
-static bool factor(parser_t *g, factor_t *f);
-static bool identifier(parser_t *g, string_slice *s);
+void destroy_expression(expression_t *e);
+bool match(parser_t *g, int expr);
+bool syntax(parser_t *g);
+bool production(parser_t *g, production_t *p);
+bool expression(parser_t *g, expression_t *e);
+bool term(parser_t *g, term_t *t);
+bool factor(parser_t *g, factor_t *f);
+bool identifier(parser_t *g, string_slice *s);
 
 static bool match_literal(parser_t *g, char literal) {
   if (finished(&g->ctx))
@@ -106,12 +106,12 @@ static bool match_literal(parser_t *g, char literal) {
   return false;
 }
 
-static bool match(parser_t *g, int expr) {
+bool match(parser_t *g, int expr) {
   regex *r = regexes[expr];
   return regex_matches(r, &g->ctx).match;
 }
 
-static bool factor(parser_t *g, factor_t *f) {
+bool factor(parser_t *g, factor_t *f) {
   // first set:
   // letter -> identifier
   // """    -> string
@@ -126,12 +126,15 @@ static bool factor(parser_t *g, factor_t *f) {
   case '"':
   case '\'':
     f->type = F_STRING;
-    f->string.str = POINT + 1;
+    string_slice string;
+    string.str = POINT + 1;
+
     if (!match(g, STRING)) {
       fprintf(stderr, "Expected STRING\n");
       return 0;
     }
-    f->string.n = POINT - f->string.str - 1;
+    string.n = POINT - string.str - 1;
+    f->string_regex = mk_regex_from_slice(string);
     break;
   case '(':
     f->type = F_PARENS;
@@ -211,7 +214,12 @@ bool expression(parser_t *g, expression_t *e) {
 
 bool identifier(parser_t *g, string_slice *s) {
   s->str = POINT;
-  MATCH_TERMINAL(IDENTIFIER);
+  {
+    if (!match(g, IDENTIFIER)) {
+      die("Expected IDENTIFIER in identifier %s\n", s->str);
+      return 0;
+    }
+  };
   s->n = POINT - s->str;
   return true;
 }
@@ -224,7 +232,12 @@ bool production(parser_t *g, production_t *p) {
   MATCH_TERMINAL(ASSIGNMENT);
   if (!expression(g, &p->expr))
     return false;
-  MATCH_TERMINAL(PERIOD);
+  {
+    if (!match(g, PERIOD)) {
+      error("Expected PERIOD in production %.*s\n", s.n, s.str);
+      return 0;
+    }
+  };
   p->identifier = s;
   return true;
 }
@@ -399,20 +412,22 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
     return prod;
   }
   case F_STRING: {
-    symbol_t *s, *last;
-    s = last = NULL;
-    string_slice str = factor->string;
-    for (int i = 0; i < str.n; i++) {
-      char ch = str.str[i];
-      symbol_t *charsym = MKSYM();
-      *charsym = (symbol_t){.sym = ch};
-      if (s == NULL)
-        last = s = charsym;
-      else {
-        last->next = charsym;
-        last = charsym;
-      }
-    }
+    symbol_t *s = MKSYM();
+    *s = (symbol_t){.regex = factor->string_regex};
+    // symbol_t *s, *last;
+    // s = last = NULL;
+    // string_slice str = factor->string;
+    // for (int i = 0; i < str.n; i++) {
+    //   char ch = str.str[i];
+    //   symbol_t *charsym = MKSYM();
+    //   *charsym = (symbol_t){.sym = ch};
+    //   if (s == NULL)
+    //     last = s = charsym;
+    //   else {
+    //     last->next = charsym;
+    //     last = charsym;
+    //   }
+    // }
     return s;
   }
   default:
@@ -479,7 +494,8 @@ parser_t mk_parser(const char *text) {
   for (int i = 0; i < LAST_TERMINAL; i++) {
     if (regexes[i])
       continue;
-    regexes[i] = mk_regex(patterns[i]);
+    string_slice s = {.n = strlen(patterns[i]), .str = patterns[i]};
+    regexes[i] = mk_regex_from_slice(s);
     if (!regexes[i]) {
       fprintf(stderr, "Failed to compile regex %s\n", patterns[i]);
       return g;
@@ -499,7 +515,7 @@ parser_t mk_parser(const char *text) {
   return g;
 }
 
-static void destroy_expression(expression_t *e);
+void destroy_expression(expression_t *e);
 
 static void destroy_term(term_t *t) {
   v_foreach(factor_t *, f, t->factors_vec) {
@@ -509,7 +525,7 @@ static void destroy_term(term_t *t) {
   vec_destroy(&t->factors_vec);
 }
 
-static void destroy_expression(expression_t *e) {
+void destroy_expression(expression_t *e) {
   v_foreach(term_t *, t, e->terms_vec) { destroy_term(t); }
   vec_destroy(&e->terms_vec);
 }
@@ -544,21 +560,20 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
 
   while (x) {
     struct parse_frame frame = {.source_cursor = ctx->c, .token_cursor = t->n_tokens};
-    char ch = peek(ctx);
 
-    if (!x->is_nonterminal) {
-      if (!finished(ctx) && x->sym == ch) {
-        match = true;
-        advance(ctx);
-      } else {
-        match = x->empty;
-      }
-    } else {
+    if (x->is_nonterminal) {
       match = tokenize(x->nonterminal->header, ctx, t, backtrack);
       if (backtrack && !match) {
         // rewind
         ctx->c = frame.source_cursor;
         t->n_tokens = frame.token_cursor;
+      }
+    } else {
+      if (x->empty) {
+        match = true;
+      } else {
+        regex_match m = regex_matches(x->regex, ctx);
+        match = m.match;
       }
     }
 

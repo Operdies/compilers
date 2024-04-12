@@ -1,6 +1,8 @@
 #ifndef REGEX_H
 #define REGEX_H
+
 #include "arena.h"
+#include "collections.h"
 #include "text.h"
 #include <stdbool.h>
 #include <stdio.h>
@@ -49,4 +51,5 @@ regex_match regex_matches(regex *r, match_context *ctx);
 regex_match regex_find(regex *r, const char *string);
 void destroy_regex(regex *r);
 regex *mk_regex(const char *pattern);
+regex *mk_regex_from_slice(string_slice slice);
 #endif // REGEX_H

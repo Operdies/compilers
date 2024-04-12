@@ -21,7 +21,8 @@ static void populate_terminals(terminal_list *terminals, expression_t *e) {
       if (f->type == F_PARENS || f->type == F_OPTIONAL || f->type == F_REPEAT) {
         populate_terminals(terminals, &f->expression);
       } else if (f->type == F_STRING) {
-        vec_push(&terminals->terminals_vec, (char *)f->string.str);
+        // TODO: compute start symbols of regex
+        vec_push(&terminals->terminals_vec, (char*)f->string_regex->ctx.src);
       }
     }
   }
@@ -66,7 +67,8 @@ static void populate_first_term(const parser_t *g, struct header_t *h, term_t *t
       return;
     }
     case F_STRING: {
-      struct follow_t fst = {.type = FOLLOW_SYMBOL, .symbol = *(char *)fac->string.str};
+      // TODO: compute valid start symbols of regex
+      struct follow_t fst = {.type = FOLLOW_SYMBOL, .symbol = 0};
       vec_push(&h->first_vec, &fst);
       return;
     }
@@ -137,7 +139,8 @@ void add_symbols(symbol_t *start, int k, vec *follows) {
           f.prod = alt->nonterminal;
         } else {
           f.type = FOLLOW_SYMBOL;
-          f.symbol = alt->sym;
+          // TODO: compute start symbols of regex
+          f.symbol = alt->regex->ctx.src[0];
         }
         if (!vec_contains(follows, &f)) {
           vec_push(follows, &f);

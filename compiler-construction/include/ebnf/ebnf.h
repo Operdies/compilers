@@ -3,6 +3,7 @@
 
 #include "collections.h"
 #include "text.h"
+#include "regex.h"
 
 // * factor     = identifier | string | "(" expression ")" | "[" expression "]" | "{" expression "}".
 enum factor_switch {
@@ -51,7 +52,7 @@ struct identifier_t {
 struct factor_t {
   string_slice range;
   union {
-    string_slice string;
+    regex *string_regex;
     struct identifier_t identifier;
     struct expression_t expression;
   };
@@ -77,7 +78,7 @@ struct parser_t {
 };
 
 struct symbol_t {
-  char sym;
+  regex *regex;
   symbol_t *next;
   symbol_t *alt;
   production_t *nonterminal;

@@ -3,7 +3,9 @@
 #include "text.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include "logging.h"
 
 // chars 0-10 are not printable and can be freely used as special tokens
 #define EPSILON 2
@@ -80,8 +82,10 @@ static u8 take_char(parse_context *ctx) {
       return 0;
     }
     ch = take(ctx);
-    if (ch == 'n') return '\n';
-    if (ch == 't') return '\t';
+    if (ch == 'n')
+      return '\n';
+    if (ch == 't')
+      return '\t';
     return ch;
   }
   return ch;
@@ -396,23 +400,29 @@ void destroy_regex(regex *r) {
     destroy_arena(r->ctx.a);
 }
 
-regex *mk_regex(const char *pattern) {
+regex *mk_regex_from_slice(string_slice slice) {
   regex *r = NULL;
-  if (pattern) {
+  if (slice.str == NULL) die("NULL string");
+  if (slice.str) {
     arena *a = mk_arena();
+    char *pattern = arena_alloc(a, slice.n + 1, 1);
+    strncpy(pattern, slice.str, slice.n);
     r = arena_alloc(a, 1, sizeof(regex));
-    size_t len = strlen(pattern);
-    char *src = arena_alloc(a, len + 1, 1);
-    strcpy(src, pattern);
-    r->ctx = (parse_context){.n = len, .c = 0, .src = src, .a = a, .err = arena_alloc(a, 100, 1)};
+    r->ctx = (parse_context){.n = slice.n, .c = 0, .src = pattern, .a = a, .err = arena_alloc(a, 100, 1)};
     r->start = build_automaton(&r->ctx);
     reset(r->start);
     if (!finished(&r->ctx)) {
+      die("Invalid regex '%.*s'", slice.n, slice.str);
       destroy_regex(r);
       return NULL;
     }
   }
   return r;
+}
+
+regex *mk_regex(const char *pattern) {
+  string_slice s = {.n = strlen(pattern), .str = pattern};
+  return mk_regex_from_slice(s);
 }
 
 regex_match regex_pos(regex *r, const char *string, int len) {
@@ -428,12 +438,13 @@ regex_match regex_pos(regex *r, const char *string, int len) {
   return result;
 }
 
-regex_match regex_matches(regex *r, match_context *ctx){
+regex_match regex_matches(regex *r, match_context *ctx) {
+  if (r == NULL) die("NULL regex");
   size_t pos = ctx->c;
   reset(r->start);
   bool match = partial_match(r->start, ctx);
-  if (match){
-    regex_match result = { .match = true, .start = pos, .length = ctx->c - pos };
+  if (match) {
+    regex_match result = {.match = true, .start = pos, .length = ctx->c - pos};
     return result;
   } else {
     regex_match no_match = {0};

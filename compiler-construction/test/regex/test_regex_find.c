@@ -1,4 +1,4 @@
-// link: regex.o arena.o
+// link: regex.o arena.o collections.o logging.o
 #include "macros.h"
 #include "regex.h"
 #include "text.h"

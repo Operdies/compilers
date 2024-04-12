@@ -1,7 +1,6 @@
-// link: regex.o arena.o
+// link: regex.o arena.o collections.o logging.o
 #include "regex.h"
 #include <stdio.h>
-#include <string.h>
 
 int main(int argc, char *argv[argc + 1]) {
   for (int i = 1; (i + 1) < argc; i += 2) {

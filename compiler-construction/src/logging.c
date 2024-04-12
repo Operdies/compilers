@@ -123,6 +123,36 @@ void error(const char *fmt, ...) {
   va_end(ap);
 }
 
+static void print_stacktrace_friendly(void **array, int size, int skip) {
+  const int depth = 5;
+  char **strings;
+  int top, bottom;
+  // skip_end: _start, __libc_start_main, mangled libc symbol
+  int skip_end = 3;
+
+  strings = backtrace_symbols(array, size);
+  for (top = skip; top < size && top < (depth + skip); top++) {
+    char *str = strings[top];
+    str = strrchr(str, '/') + 1;
+    debug("%2d) %s", top - skip, str);
+  }
+
+  bottom = size - depth - skip_end;
+  if (bottom < top) {
+    bottom = top;
+  } else if (bottom - top == 1) {
+    // If exactly one element would be truncated, just print it instead of truncating
+    bottom -= 1;
+  } else {
+    debug("    -----");
+  }
+
+  for (; bottom < size - skip_end; bottom++) {
+    char *str = strings[bottom];
+    str = strrchr(str, '/') + 1;
+    debug("%2d) %s", bottom - skip, str);
+  }
+}
 void die(const char *fmt, ...) {
   va_list ap;
 
@@ -134,19 +164,9 @@ void die(const char *fmt, ...) {
     colored_log(stderr, FATAL, strerror(errno), NULL);
   }
 
-  { // print stacktrace
-    void *array[10];
-    char **strings;
-    int size, i;
-
-    size = backtrace(array, LENGTH(array));
-    strings = backtrace_symbols(array, size);
-    for (i = 0; i < size; i++) {
-      char *str = strings[i];
-      str = strrchr(str, '/') + 1;
-      debug(str);
-    }
-  }
+  void *array[100];
+  int size = backtrace(array, LENGTH(array));
+  print_stacktrace_friendly(array, size, 0);
 
   if (log)
     fclose(log);
@@ -156,22 +176,11 @@ void die(const char *fmt, ...) {
 static void handler(int sig) {
   const char *signal = strsignal(sig);
   error(signal);
-  { // print stacktrace
-    void *array[10];
-    char **strings;
-    int size, i;
 
-    size = backtrace(array, LENGTH(array));
-    strings = backtrace_symbols(array, size);
-    // skip 2 entries:
-    // 0: handler (this)
-    // 1: signal handler from libc
-    for (i = 2; i < size; i++) {
-      char *str = strings[i];
-      str = strrchr(str, '/') + 1;
-      debug(str);
-    }
-  }
+  void *array[100];
+  int size = backtrace(array, LENGTH(array));
+  print_stacktrace_friendly(array, size, 2);
+
   if (log)
     fclose(log);
   exit(sig);
