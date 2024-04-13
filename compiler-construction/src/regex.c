@@ -412,7 +412,7 @@ regex *mk_regex_from_slice(string_slice slice) {
     r->start = build_automaton(&r->ctx);
     reset(r->start);
     if (!finished(&r->ctx)) {
-      die("Invalid regex '%.*s'", slice.n, slice.str);
+      debug("Invalid regex '%.*s'", slice.n, slice.str);
       destroy_regex(r);
       return NULL;
     }
