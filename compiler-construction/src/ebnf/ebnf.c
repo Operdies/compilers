@@ -186,7 +186,7 @@ bool term(parser_t *g, term_t *t) {
   t->range.str = POINT;
   if (!factor(g, &f))
     return false;
-  mk_vec(&t->factors_vec, sizeof(factor_t), 1);
+  t->factors_vec = v_make(factor_t);
   vec_push(&t->factors_vec, &f);
   while (factor(g, &f)) {
     vec_push(&t->factors_vec, &f);
@@ -196,7 +196,7 @@ bool term(parser_t *g, term_t *t) {
 }
 
 bool expression(parser_t *g, expression_t *e) {
-  mk_vec(&e->terms_vec, sizeof(term_t), 1);
+  e->terms_vec = v_make(term_t);
 
   e->range.str = POINT;
   do {
@@ -377,8 +377,7 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
       *loop = (symbol_t){.empty = true};
       if (0) {
         // TODO:  is this needed or can we keep the other variant
-        vec seen = {0};
-        mk_vec(&seen, sizeof(symbol_t), 1);
+        vec seen = v_make(symbol_t);
         append_all_nexts(subexpression, loop, &seen);
         vec_destroy(&seen);
       } else {

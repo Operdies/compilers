@@ -29,16 +29,14 @@ static void populate_terminals(terminal_list *terminals, expression_t *e) {
 }
 
 terminal_list get_terminals(const parser_t *g) {
-  terminal_list t = {0};
-  mk_vec(&t.terminals_vec, sizeof(char), 0);
+  terminal_list t = {.terminals_vec = v_make(char)};
   v_foreach(production_t *, p, g->productions_vec) {
     populate_terminals(&t, &p->expr);
   }
   return t;
 }
 nonterminal_list get_nonterminals(const parser_t *g) {
-  nonterminal_list t = {0};
-  mk_vec(&t.nonterminals_vec, sizeof(header_t), 0);
+  nonterminal_list t = {.nonterminals_vec = v_make(header_t)};
   v_foreach(production_t *, p, g->productions_vec)
       vec_push(&t.nonterminals_vec, p->header);
   return t;
@@ -86,7 +84,7 @@ void populate_first(const parser_t *g, struct header_t *h) {
   if (h->first) {
     return;
   }
-  mk_vec(&h->first_vec, sizeof(struct follow_t), 0);
+  h->first_vec = v_make(struct follow_t);
   populate_first_expr(g, h, &h->prod->expr);
 }
 
@@ -189,7 +187,7 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
           production_t *prod = slow->nonterminal->header->prod;
           { // apply rule 1 and 2
             if (!prod->header->follow)
-              mk_vec(&prod->header->follow_vec, sizeof(struct follow_t), 0);
+              prod->header->follow_vec = v_make(struct follow_t);
             // Rule 1 is applied by walking the graph k symbols forward from where
             // this production was referenced. This also applies rule 2
             // since a { repeat } expression links back with an empty transition.
@@ -227,8 +225,7 @@ void populate_follow(const parser_t *g) {
   // follows, the first set of that production is included in this symbol's follow set
   // 2. If the production occurs at the end of a { repeat }, the symol at the start of the repeat is included
   // 3. If the production occurs at the end of another production, the follow set of the owning production is included
-  vec seen = {0};
-  mk_vec(&seen, sizeof(symbol_t), 0);
+  vec seen = v_make(symbol_t);
   v_foreach(production_t *, p, g->productions_vec) {
     symbol_t *start = p->header->sym;
     mega_follow_walker(g, start, &seen, p);

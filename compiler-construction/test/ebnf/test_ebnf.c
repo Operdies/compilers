@@ -93,9 +93,8 @@ void test_parser(void) {
   destroy_parser(&p);
 }
 
-void print_nonterminals(nonterminal_list ntl) {
-  vec buf = {0};
-  buf.sz = sizeof(char);
+static void print_nonterminals(nonterminal_list ntl) {
+  vec buf = v_make(char);
   v_foreach(header_t *, h, ntl.nonterminals_vec) {
     production_t *p = h->prod;
     vec_write(&buf, "%.*s, ", p->identifier.n, p->identifier.str);
@@ -103,9 +102,8 @@ void print_nonterminals(nonterminal_list ntl) {
   info("Nonterminals: %.*s", buf.n, buf.array);
   vec_destroy(&buf);
 }
-void print_terminals(terminal_list tl) {
-  vec buf = {0};
-  buf.sz = sizeof(char);
+static void print_terminals(terminal_list tl) {
+  vec buf = v_make(char);
   for (int i = 0; i < tl.n_terminals; i++) {
     char ch = tl.terminals[i];
     if (isgraph(ch))

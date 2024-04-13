@@ -146,9 +146,8 @@ void vec_foreach(vslice *v, vec_fn f) {
 }
 
 vec vec_select(const vslice *v, int elem_size, vec_selector s) {
-  vec result = {0};
+  vec result = { .sz = elem_size };
   if (v) {
-    mk_vec(&result, elem_size, v->n);
     for (int i = 0; i < v->n; i++) {
       void *elem = (char *)v->arr + i * v->sz;
       void *new_elem = s(elem);

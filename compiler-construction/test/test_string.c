@@ -19,9 +19,8 @@ void add_one(int *v) {
 }
 
 int test_vec(void) {
-  vec v = {0};
+  vec v = v_make(int);
   int payload[] = {7, 9, 13};
-  mk_vec(&v, sizeof(int), 1);
 
   for (int i = 0; i < LENGTH(payload); i++)
     vec_push(&v, &payload[i]);
@@ -68,8 +67,7 @@ int test_vec(void) {
 }
 
 void test_vec_write(void) {
-  vec v = {0};
-  v.sz = sizeof(char);
+  vec v = v_make(char);
   vec_write(&v, "Hello %d %s\n", 1, "guy");
   vec_write(&v, "Hello %d %s\n", 2, "bro");
   if (strcmp("Hello 1 guy\nHello 2 bro\n", v.array) != 0)
@@ -91,8 +89,7 @@ void test_push_string(void) {
 }
 
 void test_vec_insert(void) {
-  vec v = {0};
-  v.sz = sizeof(int);
+  vec v = v_make(int);
   vec_insert(&v, 0, &(int){1});
   vec_insert(&v, 1, &(int){4});
   vec_insert(&v, 1, &(int){3});
