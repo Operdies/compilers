@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "collections.h"
 #include "logging.h"
 #include "macros.h"
 
@@ -62,6 +63,8 @@ static bool should_log(FILE *fp, enum loglevel level) {
 }
 
 void colored_log(FILE *fp, enum loglevel level, const char *fmt, va_list ap) {
+  static vec strbuf = {.sz = sizeof(char)};
+  strbuf.n = 0;
   setup_crash_stacktrace_logger();
   if (!fp)
     return;
@@ -72,21 +75,26 @@ void colored_log(FILE *fp, enum loglevel level, const char *fmt, va_list ap) {
     const char *color = log_colors[level];
     const char *header = headers[level];
 
-    if (add_colors(fp))
-      fprintf(fp, "%s %-*s %s %s", log_headers[level], 5, header, RESET_COLOR, color);
-    else
-      fprintf(fp, "[%-*s] ", 5, header);
-
     if (ap)
-      vfprintf(fp, fmt, ap);
+      vec_vwrite(&strbuf, fmt, ap);
     else
-      fputs(fmt, fp);
+      vec_write(&strbuf, fmt);
+
+    vec_push(&strbuf, "\0");
+
+    char *line = strtok(strbuf.array, "\n");
+    for (; line; line = strtok(NULL, "\n")) {
+      if (add_colors(fp))
+        fprintf(fp, "%s %-*s %s %s", log_headers[level], 5, header, RESET_COLOR, color);
+      else
+        fprintf(fp, "[%-*s] ", 5, header);
+
+      fprintf(fp, "%s\n", line);
+    }
+
     if (add_colors(fp))
       fprintf(fp, RESET_COLOR);
 
-    fputs("\n", fp);
-    // flush to ensure correct ordering between stdout and stderr to avoid confusion
-    // also probably a good idea to ensure files are written to disk before program exit
     fflush(fp);
   }
 }

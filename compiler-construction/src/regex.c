@@ -1,11 +1,11 @@
 #include "regex.h"
+#include "logging.h"
 #include "macros.h"
 #include "text.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "logging.h"
 
 // chars 0-10 are not printable and can be freely used as special tokens
 #define EPSILON 2
@@ -402,7 +402,8 @@ void destroy_regex(regex *r) {
 
 regex *mk_regex_from_slice(string_slice slice) {
   regex *r = NULL;
-  if (slice.str == NULL) die("NULL string");
+  if (slice.str == NULL)
+    die("NULL string");
   if (slice.str) {
     arena *a = mk_arena();
     char *pattern = arena_alloc(a, slice.n + 1, 1);
@@ -439,7 +440,8 @@ regex_match regex_pos(regex *r, const char *string, int len) {
 }
 
 regex_match regex_matches(regex *r, match_context *ctx) {
-  if (r == NULL) die("NULL regex");
+  if (r == NULL)
+    die("NULL regex");
   size_t pos = ctx->c;
   reset(r->start);
   bool match = partial_match(r->start, ctx);

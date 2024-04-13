@@ -97,6 +97,10 @@ bool vec_push_slice(vec *destination, const vslice *source) {
   return true;
 }
 
+bool vec_push_array(vec *v, int n, void *data) {
+  return vec_push_slice(v, &(vslice){.n = n, .sz = v->sz, .arr = data});
+}
+
 static int roll(int x, int n) {
   if (x < 0) {
     x = -x;
@@ -146,7 +150,7 @@ void vec_foreach(vslice *v, vec_fn f) {
 }
 
 vec vec_select(const vslice *v, int elem_size, vec_selector s) {
-  vec result = { .sz = elem_size };
+  vec result = {.sz = elem_size};
   if (v) {
     for (int i = 0; i < v->n; i++) {
       void *elem = (char *)v->arr + i * v->sz;
@@ -210,21 +214,22 @@ void *ereallocarray(void *array, size_t nmemb, size_t size) {
   return p;
 }
 
+int vec_vwrite(vec *v, const char *fmt, va_list ap) {
+  // Unfortunate that this requires an extra allocation
+  char *temp;
+  int n = vasprintf(&temp, fmt, ap);
+  ensure_capacity(v, v->n + n);
+  memcpy((char *)v->array + v->n * v->sz, temp, n);
+  free(temp);
+  v->n += n;
+  return n;
+}
+
 int vec_write(vec *v, const char *fmt, ...) {
   va_list ap;
-  int limit = v->c - v->n;
-#define wrt() (char *)v->array + v->n * v->sz
-
   va_start(ap, fmt);
-  int written = vsnprintf(wrt(), limit, fmt, ap);
+  int written = vec_vwrite(v, fmt, ap);
   va_end(ap);
-  if (written > limit) {
-    ensure_capacity(v, v->n + written);
-    va_start(ap, fmt);
-    vsnprintf(wrt(), written + 1, fmt, ap);
-    va_end(ap);
-  }
-  v->n += written;
   return written;
 #undef wrt
 }

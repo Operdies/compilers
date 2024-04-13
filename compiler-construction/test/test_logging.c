@@ -1,4 +1,4 @@
-// link: logging.o
+// link: logging.o collections.o
 #include "logging.h"
 
 // This is not so much a test as just some code that tries each color and exits
@@ -8,5 +8,6 @@ int main(void) {
   info("Info");
   warn("Warning");
   error("Error");
+  debug("thing\n  on multiple\nlines");
   return 0;
 }

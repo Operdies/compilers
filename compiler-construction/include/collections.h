@@ -26,7 +26,8 @@ typedef struct {
   type var;                        \
   for (int idx_##var = vec.n - 1; idx_##var >= 0 && (var = vec_nth(&vec.slice, idx_##var)); idx_##var--)
 
-#define v_make(type) (vec) { .sz = sizeof(type) }
+#define v_make(type) \
+  (vec) { .sz = sizeof(type) }
 
 // generically sized vector
 typedef struct {
@@ -62,6 +63,7 @@ int slicecmp(string_slice s1, string_slice s2);
 void mk_vec(vec *v, int elem_size, int initial_capacity);
 void vec_destroy(vec *v);
 void vec_push(vec *v, void *elem);
+bool vec_push_array(vec *destination, int n, void *data);
 void vec_insert(vec *v, int index, void *elem);
 void *vec_pop(vec *v);
 vec vec_clone(const vec *v);
@@ -97,6 +99,7 @@ void destroy_string(string *s);
 // Create a new string from an existing char array
 string string_from_chars(const char *src, int n);
 
-void * ecalloc(size_t nmemb, size_t size);
+void *ecalloc(size_t nmemb, size_t size);
 void *ereallocarray(void *array, size_t nmemb, size_t size);
+int vec_vwrite(vec *v, const char *fmt, va_list ap);
 int vec_write(vec *v, const char *fmt, ...);
