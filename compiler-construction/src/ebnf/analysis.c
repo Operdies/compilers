@@ -233,4 +233,59 @@ void populate_follow(const parser_t *g) {
   vec_destroy(&seen);
 }
 
-bool is_ll1(const parser_t *g);
+void expand_first(struct follow_t *follow, vec *mega_first, vec *seen) {
+  if (vec_contains(seen, follow))
+    return;
+  vec_push(seen, follow);
+
+  switch (follow->type) {
+
+  case FOLLOW_SYMBOL:
+    vec_push(mega_first, &follow->symbol);
+    break;
+  case FOLLOW_FIRST: {
+    v_foreach(struct follow_t *, fst, follow->prod->header->first_vec) {
+      expand_first(fst, mega_first, seen);
+    }
+  } break;
+  case FOLLOW_FOLLOW:
+    break;
+  }
+}
+
+bool is_ll1(const parser_t *g) {
+  /* test_ll1:
+   * for each nonterminal nt:
+   * > for each terminal in follow(nt) t
+   * >> for each nonterminal in follow(nt) fnt
+   * >>> check if t is in first(fnt)
+   * TODO: How can this same test be achieved using floyd-warshall? (all pairs shortest path)
+   * > for each symbol in follow(nt) sym
+   * >> check what nonterminals are reachable with sym
+   * >> if more than one nonterminal is reachable, the grammar is not ll(1)
+   * >> for each character in first, check if there is more than one continuation.
+   */
+
+  v_foreach(production_t *, p, g->productions_vec)
+      populate_first(g, p->header);
+  populate_follow(g);
+  terminal_list t = get_terminals(g);
+  nonterminal_list nt = get_nonterminals(g);
+
+  vec reachable = v_make(symbol_t);
+  vec seen = v_make(struct follow_t);
+
+  v_foreach(header_t *, h, nt.nonterminals_vec) {
+    vec_clear(&reachable);
+    v_foreach(struct follow_t *, sym, h->first_vec) {
+      expand_first(sym, &reachable, &seen);
+    }
+  }
+
+  vec_destroy(&seen);
+  vec_destroy(&reachable);
+  vec_destroy(&t.terminals_vec);
+  vec_destroy(&nt.nonterminals_vec);
+
+  return false;
+}

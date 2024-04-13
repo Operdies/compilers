@@ -235,24 +235,56 @@ void json_parser(void) {
 }
 
 void test_ll1(void) {
-  static const char grammar[] = {
-      "expression = term {('\\+' | '-' ) term } .\n"
-      "term       = factor {('\\*' | '/') factor } .\n"
-      "factor     = ( digits | '(' expression ')' ) .\n"
-      "digits     = digit { digit } .\n"
-      "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
-  parser_t p = mk_parser(grammar);
-  info("First Set");
-  print_first_sets(&p);
-  info("Follow Set");
-  print_follow_sets(&p);
-  terminal_list t = get_terminals(&p);
-  nonterminal_list nt = get_nonterminals(&p);
-  print_terminals(t);
-  print_nonterminals(nt);
-  vec_destroy(&t.terminals_vec);
-  vec_destroy(&nt.nonterminals_vec);
-  destroy_parser(&p);
+  {
+    static const char grammar[] = {
+        "expression = term {('\\+' | '-' ) term } .\n"
+        "term       = factor {('\\*' | '/') factor } .\n"
+        "factor     = ( digits | '(' expression ')' ) .\n"
+        "digits     = digit { digit } .\n"
+        "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
+    parser_t p = mk_parser(grammar);
+    info("First Set");
+    print_first_sets(&p);
+    // info("Follow Set");
+    // print_follow_sets(&p);
+    terminal_list t = get_terminals(&p);
+    nonterminal_list nt = get_nonterminals(&p);
+    print_terminals(t);
+    print_nonterminals(nt);
+    vec_destroy(&t.terminals_vec);
+    vec_destroy(&nt.nonterminals_vec);
+
+    if (!is_ll1(&p)) {
+      error("Expected ll1: \n%s", grammar);
+      exit(1);
+    }
+
+    destroy_parser(&p);
+  }
+
+  {
+    static const char grammar[] = {
+        "A = B | C.\n"
+        "B = 'b' 'b'.\n"
+        "C = 'b' 'c'.\n"};
+    parser_t p = mk_parser(grammar);
+    // info("First Set");
+    // print_first_sets(&p);
+    // info("Follow Set");
+    // print_follow_sets(&p);
+    terminal_list t = get_terminals(&p);
+    nonterminal_list nt = get_nonterminals(&p);
+    print_terminals(t);
+    print_nonterminals(nt);
+    vec_destroy(&t.terminals_vec);
+    vec_destroy(&nt.nonterminals_vec);
+
+    if (is_ll1(&p)) {
+      error("Expected not ll1: \n%s", grammar);
+    }
+
+    destroy_parser(&p);
+  }
 }
 
 int prev_test(void) {
