@@ -1,4 +1,5 @@
 #include "regex.h"
+#include "collections.h"
 #include "logging.h"
 #include "macros.h"
 #include "text.h"
@@ -423,7 +424,8 @@ regex *mk_regex_from_slice(string_slice slice) {
 
 regex *mk_regex(const char *pattern) {
   string_slice s = {.n = strlen(pattern), .str = pattern};
-  return mk_regex_from_slice(s);
+  regex *r = mk_regex_from_slice(s);
+  return r;
 }
 
 regex_match regex_pos(regex *r, const char *string, int len) {
@@ -485,4 +487,24 @@ bool matches(const char *pattern, const char *string) {
   bool result = regex_matches_strict(r, string);
   destroy_regex(r);
   return result;
+}
+
+static void _regex_first(dfa *d, char map[static UINT8_MAX]) {
+  if (d == NULL)
+    return;
+  if (d->accept == EPSILON) {
+    for (size_t i = 0; i < d->lst.n; i++) {
+      dfa *next = d->lst.arr[i];
+      _regex_first(next, map);
+    }
+  } else {
+    for (int ch = d->accept; ch <= d->accept_end; ch++)
+      map[ch] = 1;
+  }
+}
+
+void regex_first(regex *r, char map[static UINT8_MAX]) {
+  if (r && r->start) {
+    _regex_first(r->start, map);
+  }
 }

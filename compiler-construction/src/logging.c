@@ -88,6 +88,7 @@ void colored_log(FILE *fp, enum loglevel level, const char *fmt, va_list ap) {
         fprintf(fp, "%s %-*s %s %s", log_headers[level], 5, header, RESET_COLOR, color);
       else
         fprintf(fp, "[%-*s] ", 5, header);
+      header = "  >";
 
       fprintf(fp, "%s\n", line);
     }
@@ -151,7 +152,8 @@ static void print_stacktrace_friendly(void **array, int size, int skip) {
   } else if (bottom - top == 1) {
     // If exactly one element would be truncated, just print it instead of truncating
     bottom -= 1;
-  } else {
+  } else if (top != bottom) {
+    // avoid printing the separator if top and bottom exactly meet
     debug("    -----");
   }
 

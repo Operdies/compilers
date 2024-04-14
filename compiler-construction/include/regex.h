@@ -5,6 +5,7 @@
 #include "collections.h"
 #include "text.h"
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 
 typedef struct dfa dfa;
@@ -52,4 +53,6 @@ regex_match regex_find(regex *r, const char *string);
 void destroy_regex(regex *r);
 regex *mk_regex(const char *pattern);
 regex *mk_regex_from_slice(string_slice slice);
+// Get the set of characters that can occur in the beginning of a matching regex
+void regex_first(regex *r, char map[static UINT8_MAX]);
 #endif // REGEX_H

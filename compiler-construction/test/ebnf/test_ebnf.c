@@ -104,12 +104,14 @@ static void print_nonterminals(nonterminal_list ntl) {
 }
 static void print_terminals(terminal_list tl) {
   vec buf = v_make(char);
-  for (int i = 0; i < tl.n_terminals; i++) {
-    char ch = tl.terminals[i];
-    if (isgraph(ch))
-      vec_write(&buf, "%c, ", ch);
-    else
-      vec_write(&buf, "%02x, ", (int)ch);
+  for (int i = 0; i < LENGTH(tl.map); i++) {
+    if (tl.map[i]) {
+      char ch = (char)i;
+      if (isgraph(ch))
+        vec_write(&buf, "%c, ", ch);
+      else
+        vec_write(&buf, "%02x, ", (int)ch);
+    }
   }
   info("Terminals: %.*s", buf.n, buf.array);
   vec_destroy(&buf);
@@ -124,15 +126,22 @@ void print_sym(symbol_t *sym) {
     printf("regex '%s'\n", sym->regex->ctx.src);
 }
 
-void print_follow_set(vec *v) {
+static void print_follow_set(vec *v) {
   v_foreach(struct follow_t *, sym, (*v)) {
     switch (sym->type) {
-    case FOLLOW_SYMBOL:
-      if (isgraph(sym->symbol))
-        printf("%c, ", sym->symbol);
-      else
-        printf("0x%x, ", sym->symbol);
+    case FOLLOW_SYMBOL: {
+      char map[255] = {0};
+      regex_first(sym->regex, map);
+      for (int sym = 0; sym < LENGTH(map); sym++) {
+        if (map[sym]) {
+          if (isgraph(sym))
+            printf("%c, ", sym);
+          else
+            printf("0x%x, ", sym);
+        }
+      }
       break;
+    }
     case FOLLOW_FIRST:
       printf("First(%.*s), ", sym->prod->identifier.n, sym->prod->identifier.str);
       break;
@@ -143,7 +152,7 @@ void print_follow_set(vec *v) {
   }
 }
 
-void print_first_sets(parser_t *g) {
+static void print_first_sets(parser_t *g) {
   v_foreach(production_t *, p, g->productions_vec) {
     header_t *h = p->header;
     populate_first(g, h);
@@ -154,7 +163,7 @@ void print_first_sets(parser_t *g) {
   }
 }
 
-void print_follow_sets(parser_t *g) {
+static void print_follow_sets(parser_t *g) {
   populate_follow(g);
   v_foreach(production_t *, p, g->productions_vec) {
     header_t *h = p->header;
@@ -165,7 +174,7 @@ void print_follow_sets(parser_t *g) {
   }
 }
 
-void print_enumerated_graph(vec all) {
+static void print_enumerated_graph(vec all) {
   v_foreach(symbol_t *, sym, all) {
     int idx = idx_sym;
     printf("%2d) ", idx);
@@ -237,52 +246,26 @@ void json_parser(void) {
 void test_ll1(void) {
   {
     static const char grammar[] = {
-        "expression = term {('\\+' | '-' ) term } .\n"
-        "term       = factor {('\\*' | '/') factor } .\n"
-        "factor     = ( digits | '(' expression ')' ) .\n"
-        "digits     = digit { digit } .\n"
-        "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
-    parser_t p = mk_parser(grammar);
-    info("First Set");
-    print_first_sets(&p);
-    // info("Follow Set");
-    // print_follow_sets(&p);
-    terminal_list t = get_terminals(&p);
-    nonterminal_list nt = get_nonterminals(&p);
-    print_terminals(t);
-    print_nonterminals(nt);
-    vec_destroy(&t.terminals_vec);
-    vec_destroy(&nt.nonterminals_vec);
-
-    if (!is_ll1(&p)) {
-      error("Expected ll1: \n%s", grammar);
-      exit(1);
-    }
-
-    destroy_parser(&p);
-  }
-
-  {
-    static const char grammar[] = {
         "A = B | C.\n"
         "B = 'b' 'b'.\n"
         "C = 'b' 'c'.\n"};
     parser_t p = mk_parser(grammar);
-    // info("First Set");
-    // print_first_sets(&p);
-    // info("Follow Set");
-    // print_follow_sets(&p);
-    terminal_list t = get_terminals(&p);
-    nonterminal_list nt = get_nonterminals(&p);
-    print_terminals(t);
-    print_nonterminals(nt);
-    vec_destroy(&t.terminals_vec);
-    vec_destroy(&nt.nonterminals_vec);
-
     if (is_ll1(&p)) {
-      error("Expected not ll1: \n%s", grammar);
+      die("Expected not ll1: \n%s", grammar);
     }
-
+    destroy_parser(&p);
+  }
+  {
+    static const char grammar[] = {
+        "expression = term {('\\+' | '-' ) term } .\n"
+        "term       = factor {('\\*' | '/') factor } .\n"
+        "factor     = ( digits | '\\(' expression '\\)' ) .\n"
+        "digits     =  digit { digit } .\n"
+        "digit      = '[0-9]' .\n"};
+    parser_t p = mk_parser(grammar);
+    if (!is_ll1(&p)) {
+      die("Expected ll1: \n%s", grammar);
+    }
     destroy_parser(&p);
   }
 }
@@ -312,6 +295,6 @@ int main(void) {
   test_lookahead();
   prev_test();
   json_parser();
-  // test_ll1();
+  test_ll1();
   return 0;
 }

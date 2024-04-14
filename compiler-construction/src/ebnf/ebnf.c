@@ -134,7 +134,9 @@ bool factor(parser_t *g, factor_t *f) {
       return 0;
     }
     string.n = POINT - string.str - 1;
-    f->string_regex = mk_regex_from_slice(string);
+    f->regex = mk_regex_from_slice(string);
+    if (f->regex == NULL)
+      die("Failed to construct regex from '%.*s'", string.n, string.str);
     break;
   case '(':
     f->type = F_PARENS;
@@ -412,7 +414,7 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
   }
   case F_STRING: {
     symbol_t *s = MKSYM();
-    *s = (symbol_t){.regex = factor->string_regex};
+    *s = (symbol_t){.regex = factor->regex};
     // symbol_t *s, *last;
     // s = last = NULL;
     // string_slice str = factor->string;
@@ -496,8 +498,7 @@ parser_t mk_parser(const char *text) {
     string_slice s = {.n = strlen(patterns[i]), .str = patterns[i]};
     regexes[i] = mk_regex_from_slice(s);
     if (!regexes[i]) {
-      fprintf(stderr, "Failed to compile regex %s\n", patterns[i]);
-      return g;
+      die("Failed to compile regex %s\n", patterns[i]);
     }
   }
 

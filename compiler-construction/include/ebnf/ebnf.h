@@ -2,8 +2,9 @@
 #define EBNF_H
 
 #include "collections.h"
-#include "text.h"
 #include "regex.h"
+#include "text.h"
+#include <stdint.h>
 
 // * factor     = identifier | string | "(" expression ")" | "[" expression "]" | "{" expression "}".
 enum factor_switch {
@@ -52,7 +53,7 @@ struct identifier_t {
 struct factor_t {
   string_slice range;
   union {
-    regex *string_regex;
+    regex *regex;
     struct identifier_t identifier;
     struct expression_t expression;
   };
@@ -122,7 +123,7 @@ position_t get_position(const char *source, string_slice place);
  */
 
 typedef struct {
-  DECLARE_VEC(char, terminals);
+  char map[UINT8_MAX];
 } terminal_list;
 
 typedef struct {
@@ -137,7 +138,7 @@ enum follow_type {
 
 struct follow_t {
   enum follow_type type;
-  char symbol;
+  regex *regex;
   production_t *prod;
 };
 

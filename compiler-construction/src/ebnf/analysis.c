@@ -1,4 +1,8 @@
 #include "ebnf/ebnf.h"
+#include "logging.h"
+#include "macros.h"
+#include <stdint.h>
+#include <string.h>
 
 position_t get_position(const char *source, string_slice place) {
   int line, column;
@@ -15,21 +19,20 @@ position_t get_position(const char *source, string_slice place) {
   return (position_t){-1, -1};
 }
 
-static void populate_terminals(terminal_list *terminals, expression_t *e) {
+void populate_terminals(terminal_list *terminals, expression_t *e) {
   v_foreach(term_t *, t, e->terms_vec) {
     v_foreach(factor_t *, f, t->factors_vec) {
       if (f->type == F_PARENS || f->type == F_OPTIONAL || f->type == F_REPEAT) {
         populate_terminals(terminals, &f->expression);
       } else if (f->type == F_STRING) {
-        // TODO: compute start symbols of regex
-        vec_push(&terminals->terminals_vec, (char*)f->string_regex->ctx.src);
+        regex_first(f->regex, terminals->map);
       }
     }
   }
 }
 
 terminal_list get_terminals(const parser_t *g) {
-  terminal_list t = {.terminals_vec = v_make(char)};
+  terminal_list t = {0};
   v_foreach(production_t *, p, g->productions_vec) {
     populate_terminals(&t, &p->expr);
   }
@@ -66,7 +69,7 @@ static void populate_first_term(const parser_t *g, struct header_t *h, term_t *t
     }
     case F_STRING: {
       // TODO: compute valid start symbols of regex
-      struct follow_t fst = {.type = FOLLOW_SYMBOL, .symbol = 0};
+      struct follow_t fst = {.type = FOLLOW_SYMBOL, .regex = fac->regex};
       vec_push(&h->first_vec, &fst);
       return;
     }
@@ -138,7 +141,7 @@ void add_symbols(symbol_t *start, int k, vec *follows) {
         } else {
           f.type = FOLLOW_SYMBOL;
           // TODO: compute start symbols of regex
-          f.symbol = alt->regex->ctx.src[0];
+          f.regex = alt->regex;
         }
         if (!vec_contains(follows, &f)) {
           vec_push(follows, &f);
@@ -233,59 +236,127 @@ void populate_follow(const parser_t *g) {
   vec_destroy(&seen);
 }
 
-void expand_first(struct follow_t *follow, vec *mega_first, vec *seen) {
+typedef char MAP[UINT8_MAX];
+void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec *seen) {
   if (vec_contains(seen, follow))
     return;
   vec_push(seen, follow);
 
   switch (follow->type) {
-
   case FOLLOW_SYMBOL:
-    vec_push(mega_first, &follow->symbol);
+    regex_first(follow->regex, reachable);
     break;
   case FOLLOW_FIRST: {
-    v_foreach(struct follow_t *, fst, follow->prod->header->first_vec) {
-      expand_first(fst, mega_first, seen);
-    }
+    v_foreach(struct follow_t *, fst, follow->prod->header->first_vec)
+        expand_first(fst, reachable, seen);
   } break;
-  case FOLLOW_FOLLOW:
-    break;
+  case FOLLOW_FOLLOW: {
+    v_foreach(struct follow_t *, fol, follow->prod->header->follow_vec)
+        expand_first(fol, reachable, seen);
+  } break;
   }
 }
 
+typedef struct {
+  MAP set;
+  production_t *prod;
+} record;
+
+typedef struct {
+  production_t *A;
+  production_t *B;
+  char ch;
+  bool first;
+  production_t *owner;
+} conflict;
+
+vec populate_maps(production_t *owner, int n, struct follow_t follows[static n]) {
+  vec map = v_make(record);
+  for (int i = 0; i < n; i++) {
+    struct follow_t *follow = &follows[i];
+    // in the first set of everything that can follow this production,
+    // are there any intersections?
+    record r = {.prod = owner};
+
+    switch (follow->type) {
+    case FOLLOW_SYMBOL:
+      regex_first(follow->regex, r.set);
+      break;
+    case FOLLOW_FOLLOW:
+    case FOLLOW_FIRST: {
+      vec seen = v_make(struct follow_t);
+      r.prod = follow->prod;
+      expand_first(follow, r.set, &seen);
+      vec_destroy(&seen);
+      break;
+    }
+    }
+    vec_push(&map, &r);
+  }
+  return map;
+}
+
+bool check_intersection(int n, record records[static n], conflict *c) {
+  for (int i = 0; i < UINT8_MAX; i++) {
+    production_t *seen = NULL;
+    for (int j = 0; j < n; j++) {
+      record *r = &records[j];
+      if (r->set[i]) {
+        if (seen) {
+          *c = (conflict){.A = seen, .B = r->prod, .ch = i};
+          return true;
+        }
+        seen = r->prod;
+      }
+    }
+  }
+  return false;
+}
+
+bool get_conflicts(const header_t *h, conflict *c) {
+  *c = (conflict){0};
+  {
+    vec first_map = populate_maps(h->prod, h->n_first, h->first);
+    bool intersect = check_intersection(first_map.n, first_map.array, c);
+    vec_destroy(&first_map);
+    c->first = true;
+    c->owner = h->prod;
+    if (intersect)
+      return true;
+  }
+  {
+    vec follow_map = populate_maps(h->prod, h->n_follow, h->follow);
+    bool intersect = check_intersection(follow_map.n, follow_map.array, c);
+    vec_destroy(&follow_map);
+    c->first = false;
+    if (intersect)
+      return true;
+  }
+
+  return false;
+}
+
 bool is_ll1(const parser_t *g) {
-  /* test_ll1:
-   * for each nonterminal nt:
-   * > for each terminal in follow(nt) t
-   * >> for each nonterminal in follow(nt) fnt
-   * >>> check if t is in first(fnt)
-   * TODO: How can this same test be achieved using floyd-warshall? (all pairs shortest path)
-   * > for each symbol in follow(nt) sym
-   * >> check what nonterminals are reachable with sym
-   * >> if more than one nonterminal is reachable, the grammar is not ll(1)
-   * >> for each character in first, check if there is more than one continuation.
-   */
+  bool isll1 = true;
 
   v_foreach(production_t *, p, g->productions_vec)
       populate_first(g, p->header);
   populate_follow(g);
-  terminal_list t = get_terminals(g);
   nonterminal_list nt = get_nonterminals(g);
 
-  vec reachable = v_make(symbol_t);
-  vec seen = v_make(struct follow_t);
-
+  // TEST FIRST CONFLICTS
+  conflict c = {0};
   v_foreach(header_t *, h, nt.nonterminals_vec) {
-    vec_clear(&reachable);
-    v_foreach(struct follow_t *, sym, h->first_vec) {
-      expand_first(sym, &reachable, &seen);
+    if (get_conflicts(h, &c)) {
+      string_slice id1 = c.A->identifier;
+      string_slice id2 = c.B->identifier;
+      string_slice id3 = c.owner->identifier;
+      debug("Productions '%.*s' and '%.*s' are in conflict.\nBoth allow char '%c'\nIn '%s' set of '%.*s'", id1.n, id1.str, id2.n, id2.str, c.ch, c.first ? "first" : "follow", id3.n, id3.str);
+      isll1 = false;
     }
   }
 
-  vec_destroy(&seen);
-  vec_destroy(&reachable);
-  vec_destroy(&t.terminals_vec);
   vec_destroy(&nt.nonterminals_vec);
 
-  return false;
+  return isll1;
 }

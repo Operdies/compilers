@@ -35,14 +35,21 @@ void ensure_capacity(vec *v, int c) {
     return;
   if (v->c <= 0)
     v->c = 1;
-  while (v->c < c)
+  while (v->c < c) {
     v->c *= 2;
+    if (v->c <= 0) {
+      die("Extremely large vector: 0x%x", c);
+      v->c = c;
+      break;
+    }
+  }
   if (v->array) {
     v->array = ereallocarray(v->array, v->c, v->sz);
   } else {
     v->array = ecalloc(v->c, v->sz);
   }
 }
+void vec_ensure_capacity(vec *v, int c) { ensure_capacity(v, c); }
 
 void vec_push(vec *v, void *elem) {
   ensure_capacity(v, v->n + 1);
