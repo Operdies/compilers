@@ -240,3 +240,7 @@ int vec_write(vec *v, const char *fmt, ...) {
   return written;
 #undef wrt
 }
+
+char *string_slice_clone(string_slice s) {
+  return strndup(s.str, s.n + 1);
+}

@@ -9,6 +9,7 @@
 #include <string.h>
 
 // chars 0-10 are not printable and can be freely used as special tokens
+#define DIGIT 3 // \d
 #define EPSILON 2
 #define DOT 1
 #define KLEENE '*'
@@ -64,7 +65,10 @@ static void push_dfa(parse_context *ctx, dfalist *lst, dfa *d) {
 
 static dfa *mk_state(parse_context *ctx, u8 accept) {
   dfa *d = arena_alloc(ctx->a, sizeof(dfa), 1);
-  if (accept == DOT) {
+  if (accept == DIGIT) {
+    d->accept = '0';
+    d->accept_end = '9';
+  } else if (accept == DOT) {
     d->accept = 0;
     d->accept_end = ~0;
   } else {
@@ -99,8 +103,12 @@ static dfa *match_symbol(parse_context *ctx, bool class_match) {
   u8 ch = take_char(ctx);
   if (ch == 0)
     return NULL;
-  if (escaped)
-    return mk_state(ctx, ch);
+  if (escaped) {
+    if (ch == 'd')
+      return mk_state(ctx, DIGIT);
+    else
+      return mk_state(ctx, ch);
+  }
 
   switch (ch) {
   case '(':

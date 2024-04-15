@@ -1,7 +1,9 @@
 #include "ebnf/ebnf.h"
 #include "logging.h"
 #include "macros.h"
+#include "regex.h"
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 position_t get_position(const char *source, string_slice place) {

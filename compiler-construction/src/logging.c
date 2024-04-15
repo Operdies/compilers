@@ -40,9 +40,12 @@ static const char *headers[] = {
 };
 
 static FILE *log = NULL;
-void set_loglevel(enum loglevel level) {
+int set_loglevel(enum loglevel level) {
+  int current = loglevel;
   loglevel = level;
+  return current;
 }
+int get_loglevel(void) { return loglevel; }
 
 bool set_log_location(const char *filename) {
   if (log)

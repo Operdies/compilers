@@ -104,3 +104,4 @@ void *ecalloc(size_t nmemb, size_t size);
 void *ereallocarray(void *array, size_t nmemb, size_t size);
 int vec_vwrite(vec *v, const char *fmt, va_list ap);
 int vec_write(vec *v, const char *fmt, ...);
+char *string_slice_clone(string_slice s);

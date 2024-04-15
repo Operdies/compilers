@@ -155,5 +155,7 @@ void populate_first(const parser_t *g, struct header_t *h);
 void populate_follow(const parser_t *g);
 bool is_ll1(const parser_t *g);
 void graph_walk(symbol_t *start, vec *all);
+vec populate_maps(production_t *owner, int n, struct follow_t follows[static n]);
+void add_symbols(symbol_t *start, int k, vec *follows);
 
 #endif // !EBNF_H

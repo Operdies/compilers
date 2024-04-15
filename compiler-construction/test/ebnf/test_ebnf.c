@@ -6,6 +6,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static const char program[] = {"12-34+(3*(4+2)-1)/1-23"};
 
@@ -78,6 +79,7 @@ void test_parser(void) {
       {"(1+1)",  true },
   };
 
+  int ll = set_loglevel(WARN);
   parser_t p = mk_parser(grammar);
   for (int i = 0; i < LENGTH(testcases); i++) {
     tokens t = {0};
@@ -91,6 +93,7 @@ void test_parser(void) {
     vec_destroy(&t.tokens_vec);
   }
   destroy_parser(&p);
+  set_loglevel(ll);
 }
 
 static void print_nonterminals(nonterminal_list ntl) {
@@ -229,6 +232,7 @@ void json_parser(void) {
        true                },
   };
 
+  int ll = set_loglevel(WARN);
   for (int i = 0; i < LENGTH(testcases); i++) {
     tokens t = {0};
     struct testcase *test = &testcases[i];
@@ -241,6 +245,7 @@ void json_parser(void) {
     vec_destroy(&t.tokens_vec);
   }
   destroy_parser(&p);
+  set_loglevel(ll);
 }
 
 void test_ll1(void) {
@@ -251,7 +256,7 @@ void test_ll1(void) {
         "C = 'b' 'c'.\n"};
     parser_t p = mk_parser(grammar);
     if (is_ll1(&p)) {
-      die("Expected not ll1: \n%s", grammar);
+      error("Expected not ll1: \n%s", grammar);
     }
     destroy_parser(&p);
   }
@@ -282,8 +287,8 @@ int prev_test(void) {
   if (!parse(&p, program, &t)) {
     printf("Error parsing program %s:\n", program);
     printf("%s", t.error.error);
+    vec_destroy(&t.tokens_vec);
   }
-  vec_destroy(&t.tokens_vec);
 
   destroy_parser(&p);
   return 0;

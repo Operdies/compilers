@@ -112,12 +112,6 @@ bool match(parser_t *g, int expr) {
 }
 
 bool factor(parser_t *g, factor_t *f) {
-  // first set:
-  // letter -> identifier
-  // """    -> string
-  // "("    -> "(" expression ")"
-  // "["    -> "[" expression "]"
-  // "{"    -> "{" expression "}"
   MATCH_TERMINAL(WHITESPACE);
   f->range.str = POINT;
   char ch = peek(&g->ctx);
@@ -204,6 +198,7 @@ bool expression(parser_t *g, expression_t *e) {
   do {
     term_t t = {0};
     if (!term(g, &t)) {
+      die("Expected term at %s.", e->range.str);
       destroy_expression(e);
       return false;
     }
@@ -505,7 +500,7 @@ parser_t mk_parser(const char *text) {
   g.ctx = (match_context){.src = g.body.chars, .n = g.body.n};
   bool success = syntax(&g);
   if (!success)
-    return g;
+    die("Failed to parse grammar.");
 
   if (!init_productions(&g))
     return g;
@@ -633,6 +628,11 @@ bool parse(parser_t *g, const char *program, tokens *result) {
              "%.*s\n"
              " %*s\n",
              (int)(ctx.n), ctx.src, (int)ctx.c, "^");
+  if (!result->success || !finished(&ctx)) {
+    debug("Parse error at:\n"
+          "%.*s\n"
+          " %*s\n",
+          (int)(ctx.n), ctx.src, (int)ctx.c, "^");
     return false;
   }
   return true;
