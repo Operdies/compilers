@@ -52,11 +52,29 @@ void test_lookahead(void) {
   }
 }
 
+struct testcase {
+  char *src;
+  bool expected;
+};
+
+void test_parser2(parser_t *g, int n, struct testcase testcases[static n]) {
+  int ll = set_loglevel(WARN);
+  // this is a bit spammy for failing grammars
+  for (int i = 0; i < n; i++) {
+    tokens t = {0};
+    struct testcase *test = &testcases[i];
+    bool success = parse(g, test->src, &t);
+    if (success != test->expected) {
+      print_tokens(t);
+      error("Error parsing program %s:\n", test->src);
+      error("%s", t.error.error);
+    }
+    vec_destroy(&t.tokens_vec);
+  }
+  set_loglevel(ll);
+}
+
 void test_parser(void) {
-  struct testcase {
-    char *src;
-    bool expected;
-  };
   const char grammar[] = {
       "expression = term {('\\+' | '-' ) term } .\n"
       "term       = factor {('\\*' | '/') factor } .\n"
@@ -78,22 +96,9 @@ void test_parser(void) {
       {"1+1",    true },
       {"(1+1)",  true },
   };
-
-  int ll = set_loglevel(WARN);
   parser_t p = mk_parser(grammar);
-  for (int i = 0; i < LENGTH(testcases); i++) {
-    tokens t = {0};
-    struct testcase *test = &testcases[i];
-    bool success = parse(&p, test->src, &t);
-    if (success != test->expected) {
-      print_tokens(t);
-      printf("Error parsing program %s:\n", program);
-      printf("%s", t.error.error);
-    }
-    vec_destroy(&t.tokens_vec);
-  }
+  test_parser2(&p, LENGTH(testcases), testcases);
   destroy_parser(&p);
-  set_loglevel(ll);
 }
 
 static void print_nonterminals(nonterminal_list ntl) {
@@ -348,25 +353,21 @@ void test_oberon2(void) {
       "B = [ A { A 'x' } ] 'z' .\n" // TODO: 'x' not in follow(A)
       "A = '1' .\n"
       ""};
+  struct testcase testcases[] = {
+      {"z",    true },
+      {"1",    false},
+      {"1xz",  false},
+      {"11xz", true },
+      {"11x",  false},
+      {"x",    false},
+  };
 
   parser_t p = mk_parser(grammar);
-
-  print_first_sets(&p);
-  print_follow_sets(&p);
-
-  tokens t = {0};
-  p.backtrack = true;
-  parse(&p, "11xz", &t);
-  print_tokens(t);
-
-  // void add_symbols(symbol_t *start, int k, vec *follows);
-  v_foreach(production_t *, prod, p.productions_vec) {
-    if (strncmp(prod->identifier.str, "type", prod->identifier.n) == 0) {
-      vec follows = v_make(struct follow_t);
-      add_symbols(prod->header->sym, 1, &follows);
-    }
-  }
+  // print_first_sets(&p);
+  // print_follow_sets(&p);
+  test_parser2(&p, LENGTH(testcases), testcases);
 }
+
 void test_oberon(void) {
   static char grammar[] = {
       "module               = 'MODULE' ident ';' declarations ['BEGIN' StatementSequence] 'END' ident '\\.' .\n"
@@ -408,20 +409,15 @@ void test_oberon(void) {
 
   parser_t p = mk_parser(grammar);
 
-  print_first_sets(&p);
-  print_follow_sets(&p);
+  // print_first_sets(&p);
+  // print_follow_sets(&p);
 
   tokens t = {0};
-  parse(&p, "MODULE a; END a.", &t);
+  // parse(&p, "MODULE a; END a.", &t);
   print_tokens(t);
+  vec_destroy(&t.tokens_vec);
 
-  // void add_symbols(symbol_t *start, int k, vec *follows);
-  v_foreach(production_t *, prod, p.productions_vec) {
-    if (strncmp(prod->identifier.str, "type", prod->identifier.n) == 0) {
-      vec follows = v_make(struct follow_t);
-      add_symbols(prod->header->sym, 1, &follows);
-    }
-  }
+  destroy_parser(&p);
 }
 
 int main(void) {
@@ -431,6 +427,7 @@ int main(void) {
   prev_test();
   json_parser();
   test_oberon2();
+  test_oberon();
   // test_ll1();
   return 0;
 }
