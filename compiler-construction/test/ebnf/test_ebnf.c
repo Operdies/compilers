@@ -129,40 +129,60 @@ void print_sym(symbol_t *sym) {
     printf("regex '%s'\n", sym->regex->ctx.src);
 }
 
-static void print_follow_set(vec *v) {
+void print_map(char map[UINT8_MAX]) {
+  for (int sym = 0; sym < UINT8_MAX; sym++) {
+    if (map[sym]) {
+      if (isgraph(sym))
+        printf("%c ", sym);
+      else
+        printf("0x%x ", sym);
+    }
+  }
+}
+static void print_follow_set(vec *v, vec *seen, char map[UINT8_MAX]) {
+  if (vec_contains(seen, v))
+    return;
+  vec_push(seen, v);
   v_foreach(struct follow_t *, sym, (*v)) {
     switch (sym->type) {
     case FOLLOW_SYMBOL: {
-      char map[255] = {0};
       regex_first(sym->regex, map);
-      for (int sym = 0; sym < LENGTH(map); sym++) {
-        if (map[sym]) {
-          if (isgraph(sym))
-            printf("%c, ", sym);
-          else
-            printf("0x%x, ", sym);
-        }
-      }
       break;
     }
     case FOLLOW_FIRST:
-      printf("First(%.*s), ", sym->prod->identifier.n, sym->prod->identifier.str);
+      // printf("First(%.*s) ", sym->prod->identifier.n, sym->prod->identifier.str);
+      print_follow_set(&sym->prod->header->first_vec, seen, map);
       break;
     case FOLLOW_FOLLOW:
-      printf("Follow(%.*s), ", sym->prod->identifier.n, sym->prod->identifier.str);
+      // printf("Follow(%.*s) ", sym->prod->identifier.n, sym->prod->identifier.str);
+      print_follow_set(&sym->prod->header->follow_vec, seen, map);
       break;
     }
   }
 }
 
 static void print_first_sets(parser_t *g) {
+  {
+    v_foreach(production_t *, p, g->productions_vec) {
+      header_t *h = p->header;
+      populate_first(g, h);
+    }
+  }
   v_foreach(production_t *, p, g->productions_vec) {
     header_t *h = p->header;
-    populate_first(g, h);
-    printf("First(%.*s)  %*c ", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
-    print_follow_set(&h->first_vec);
+    char *ident = string_slice_clone(p->identifier);
+    printf(" First(%22s) %2c  ", ident, '=');
+    vec seen = v_make(vec);
+    char map[UINT8_MAX] = {0};
+    print_follow_set(&h->first_vec, &seen, map);
+    vec_destroy(&seen);
+    print_map(map);
     puts("");
-    vec_destroy(&h->first_vec);
+    free(ident);
+  }
+  {
+    v_foreach(production_t *, p, g->productions_vec)
+        vec_destroy(&p->header->first_vec);
   }
 }
 
@@ -170,11 +190,20 @@ static void print_follow_sets(parser_t *g) {
   populate_follow(g);
   v_foreach(production_t *, p, g->productions_vec) {
     header_t *h = p->header;
-    printf("Follow(%.*s) %*c ", p->identifier.n, p->identifier.str, 15 - p->identifier.n, '=');
-    print_follow_set(&h->follow_vec);
+    // vec follow = populate_maps(p, h->n_follow, h->follow);
+    char *ident = string_slice_clone(p->identifier);
+    printf("Follow(%22s) %2c  ", ident, '=');
+    vec seen = v_make(vec);
+    char map[UINT8_MAX] = {0};
+    print_follow_set(&h->follow_vec, &seen, map);
+    vec_destroy(&seen);
+    print_map(map);
     puts("");
-    vec_destroy(&h->follow_vec);
+    free(ident);
+    // vec_destroy(&follow);
   }
+  v_foreach((void), p, g->productions_vec)
+      vec_destroy(&p->header->follow_vec);
 }
 
 static void print_enumerated_graph(vec all) {
@@ -206,9 +235,9 @@ void json_parser(void) {
   };
 
   static const char json_grammar[] = {
-      "object       = { space } ( '{' [ keyvalues ] '}' | '\\[' [ list ] '\\]' | number | string | boolean ) { space } .\n"
-      "list         = object { comma object } .\n"
-      "keyvalues    = keyvalue { comma keyvalue } .\n"
+      "object       = { space } ( '{' keyvalues '}' | '\\[' list '\\]' | number | string | boolean ) { space } .\n"
+      "list         = [ object { comma object } ] .\n"
+      "keyvalues    = [ keyvalue { comma keyvalue } ] .\n"
       "keyvalue     = { space } string colon object  .\n"
       "string       =  '\"' symbol { symbol } '\"' .\n"
       "symbol       = alphanumeric { alphanumeric } .\n"
@@ -221,16 +250,22 @@ void json_parser(void) {
       "digit        = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
 
   parser_t p = mk_parser(json_grammar);
+  p.backtrack = false;
   struct testcase testcases[] = {
       {"",            false},
       {"[1",          false},
       {"[1,2,45,-3]", true },
       {"{ "
-       "  \"mythingY\":[1, 2,45,-3], "
-       "  \"truth\":1 "
+       "\"mythingY\":[1, 2,45,-3], "
+       "\"truth\":1, "
+       "\"q\":[]"
        "}",
        true                },
   };
+
+  // if (!is_ll1(&p)) {
+  //   error("Expected json to be ll1");
+  // }
 
   int ll = set_loglevel(WARN);
   for (int i = 0; i < LENGTH(testcases); i++) {
@@ -252,8 +287,8 @@ void test_ll1(void) {
   {
     static const char grammar[] = {
         "A = B | C.\n"
-        "B = 'b' 'b'.\n"
-        "C = 'b' 'c'.\n"};
+        "B = '[a-f]' 'b'.\n"
+        "C = '[e-k]' 'c'.\n"};
     parser_t p = mk_parser(grammar);
     if (is_ll1(&p)) {
       error("Expected not ll1: \n%s", grammar);
@@ -265,9 +300,23 @@ void test_ll1(void) {
         "expression = term {('\\+' | '-' ) term } .\n"
         "term       = factor {('\\*' | '/') factor } .\n"
         "factor     = ( digits | '\\(' expression '\\)' ) .\n"
-        "digits     =  digit { digit } .\n"
+        "digits     =  digit { digit } ['-'] .\n"
         "digit      = '[0-9]' .\n"};
     parser_t p = mk_parser(grammar);
+    if (!is_ll1(&p)) {
+      error("Expected ll1: \n%s", grammar);
+    }
+    destroy_parser(&p);
+  }
+  {
+    static const char grammar[] = {
+        "dong         = 'a' strong | 'g' string.\n"
+        "string       =  '\"' alpha { alpha } '\"' .\n"
+        "strong       =  '\"' alpha { alpha } '\"' .\n"
+        "alpha        = '[hng]' .\n"};
+    parser_t p = mk_parser(grammar);
+    print_first_sets(&p);
+    print_follow_sets(&p);
     if (!is_ll1(&p)) {
       die("Expected ll1: \n%s", grammar);
     }
@@ -294,12 +343,94 @@ int prev_test(void) {
   return 0;
 }
 
+void test_oberon2(void) {
+  static char grammar[] = {
+      "B = [ A { A 'x' } ] 'z' .\n" // TODO: 'x' not in follow(A)
+      "A = '1' .\n"
+      ""};
+
+  parser_t p = mk_parser(grammar);
+
+  print_first_sets(&p);
+  print_follow_sets(&p);
+
+  tokens t = {0};
+  p.backtrack = true;
+  parse(&p, "11xz", &t);
+  print_tokens(t);
+
+  // void add_symbols(symbol_t *start, int k, vec *follows);
+  v_foreach(production_t *, prod, p.productions_vec) {
+    if (strncmp(prod->identifier.str, "type", prod->identifier.n) == 0) {
+      vec follows = v_make(struct follow_t);
+      add_symbols(prod->header->sym, 1, &follows);
+    }
+  }
+}
+void test_oberon(void) {
+  static char grammar[] = {
+      "module               = 'MODULE' ident ';' declarations ['BEGIN' StatementSequence] 'END' ident '\\.' .\n"
+      "selector             = {'\\.' ident | '\\[' expression '\\]'}.\n"
+      "factor               = ident selector | number | '\\(' expression '\\)' | '~' factor .\n"
+      "term                 = factor {('\\*' | 'DIV' | 'MOD' | '&') factor} .\n"
+      "SimpleExpression     = ['\\+' | '-'] term { ('\\+' | '-' | 'OR') term} .\n"
+      "expression           = SimpleExpression [('=' | '#' | '<' | '<=' | '>' | '>=') SimpleExpression] .\n"
+      "assignment           = ident selector ':=' expression .\n"
+      "ProcedureCall        = ident selector ActualParameters .\n"
+      "statement            = [assignment | ProcedureCall | IfStatement | WhileStatement | RepeatStatement].\n"
+      "StatementSequence    = statement {';' statement }.\n"
+      "FieldList            = [IdentList ':' type].\n"
+      "type                 = ident | ArrayType | RecordType.\n"
+      "FPSection            = ['VAR'] IdentList ':' type .\n"
+      "FormalParameters     = '\\(' [ FPSection { ';' FPSection } ] '\\)' .\n" // TODO: parentheses not registered in follow(FPSection)
+      "ProcedureHeading     = 'PROCEDURE' ident [FormalParameters].\n"
+      "ProcedureBody        = declarations ['BEGIN' StatementSequence] 'END' ident.\n"
+      "ProcedureDeclaration = ProcedureHeading ';' ProcedureBody .\n"
+      "declarations         = ['CONST' {ident '=' expression ';'}]"
+      " ['TYPE' {ident '=' type ';'}]"
+      " ['VAR' {IdentList ':' type ';'}]"
+      " {ProcedureDeclaration ';'} .\n"
+      "ident                = letter {letter | digit}.\n"
+      "integer              = digit {digit}.\n"
+      "number               = integer.\n"
+      "digit                = '[0-9]'.\n"
+      "letter               = 'ident' .\n"
+      "ActualParameters     = '(' [expression { ',' expression }] '\\)' .\n"
+      "IfStatement          = 'IF' expression 'THEN' StatementSequence"
+      " {'ELSIF' expression 'THEN' StatementSequence}"
+      " ['ELSE' StatementSequence] 'END' .\n"
+      "WhileStatement       = 'WHILE' expression 'DO' StatementSequence 'END' .\n"
+      "RepeatStatement      = 'REPEAT' StatementSequence 'UNTIL' expression.\n"
+      "IdentList            = ident {',' ident} .\n"
+      "ArrayType            = 'ARRAY' expression 'OF' type.\n"
+      "RecordType           = 'RECORD' FieldList { ';' FieldList} 'END'.\n"
+      ""};
+
+  parser_t p = mk_parser(grammar);
+
+  print_first_sets(&p);
+  print_follow_sets(&p);
+
+  tokens t = {0};
+  parse(&p, "MODULE a; END a.", &t);
+  print_tokens(t);
+
+  // void add_symbols(symbol_t *start, int k, vec *follows);
+  v_foreach(production_t *, prod, p.productions_vec) {
+    if (strncmp(prod->identifier.str, "type", prod->identifier.n) == 0) {
+      vec follows = v_make(struct follow_t);
+      add_symbols(prod->header->sym, 1, &follows);
+    }
+  }
+}
+
 int main(void) {
   setup_crash_stacktrace_logger();
   test_parser();
   test_lookahead();
   prev_test();
   json_parser();
-  test_ll1();
+  test_oberon2();
+  // test_ll1();
   return 0;
 }

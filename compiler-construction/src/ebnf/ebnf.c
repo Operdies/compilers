@@ -622,13 +622,13 @@ bool parse(parser_t *g, const char *program, tokens *result) {
   header_t *start = g->productions[0].header;
   result->success = tokenize(start, &ctx, result, g->backtrack) && finished(&ctx);
   result->error.ctx = ctx;
-  if (!result->success) {
+
+  if (!result->success || !finished(&ctx)) {
     snprintf(result->error.error, sizeof(result->error.error),
              "Parse error at:\n"
              "%.*s\n"
              " %*s\n",
              (int)(ctx.n), ctx.src, (int)ctx.c, "^");
-  if (!result->success || !finished(&ctx)) {
     debug("Parse error at:\n"
           "%.*s\n"
           " %*s\n",

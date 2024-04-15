@@ -47,7 +47,7 @@ nonterminal_list get_nonterminals(const parser_t *g) {
   return t;
 }
 
-static void populate_first_expr(const parser_t *g, struct header_t *h, expression_t *e);
+static bool populate_first_expr(const parser_t *g, struct header_t *h, expression_t *e);
 
 bool expression_optional(expression_t *expr);
 
@@ -420,3 +420,10 @@ bool is_ll1(const parser_t *g) {
 
   return isll1;
 }
+
+// ll1 test:
+// K
+// 1. term0 | term1    -> the terms must not have any common start symbols
+// 2. fac0 fac1        -> if fac0 contains the empty sequence, then the factors must not have any common start symbols
+// 3 [exp] or {exp}    -> the sets of start symbols of exp and of symbols that may follow K must be disjoint
+// 2. verify that the first set of each term in each production contains no duplicates
