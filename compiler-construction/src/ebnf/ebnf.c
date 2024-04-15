@@ -517,6 +517,9 @@ static void destroy_term(term_t *t) {
   v_foreach(factor_t *, f, t->factors_vec) {
     if (f->type == F_OPTIONAL || f->type == F_REPEAT || f->type == F_PARENS)
       destroy_expression(&f->expression);
+    else if (f->type == F_STRING) {
+      destroy_regex(f->regex);
+    }
   }
   vec_destroy(&t->factors_vec);
 }

@@ -345,6 +345,7 @@ int prev_test(void) {
   }
 
   destroy_parser(&p);
+  vec_destroy(&t.tokens_vec);
   return 0;
 }
 
@@ -366,6 +367,7 @@ void test_oberon2(void) {
   // print_first_sets(&p);
   // print_follow_sets(&p);
   test_parser2(&p, LENGTH(testcases), testcases);
+  destroy_parser(&p);
 }
 
 void test_oberon(void) {
