@@ -49,7 +49,39 @@ nonterminal_list get_nonterminals(const parser_t *g) {
 
 static void populate_first_expr(const parser_t *g, struct header_t *h, expression_t *e);
 
-static void populate_first_term(const parser_t *g, struct header_t *h, term_t *t) {
+bool expression_optional(expression_t *expr);
+
+bool factor_optional(factor_t *fac) {
+  switch (fac->type) {
+  case F_OPTIONAL:
+  case F_REPEAT:
+    return true;
+  case F_PARENS:
+    return expression_optional(&fac->expression);
+  case F_IDENTIFIER: {
+    return expression_optional(&fac->identifier.production->expr);
+  }
+  case F_STRING: {
+    regex *r = fac->regex;
+    regex_match m = regex_matches(r, &(match_context){.n = 0, .src = ""});
+    return m.match;
+  } break;
+  }
+  return false;
+}
+
+bool expression_optional(expression_t *expr) {
+  // help
+  v_foreach(term_t *, t, expr->terms_vec) {
+    v_foreach(factor_t *, f, t->factors_vec) {
+      if (!factor_optional(f))
+        return false;
+    }
+  }
+  return true;
+}
+
+static bool populate_first_term(const parser_t *g, struct header_t *h, term_t *t) {
   v_foreach(factor_t *, fac, t->factors_vec) {
     switch (fac->type) {
     case F_OPTIONAL:
@@ -58,31 +90,38 @@ static void populate_first_term(const parser_t *g, struct header_t *h, term_t *t
       populate_first_expr(g, h, &fac->expression);
       continue;
     case F_PARENS:
-      populate_first_expr(g, h, &fac->expression);
-      return;
+      if (populate_first_expr(g, h, &fac->expression) || expression_optional(&fac->expression))
+        continue;
+      return false;
     case F_IDENTIFIER: {
-      // Add the first set of this production to this first set
-      // TODO: if two productions recursively depend on each other,
-      // this will not work. Both might get only a partial first set.
       struct header_t *id = fac->identifier.production->header;
       struct follow_t fst = {.type = FOLLOW_FIRST, .prod = id->prod};
       vec_push(&h->first_vec, &fst);
-      return;
+      if (expression_optional(&id->prod->expr))
+        continue;
+      return false;
     }
     case F_STRING: {
-      // TODO: compute valid start symbols of regex
       struct follow_t fst = {.type = FOLLOW_SYMBOL, .regex = fac->regex};
       vec_push(&h->first_vec, &fst);
-      return;
+      regex *r = fac->regex;
+      regex_match m = regex_matches(r, &(match_context){.n = 0, .src = ""});
+      if (m.match)
+        continue;
+      return false;
     }
     }
   }
+  return true;
 }
 
-static void populate_first_expr(const parser_t *g, struct header_t *h, expression_t *e) {
+static bool populate_first_expr(const parser_t *g, struct header_t *h, expression_t *e) {
+  bool all_optional = true;
   v_foreach(term_t *, t, e->terms_vec) {
-    populate_first_term(g, h, t);
+    if (!populate_first_term(g, h, t))
+      all_optional = false;
   }
+  return all_optional;
 }
 
 void populate_first(const parser_t *g, struct header_t *h) {
@@ -90,7 +129,9 @@ void populate_first(const parser_t *g, struct header_t *h) {
     return;
   }
   h->first_vec = v_make(struct follow_t);
-  populate_first_expr(g, h, &h->prod->expr);
+  if (populate_first_expr(g, h, &h->prod->expr)) {
+    debug("%.*s is completely optional", h->prod->identifier.n, h->prod->identifier.str);
+  }
 }
 
 /* follow set
@@ -130,19 +171,17 @@ void graph_walk(symbol_t *start, vec *all) {
 void add_symbols(symbol_t *start, int k, vec *follows) {
   if (k > 0) {
     for (symbol_t *alt = start; alt; alt = alt->alt) {
-      // If the symbol is empty, we should include its continuation
       if (alt->empty) {
+        // If the symbol is empty, we should include its continuation
         add_symbols(alt->next, k, follows);
-        // Otherwise, the symbol is either a literal or a production.
-        // We include the continuation, and
       } else {
+        // Otherwise, the symbol is either a literal or a production.
         struct follow_t f = {0};
         if (alt->is_nonterminal) {
           f.type = FOLLOW_FIRST;
           f.prod = alt->nonterminal;
         } else {
           f.type = FOLLOW_SYMBOL;
-          // TODO: compute start symbols of regex
           f.regex = alt->regex;
         }
         if (!vec_contains(follows, &f)) {
@@ -161,11 +200,11 @@ bool symbol_at_end(symbol_t *start, int k) {
     return false;
   if (start == NULL)
     return true;
-  // TODO: this is not quite right.
-  // If a production is encountered, we need to check the shortest number of steps through that production
-  // e.g. if a production can be completed in 0 steps (e.g. it contains a single repeat)
-  // if (alt->is_nonterminal) symbol_at_end(alt->next, k - min_steps(alt->nonterminal))
   for (symbol_t *alt = start; alt; alt = alt->alt) {
+    // TODO: this doesn't generalize to k > 1
+    if (alt->is_nonterminal && expression_optional(&alt->nonterminal->expr)) {
+      return symbol_at_end(alt->next, k);
+    }
     // if (alt->next == NULL)
     //   return true;
     if (symbol_at_end(alt->next, alt->empty ? k : k - 1))
@@ -174,14 +213,29 @@ bool symbol_at_end(symbol_t *start, int k) {
   return false;
 }
 
+const char *describe_symbol(symbol_t *s) {
+  static char description[100];
+  if (s->empty)
+    sprintf(description, "empty");
+  else if (s->is_nonterminal)
+    sprintf(description, "prod %.*s", s->nonterminal->identifier.n, s->nonterminal->identifier.str);
+  else
+    sprintf(description, "reg %.*s", (int)s->regex->ctx.n, s->regex->ctx.src);
+  return description;
+}
 void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, production_t *owner) {
   const int k = 1;
+  // NOTE: we assume that alt loops are not possible.
+  // They should be impossible by construction.
+  // If an alt loop occurs, it is a bug.
   for (symbol_t *alt = start; alt; alt = alt->alt) {
+    // hare and tortoise solution to detect loops, which are very possible for next chains
     symbol_t *slow, *fast;
     slow = fast = alt;
     while (true) {
       if (!slow)
         break;
+      const char *slow_str = describe_symbol(slow);
 
       if (!vec_contains(seen, slow)) {
         vec_push(seen, slow);
@@ -196,7 +250,10 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
             // Rule 1 is applied by walking the graph k symbols forward from where
             // this production was referenced. This also applies rule 2
             // since a { repeat } expression links back with an empty transition.
-            add_symbols(slow->next, k, &prod->header->follow_vec);
+            // BUG: this doesn't work for a rule like "X: [ A { A } ] 'x'" where 'x' is not picked up
+            for (symbol_t *this = slow->next; this; this = this->alt) {
+              add_symbols(this, k, &prod->header->follow_vec);
+            }
 
             // The production instance itself should also be walked.
             mega_follow_walker(g, prod->header->sym, seen, prod);
@@ -239,6 +296,7 @@ void populate_follow(const parser_t *g) {
 }
 
 typedef char MAP[UINT8_MAX];
+// populate a map of all the symbols that can be reached
 void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec *seen) {
   if (vec_contains(seen, follow))
     return;
@@ -253,8 +311,6 @@ void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec
         expand_first(fst, reachable, seen);
   } break;
   case FOLLOW_FOLLOW: {
-    v_foreach(struct follow_t *, fol, follow->prod->header->follow_vec)
-        expand_first(fol, reachable, seen);
   } break;
   }
 }
@@ -305,7 +361,9 @@ bool check_intersection(int n, record records[static n], conflict *c) {
       record *r = &records[j];
       if (r->set[i]) {
         if (seen) {
-          *c = (conflict){.A = seen, .B = r->prod, .ch = i};
+          c->A = seen;
+          c->B = r->prod;
+          c->ch = i;
           return true;
         }
         seen = r->prod;
@@ -317,12 +375,12 @@ bool check_intersection(int n, record records[static n], conflict *c) {
 
 bool get_conflicts(const header_t *h, conflict *c) {
   *c = (conflict){0};
+  c->owner = h->prod;
   {
     vec first_map = populate_maps(h->prod, h->n_first, h->first);
     bool intersect = check_intersection(first_map.n, first_map.array, c);
     vec_destroy(&first_map);
     c->first = true;
-    c->owner = h->prod;
     if (intersect)
       return true;
   }
