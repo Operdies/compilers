@@ -355,7 +355,7 @@ void append_all_nexts(symbol_t *head, symbol_t *tail, vec *seen) {
   if (vec_contains(seen, head))
     return;
   vec_push(seen, head);
-  for (; head; head = head->alt) {
+  for (; head && head != tail; head = head->alt) {
     if (head->next == NULL)
       head->next = tail;
     else
@@ -372,16 +372,11 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
     if (factor->type == F_REPEAT) {
       symbol_t *loop = MKSYM();
       *loop = (symbol_t){.empty = true};
-      if (0) {
-        // TODO:  is this needed or can we keep the other variant
+      {
+        // ensure that all nexts of the subexpression can repeat the loop
         vec seen = v_make(symbol_t);
         append_all_nexts(subexpression, loop, &seen);
         vec_destroy(&seen);
-      } else {
-        for (symbol_t *alt = subexpression; alt; alt = alt->alt) {
-          // TODO: do we also need to loop through the alts of each next here?
-          append_next(alt, loop);
-        }
       }
       loop->next = subexpression;
       subexpression = loop;
@@ -391,6 +386,12 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
     } else if (factor->type == F_OPTIONAL) {
       symbol_t *empty = MKSYM();
       *empty = (symbol_t){.empty = true};
+      {
+        // ensure that all nexts of the subexpression lead to the thing that follows this optional
+        vec seen = v_make(symbol_t);
+        append_all_nexts(subexpression, empty, &seen);
+        vec_destroy(&seen);
+      }
       if (!append_alt(subexpression, empty)) {
         panic("Circular alt chain prevents loop exit.");
       }

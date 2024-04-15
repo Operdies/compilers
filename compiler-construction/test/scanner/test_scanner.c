@@ -48,6 +48,7 @@ int main(void) {
       "expression = term {(plus | minus) term} \n"
       "term       = factor {(div | mult) factor}\n"
       "factor     = integer | identifier | lpar expression rpar\n"};
+  (void)grammar;
   scanner s = {0};
   vec tokens = v_make(token_t);
   mk_scanner(&s, LENGTH(token_definition), token_definition);

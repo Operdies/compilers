@@ -236,6 +236,7 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
       if (!slow)
         break;
       const char *slow_str = describe_symbol(slow);
+      (void)slow_str;
 
       if (!vec_contains(seen, slow)) {
         vec_push(seen, slow);
