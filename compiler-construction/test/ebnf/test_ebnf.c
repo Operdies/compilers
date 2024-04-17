@@ -241,37 +241,35 @@ void json_parser(void) {
   };
 
   static const char json_grammar[] = {
-      "object       = { space } ( '{' keyvalues '}' | '\\[' list '\\]' | number | string | boolean ) { space } .\n"
+      "object       = ( '{' keyvalues '}' | '\\[' list '\\]' | number | string | boolean ) .\n"
       "list         = [ object { comma object } ] .\n"
       "keyvalues    = [ keyvalue { comma keyvalue } ] .\n"
-      "keyvalue     = { space } string colon object  .\n"
-      "string       =  '\"' symbol { symbol } '\"' .\n"
-      "symbol       = alphanumeric { alphanumeric } .\n"
+      "keyvalue     = string colon object  .\n"
+      "string       =  '\"' alphanumeric { alphanumeric } '\"' .\n"
       "boolean      = 'true' | 'false' .\n"
       "number       = ( digit | '-' ) { digit } .\n"
       "alphanumeric = '[a-zA-Z0-9]' .\n"
-      "comma        = { space } ',' { space } .\n"
-      "colon        = { space } ':' { space } .\n"
-      "space        = ' ' | '\t' | '\n' .\n"
-      "digit        = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
+      "comma        = ',' .\n"
+      "colon        = ':' .\n"
+      "digit        = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"
+      ""};
 
   parser_t p = mk_parser(json_grammar);
-  p.backtrack = false;
   struct testcase testcases[] = {
       {"",            false},
       {"[1",          false},
       {"[1,2,45,-3]", true },
-      {"{ "
-       "\"mythingY\":[1, 2,45,-3], "
-       "\"truth\":1, "
+      {"{"
+       "\"mythingY\":[1,2,45,-3],"
+       "\"truth\":1,"
        "\"q\":[]"
        "}",
        true                },
   };
 
-  // if (!is_ll1(&p)) {
-  //   error("Expected json to be ll1");
-  // }
+  if (!is_ll1(&p)) {
+    error("Expected json to be ll1");
+  }
 
   int ll = set_loglevel(WARN);
   for (int i = 0; i < LENGTH(testcases); i++) {
@@ -369,7 +367,6 @@ void test_ll1(void) {
     }
 
     { // scenario 3: term ends with a regex which can match the empty set
-      // TODO: create testcases
       test_ll12(false,
                 "A = B 'x' .\n"
                 "B = 'a' 'x*' .\n"
@@ -446,7 +443,7 @@ int prev_test(void) {
 
 void test_oberon2(void) {
   static char grammar[] = {
-      "B = [ A { A 'x' } ] 'z' .\n" // TODO: 'x' not in follow(A)
+      "B = [ A { A 'x' } ] 'z' .\n"
       "A = '1' .\n"
       ""};
   struct testcase testcases[] = {
@@ -480,7 +477,7 @@ void test_oberon(void) {
       "FieldList            = [IdentList ':' type].\n"
       "type                 = ident | ArrayType | RecordType.\n"
       "FPSection            = ['VAR'] IdentList ':' type .\n"
-      "FormalParameters     = '\\(' [ FPSection { ';' FPSection } ] '\\)' .\n" // TODO: parentheses not registered in follow(FPSection)
+      "FormalParameters     = '\\(' [ FPSection { ';' FPSection } ] '\\)' .\n"
       "ProcedureHeading     = 'PROCEDURE' ident [FormalParameters].\n"
       "ProcedureBody        = declarations ['BEGIN' StatementSequence] 'END' ident.\n"
       "ProcedureDeclaration = ProcedureHeading ';' ProcedureBody .\n"
@@ -528,6 +525,6 @@ int main(void) {
   json_parser();
   test_oberon2();
   test_oberon();
-  // test_ll1();
+  test_ll1();
   return 0;
 }
