@@ -6,7 +6,6 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 static const char program[] = {"12-34+(3*(4+2)-1)/1-23"};
 
@@ -82,7 +81,8 @@ void test_parser(void) {
       "digits     = digit { opt [ '!' ] hash digit } .\n"
       "opt        = [ '\\?' ] .\n"
       "hash       = [ '#' ] .\n"
-      "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
+      "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"
+      ""};
 
   struct testcase testcases[] = {
       {"12?!#1", true },
@@ -170,7 +170,7 @@ static void print_first_sets(parser_t *g) {
   {
     v_foreach(production_t *, p, g->productions_vec) {
       header_t *h = p->header;
-      populate_first(g, h);
+      populate_first(h);
     }
   }
   v_foreach(production_t *, p, g->productions_vec) {
@@ -224,7 +224,8 @@ static const char calc_grammar[] = {
     "term       = factor {('\\*' | '/') factor } .\n"
     "factor     = ( digits | '\\(' expression '\\)' ) .\n"
     "digits     = digit { digit } .\n"
-    "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"};
+    "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"
+    ""};
 /* Follow:
  * expression: ')'
  * term: '+' '-' follow(expression)
@@ -288,16 +289,123 @@ void json_parser(void) {
   set_loglevel(ll);
 }
 
+void test_ll12(bool expected, const char *grammar) {
+  parser_t p = mk_parser(grammar);
+  int ll = 0;
+  if (!expected)
+    ll = set_loglevel(WARN);
+  if (is_ll1(&p) != expected) {
+    error("Expected %sll1: \n%s", expected ? " " : "not ", grammar);
+  }
+  destroy_parser(&p);
+  if (ll)
+    set_loglevel(ll);
+}
 void test_ll1(void) {
+  {
+    // 1. term0 | term1    -> the terms must not have any common start symbols
+    test_ll12(true,
+              "A = B | C.\n"
+              "B = 'b'.\n"
+              "C = 'c'.\n");
+    test_ll12(false,
+              "A = B | C.\n"
+              "B = 'b'.\n"
+              "C = 'b'.\n");
+    test_ll12(true, "A = 'b' | 'c'.");
+    test_ll12(false, "A = 'bc' | 'bb'.");
+  }
+  {
+    // 2. fac0 fac1        -> if fac0 contains the empty sequence, then the factors must not have any common start symbols
+    test_ll12(true, "A = 'b' 'b'.");
+    test_ll12(false, "A = [ 'b' ] 'b'.");
+    test_ll12(true, "A = B 'b'.\n"
+                    "B = [ 'a' ] { 'd' }.");
+    test_ll12(false, "A = B 'b'.\n"
+                     "B = 'a' { 'b' }.");
+    test_ll12(false, "A = B 'b'.\n"
+                     "B = [ 'a' ] { 'b' }.");
+  }
+
+  {
+    test_ll12(true, "dong         = 'a' strong | 'g' string.\n"
+                    "string       =  '\"' alpha { alpha } '\"' .\n"
+                    "strong       =  '\"' alpha { alpha } '\"' .\n"
+                    "alpha        = '[hng]' .\n");
+  }
+  {
+    // 3 [exp] or {exp}    -> the sets of start symbols of exp and of symbols that may follow K must be disjoint
+
+    { // scenario 1: term ends with an optional
+      test_ll12(false,
+                "A = B 'x' .\n"
+                "B = 'b' { 'x' } .");
+      test_ll12(false,
+                "A = B 'x' .\n"
+                "B = 'b' [ 'x' ] .");
+      test_ll12(false,
+                "A = B 'x' .\n"
+                "B = 'b' { [ 'x' ] } .");
+      test_ll12(true,
+                "A = B 'x' .\n"
+                "B = 'b' { [ 'x' ] } 'x' .");
+      test_ll12(true,
+                "A = B 'x' .\n"
+                "B = 'b' 'x' .");
+      test_ll12(false,
+                "A = B 'x' .\n"
+                "B = { 'x' } .");
+    }
+
+    { // scenario 2: term ends with a production which contains the empty set
+      test_ll12(false,
+                "A = B 'x' .\n"
+                "B = 'a' C .\n"
+                "C = { 'x' } .");
+      test_ll12(true,
+                "A = B 'x' .\n"
+                "B = 'a' C .\n"
+                "C = 'x' { 'y' } 'x' .");
+    }
+
+    { // scenario 3: term ends with a regex which can match the empty set
+      // TODO: create testcases
+      test_ll12(false,
+                "A = B 'x' .\n"
+                "B = 'a' 'x*' .\n"
+                "");
+      test_ll12(true,
+                "A = B 'x' .\n"
+                "B = 'a' 'x*x' .\n"
+                "");
+
+      // scenario 3.b: regex can end with repeating a character from the first set
+      // test_ll12(false,
+      //           "A = B 'x' .\n"
+      //           "B = 'a' 'x+' .\n");
+    }
+  }
+  {
+    // 4 ?? parenthesized expressions are a bit trickier.
+    // We probably need to treat all expressions as productions, in an ideal world
+    // example A = ( 'a' [ 'b' ]) { 'b' }
+    // This is similar to rule 2.
+    // 2. fac0 fac1        -> if fac0 contains the empty sequence, then the factors must not have any common start symbols
+    // Clearly, ( 'a' [ 'b' ]) does not contain the empty sequence, and yet there is a problem.
+    // Do we need to recurse into the parenthesized expression and check each term to see if their terminating factors can be empty?
+  }
   {
     static const char grammar[] = {
         "A = B | C.\n"
         "B = '[a-f]' 'b'.\n"
-        "C = '[e-k]' 'c'.\n"};
+        "C = '[e-k]' 'c'.\n"
+        ""};
     parser_t p = mk_parser(grammar);
+    int ll = set_loglevel(WARN);
     if (is_ll1(&p)) {
       error("Expected not ll1: \n%s", grammar);
     }
+    set_loglevel(ll);
     destroy_parser(&p);
   }
   {
@@ -306,24 +414,11 @@ void test_ll1(void) {
         "term       = factor {('\\*' | '/') factor } .\n"
         "factor     = ( digits | '\\(' expression '\\)' ) .\n"
         "digits     =  digit { digit } ['-'] .\n"
-        "digit      = '[0-9]' .\n"};
+        "digit      = '[0-9]' .\n"
+        ""};
     parser_t p = mk_parser(grammar);
     if (!is_ll1(&p)) {
       error("Expected ll1: \n%s", grammar);
-    }
-    destroy_parser(&p);
-  }
-  {
-    static const char grammar[] = {
-        "dong         = 'a' strong | 'g' string.\n"
-        "string       =  '\"' alpha { alpha } '\"' .\n"
-        "strong       =  '\"' alpha { alpha } '\"' .\n"
-        "alpha        = '[hng]' .\n"};
-    parser_t p = mk_parser(grammar);
-    print_first_sets(&p);
-    print_follow_sets(&p);
-    if (!is_ll1(&p)) {
-      die("Expected ll1: \n%s", grammar);
     }
     destroy_parser(&p);
   }
@@ -411,6 +506,9 @@ void test_oberon(void) {
 
   parser_t p = mk_parser(grammar);
 
+  if (!is_ll1(&p)) {
+    error("Expected ll1: \n%s", grammar);
+  }
   // print_first_sets(&p);
   // print_follow_sets(&p);
 

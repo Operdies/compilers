@@ -151,7 +151,7 @@ struct header_t {
 
 terminal_list get_terminals(const parser_t *g);
 nonterminal_list get_nonterminals(const parser_t *g);
-void populate_first(const parser_t *g, struct header_t *h);
+void populate_first(struct header_t *h);
 void populate_follow(const parser_t *g);
 bool is_ll1(const parser_t *g);
 void graph_walk(symbol_t *start, vec *all);

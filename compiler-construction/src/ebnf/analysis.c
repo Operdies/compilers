@@ -1,3 +1,4 @@
+#include "collections.h"
 #include "ebnf/ebnf.h"
 #include "logging.h"
 #include "macros.h"
@@ -47,7 +48,7 @@ nonterminal_list get_nonterminals(const parser_t *g) {
   return t;
 }
 
-static bool populate_first_expr(const parser_t *g, struct header_t *h, expression_t *e);
+static bool populate_first_expr(struct header_t *h, expression_t *e);
 
 bool expression_optional(expression_t *expr);
 
@@ -81,16 +82,16 @@ bool expression_optional(expression_t *expr) {
   return true;
 }
 
-static bool populate_first_term(const parser_t *g, struct header_t *h, term_t *t) {
+static bool populate_first_term(struct header_t *h, term_t *t) {
   v_foreach(factor_t *, fac, t->factors_vec) {
     switch (fac->type) {
     case F_OPTIONAL:
     case F_REPEAT:
       // these can be skipped, so the next term must be included in the first set
-      populate_first_expr(g, h, &fac->expression);
+      populate_first_expr(h, &fac->expression);
       continue;
     case F_PARENS:
-      if (populate_first_expr(g, h, &fac->expression) || expression_optional(&fac->expression))
+      if (populate_first_expr(h, &fac->expression) || expression_optional(&fac->expression))
         continue;
       return false;
     case F_IDENTIFIER: {
@@ -115,22 +116,22 @@ static bool populate_first_term(const parser_t *g, struct header_t *h, term_t *t
   return true;
 }
 
-static bool populate_first_expr(const parser_t *g, struct header_t *h, expression_t *e) {
+static bool populate_first_expr(struct header_t *h, expression_t *e) {
   bool all_optional = true;
   v_foreach(term_t *, t, e->terms_vec) {
-    if (!populate_first_term(g, h, t))
+    if (!populate_first_term(h, t))
       all_optional = false;
   }
   return all_optional;
 }
 
-void populate_first(const parser_t *g, struct header_t *h) {
+void populate_first(struct header_t *h) {
   if (h->first) {
     return;
   }
   h->first_vec = v_make(struct follow_t);
-  if (populate_first_expr(g, h, &h->prod->expr)) {
-    debug("%.*s is completely optional", h->prod->identifier.n, h->prod->identifier.str);
+  if (populate_first_expr(h, &h->prod->expr)) {
+    // debug("%.*s is completely optional", h->prod->identifier.n, h->prod->identifier.str);
   }
 }
 
@@ -352,6 +353,7 @@ vec populate_maps(production_t *owner, int n, struct follow_t follows[static n])
     }
     vec_push(&map, &r);
   }
+
   return map;
 }
 
@@ -374,10 +376,18 @@ bool check_intersection(int n, record records[static n], conflict *c) {
   return false;
 }
 
+vec first_expr_helper(expression_t *expr) {
+  struct header_t temp_header = {.first_vec = v_make(struct follow_t)};
+  populate_first_expr(&temp_header, expr);
+  return temp_header.first_vec;
+}
+
 bool get_conflicts(const header_t *h, conflict *c) {
   *c = (conflict){0};
   c->owner = h->prod;
   {
+    // 1. term0 | term1    -> the terms must not have any common start symbols
+    // 2. fac0 fac1        -> if fac0 contains the empty sequence, then the factors must not have any common start symbols
     vec first_map = populate_maps(h->prod, h->n_first, h->first);
     bool intersect = check_intersection(first_map.n, first_map.array, c);
     vec_destroy(&first_map);
@@ -385,23 +395,74 @@ bool get_conflicts(const header_t *h, conflict *c) {
     if (intersect)
       return true;
   }
-  {
-    vec follow_map = populate_maps(h->prod, h->n_follow, h->follow);
-    bool intersect = check_intersection(follow_map.n, follow_map.array, c);
-    vec_destroy(&follow_map);
-    c->first = false;
-    if (intersect)
-      return true;
-  }
 
-  return false;
+  vec follow_map = populate_maps(h->prod, h->n_follow, h->follow);
+  bool conflict = false;
+
+  {
+    // 3 [exp] or {exp}    -> the sets of start symbols of exp and of symbols that may follow K must be disjoint
+    v_foreach(term_t *, term, h->prod->expr.terms_vec) {
+      v_rforeach(factor_t *, fac, term->factors_vec) {
+        bool optional = false;
+        if (fac->type == F_OPTIONAL || fac->type == F_REPEAT ||
+            (fac->type == F_PARENS && expression_optional(&fac->expression))) {
+          optional = true;
+          vec expr_first = first_expr_helper(&fac->expression);
+          vec map1 = populate_maps(h->prod, expr_first.n, expr_first.array);
+          vec_destroy(&expr_first);
+          vec_push_slice(&map1, &follow_map.slice);
+          conflict = check_intersection(map1.n, map1.array, c);
+          vec_destroy(&map1);
+          if (conflict) {
+            goto done;
+          }
+        } else if (fac->type == F_IDENTIFIER) {
+          if (expression_optional(&fac->identifier.production->expr)) {
+            optional = true;
+            production_t *p = fac->identifier.production;
+            vec map1 = populate_maps(p, p->header->n_first, p->header->first);
+            vec_push_slice(&map1, &follow_map.slice);
+            conflict = check_intersection(map1.n, map1.array, c);
+            vec_destroy(&map1);
+            if (conflict)
+              goto done;
+          }
+        } else if (fac->type == F_STRING) { // F_STRING
+          if (regex_matches(fac->regex, &(match_context){.src = ""}).match) {
+            optional = true;
+            struct follow_t tmpf = {.prod = h->prod, .regex = fac->regex, .type = FOLLOW_SYMBOL};
+            vec map1 = populate_maps(h->prod, 1, &tmpf);
+            vec_push_slice(&map1, &follow_map.slice);
+            conflict = check_intersection(map1.n, map1.array, c);
+            vec_destroy(&map1);
+            if (conflict)
+              goto done;
+          }
+        }
+        if (!optional) // done
+          break;
+      }
+    }
+  }
+done:
+  vec_destroy(&follow_map);
+  // {
+  //   vec follow_map = populate_maps(h->prod, h->n_follow, h->follow);
+  //   bool intersect = check_intersection(follow_map.n, follow_map.array, c);
+  //   vec_destroy(&follow_map);
+  //   c->first = false;
+  //   if (intersect)
+  //     return true;
+  // }
+
+  return conflict;
 }
 
 bool is_ll1(const parser_t *g) {
   bool isll1 = true;
 
   v_foreach(production_t *, p, g->productions_vec)
-      populate_first(g, p->header);
+      populate_first(p->header);
   populate_follow(g);
   nonterminal_list nt = get_nonterminals(g);
 
@@ -412,7 +473,11 @@ bool is_ll1(const parser_t *g) {
       string_slice id1 = c.A->identifier;
       string_slice id2 = c.B->identifier;
       string_slice id3 = c.owner->identifier;
-      debug("Productions '%.*s' and '%.*s' are in conflict.\nBoth allow char '%c'\nIn '%s' set of '%.*s'", id1.n, id1.str, id2.n, id2.str, c.ch, c.first ? "first" : "follow", id3.n, id3.str);
+      debug("Productions '%.*s' and '%.*s' are in conflict.\n"
+            "Both allow char '%c'\n"
+            "In '%s' set of '%.*s'",
+            id1.n, id1.str, id2.n, id2.str, c.ch,
+            c.first ? "first" : "follow", id3.n, id3.str);
       isll1 = false;
     }
   }
@@ -421,10 +486,3 @@ bool is_ll1(const parser_t *g) {
 
   return isll1;
 }
-
-// ll1 test:
-// K
-// 1. term0 | term1    -> the terms must not have any common start symbols
-// 2. fac0 fac1        -> if fac0 contains the empty sequence, then the factors must not have any common start symbols
-// 3 [exp] or {exp}    -> the sets of start symbols of exp and of symbols that may follow K must be disjoint
-// 2. verify that the first set of each term in each production contains no duplicates
