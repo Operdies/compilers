@@ -1,3 +1,4 @@
+#include "text.h"
 enum loglevel {
   FATAL,
   ERROR,
@@ -14,3 +15,8 @@ void die(const char *fmt, ...);
 int set_loglevel(enum loglevel level);
 int get_loglevel(void);
 void setup_crash_stacktrace_logger(void);
+
+void error_ctx(parse_context *ctx);
+void warn_ctx(parse_context *ctx);
+void debug_ctx(parse_context *ctx);
+void info_ctx(parse_context *ctx);

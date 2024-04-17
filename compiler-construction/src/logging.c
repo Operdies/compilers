@@ -127,6 +127,8 @@ void warn(const char *fmt, ...) {
   va_end(ap);
 }
 
+typedef void (*logger_sig_fn)(const char *fmt, ...);
+
 void error(const char *fmt, ...) {
   va_list ap;
 
@@ -197,6 +199,39 @@ static void handler(int sig) {
   if (log)
     fclose(log);
   exit(sig);
+}
+
+static void print_ctx(logger_sig_fn f, parse_context *ctx) {
+  size_t start, end;
+  start = ctx->c;
+  while (start > 0 && ctx->src[start] != '\n')
+    start--;
+  if (ctx->src[start] == '\n')
+    start++;
+
+  end = ctx->c;
+  while (end < ctx->n && ctx->src[end] != '\n')
+    end++;
+  f("%.*s\n"
+    "%*s",
+    end - start, ctx->src + start,
+    ctx->c - start + 1, "^");
+}
+
+void error_ctx(parse_context *ctx) {
+  print_ctx(error, ctx);
+}
+
+void warn_ctx(parse_context *ctx) {
+  print_ctx(warn, ctx);
+}
+
+void debug_ctx(parse_context *ctx) {
+  print_ctx(debug, ctx);
+}
+
+void info_ctx(parse_context *ctx) {
+  print_ctx(info, ctx);
 }
 
 static bool init = false;
