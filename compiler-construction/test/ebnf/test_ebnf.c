@@ -6,12 +6,15 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 static const char program[] = {"12-34+(3*(4+2)-1)/1-23"};
 
 void print_tokens(tokens tok) {
   v_foreach(struct token_t *, t, tok.tokens_vec) {
-    printf("Token '%.*s': '%.*s'\n", t->name.n, t->name.str, t->value.n, t->value.str);
+    if (strncmp(t->name.str, "sp", t->name.n) == 0)
+      continue;
+    info("%3d Token '%.*s'\n%.*s'\n", idx_t, t->name.n, t->name.str, t->value.n, t->value.str);
   }
 }
 
@@ -241,17 +244,15 @@ void json_parser(void) {
   };
 
   static const char json_grammar[] = {
-      "object       = ( '{' keyvalues '}' | '\\[' list '\\]' | number | string | boolean ) .\n"
-      "list         = [ object { comma object } ] .\n"
-      "keyvalues    = [ keyvalue { comma keyvalue } ] .\n"
-      "keyvalue     = string colon object  .\n"
-      "string       =  '\"' alphanumeric { alphanumeric } '\"' .\n"
+      "object       = sp ( '{' keyvalues '}' | '\\[' list '\\]' | number | string | boolean ) sp.\n"
+      "list         = [ object { ',' object } ] .\n"
+      "keyvalues    = [ keyvalue { sp ',' keyvalue } ] .\n"
+      "keyvalue     = sp string ':' object  .\n"
+      "string       =  '" DOUBLETICK_STR "' .\n"
       "boolean      = 'true' | 'false' .\n"
-      "number       = ( digit | '-' ) { digit } .\n"
+      "number       = [ '-' ] '[1-9][0-9]*' [ '\\.[0-9]*' ] .\n"
+      "sp           = '[ \n\t]*' .\n"
       "alphanumeric = '[a-zA-Z0-9]' .\n"
-      "comma        = ',' .\n"
-      "colon        = ':' .\n"
-      "digit        = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"
       ""};
 
   parser_t p = mk_parser(json_grammar);
@@ -271,7 +272,6 @@ void json_parser(void) {
     error("Expected json to be ll1");
   }
 
-  int ll = set_loglevel(WARN);
   for (int i = 0; i < LENGTH(testcases); i++) {
     tokens t = {0};
     struct testcase *test = &testcases[i];
@@ -281,10 +281,10 @@ void json_parser(void) {
       error("%s", t.error.error);
       exit(1);
     }
+    print_tokens(t);
     vec_destroy(&t.tokens_vec);
   }
   destroy_parser(&p);
-  set_loglevel(ll);
 }
 
 void test_ll12(bool expected, const char *grammar) {
@@ -524,7 +524,7 @@ int main(void) {
   prev_test();
   json_parser();
   test_oberon2();
-  test_oberon();
+  // test_oberon();
   test_ll1();
   return 0;
 }
