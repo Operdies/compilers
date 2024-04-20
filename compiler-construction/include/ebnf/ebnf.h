@@ -15,16 +15,6 @@ enum factor_switch {
   F_STRING,
 };
 
-// shorthand for declaring a growable vector
-#define DECLARE_VEC(type, varname) \
-  union {                          \
-    vec varname##_vec;             \
-    struct {                       \
-      int n_##varname;             \
-      type *varname;               \
-    };                             \
-  }
-
 typedef struct symbol_t symbol_t;
 typedef struct header_t header_t;
 typedef struct factor_t factor_t;
@@ -37,12 +27,12 @@ typedef struct position_t position_t;
 
 struct term_t {
   string_slice range;
-  DECLARE_VEC(factor_t, factors);
+  vec factors_vec;
 };
 
 struct expression_t {
   string_slice range;
-  DECLARE_VEC(term_t, terms);
+  vec terms_vec;
 };
 
 struct identifier_t {
@@ -74,7 +64,7 @@ struct parser_t {
   arena *a;
   string body;
   bool backtrack;
-  DECLARE_VEC(struct production_t, productions);
+  vec productions_vec;
 };
 
 struct symbol_t {
@@ -97,7 +87,7 @@ struct token_t {
 };
 
 typedef struct {
-  DECLARE_VEC(struct token_t, tokens);
+  vec tokens_vec;
   bool success;
   parse_context ctx;
 } tokens;
@@ -129,7 +119,7 @@ typedef struct {
 } terminal_list;
 
 typedef struct {
-  DECLARE_VEC(struct header_t, nonterminals);
+  vec nonterminals_vec;
 } nonterminal_list;
 
 enum follow_type {
@@ -147,8 +137,8 @@ struct follow_t {
 struct header_t {
   production_t *prod;
   symbol_t *sym;
-  DECLARE_VEC(struct follow_t, first);
-  DECLARE_VEC(struct follow_t, follow);
+  vec first_vec;
+  vec follow_vec;
 };
 
 terminal_list get_terminals(const parser_t *g);
@@ -157,7 +147,7 @@ void populate_first(struct header_t *h);
 void populate_follow(const parser_t *g);
 bool is_ll1(const parser_t *g);
 void graph_walk(symbol_t *start, vec *all);
-vec populate_maps(production_t *owner, int n, struct follow_t follows[static n]);
+vec populate_maps(production_t *owner, vec follows);
 void add_symbols(symbol_t *start, int k, vec *follows);
 
 #endif // !EBNF_H

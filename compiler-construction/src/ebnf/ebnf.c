@@ -7,20 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define __VA_REST__(A, ...) __VA_ARGS__
-#define __VA_FIRST__(A, ...) A
-
-#define panicf(fmt, ...)                                               \
-  {                                                                    \
-    printf("%s:%d Error: " fmt "\n", __FILE__, __LINE__, __VA_ARGS__); \
-    exit(1);                                                           \
-  }
-#define panic(fmt)                                        \
-  {                                                       \
-    printf("%s:%d Error: " fmt "\n", __FILE__, __LINE__); \
-    exit(1);                                              \
-  }
-
 // TODO: error reporting
 enum terminals {
   LETTER,
@@ -101,6 +87,7 @@ bool identifier(parser_t *g, string_slice *s);
 static void print_ast(AST *root, vec *parents) {
   static vec vbuf = {.sz = sizeof(char)};
   vbuf.n = 0;
+  #define arr ((char *)vbuf.array)
   const char fork[] = "├";
   const char angle[] = "└";
   const char dash[] = "──";
@@ -123,6 +110,8 @@ static void print_ast(AST *root, vec *parents) {
 
   for (; root; root = root->next) {
     if (root->range.str) {
+      if (strncmp("sp", root->name.str, 2) == 0)
+        continue;
       v_foreach(AST *, p, (*parents))
           vec_write(&vbuf, "%s   ", p->next ? pipe : " ");
       vec_write(&vbuf, "%s", root->next ? fork : angle);
@@ -141,7 +130,6 @@ static void print_ast(AST *root, vec *parents) {
       int max = 70;
 
       // count utf-8 code points
-      char *arr = (char *)vbuf.array;
       for (int i = 0; i < vbuf.n; i++)
         wstrlen += (arr[i] & 0xC0) != 0x80;
       vec_write(&vbuf, "%*s '%.*s'%s", max - wstrlen, "<->   ", lim, root->range.str, lim < root->range.n ? "..." : "");
@@ -469,7 +457,7 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
         vec_destroy(&seen);
       }
       if (!append_alt(subexpression, empty)) {
-        panic("Circular alt chain prevents loop exit.");
+        die("Circular alt chain prevents loop exit.");
       }
     }
     return subexpression;
@@ -477,7 +465,7 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
   case F_IDENTIFIER: {
     production_t *p = factor->identifier.production;
     if (!p) {
-      panicf("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
+      die("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
       return NULL;
     }
     symbol_t *prod = MKSYM();
@@ -540,7 +528,7 @@ static symbol_t *expression_symbol(parser_t *g, expression_t *expr) {
       new_expression = new_term;
     } else {
       if (!append_alt(new_expression, new_term))
-        panic("Circular alt chain.");
+        die("Circular alt chain.");
     }
   }
   return new_expression;
@@ -717,7 +705,7 @@ bool parse(parser_t *g, const char *program, tokens *result) {
   if (result == NULL)
     return false;
   parse_context ctx = {.n = strlen(program), .src = program};
-  header_t *start = g->productions[0].header;
+  header_t *start = ((production_t*)g->productions_vec.array)->header;
   AST *root = NULL;
   vec tokens = v_make(struct token_t);
   bool success = tokenize(start, &ctx, &tokens, g->backtrack, &root);

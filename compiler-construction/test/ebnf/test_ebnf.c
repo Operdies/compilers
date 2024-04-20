@@ -46,7 +46,7 @@ void test_lookahead(void) {
     tokens t = {0};
     if (!parse(&p, "bc", &t)) {
       printf("Error parsing program %s:\n", "bc");
-      printf("%s", t.error.error);
+      error_ctx(&t.ctx);
       printf("With grammar %s\n", test->grammar);
     }
     vec_destroy(&t.tokens_vec);
@@ -59,8 +59,8 @@ struct testcase {
   bool expected;
 };
 
-void test_parser2(parser_t *g, int n, struct testcase testcases[static n]) {
-  int ll = set_loglevel(INFO);
+void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum loglevel l) {
+  int ll = set_loglevel(l);
   // this is a bit spammy for failing grammars
   for (int i = 0; i < n; i++) {
     tokens t = {0};
@@ -69,7 +69,8 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n]) {
     if (success != test->expected) {
       print_tokens(t);
       error("Error parsing program %s:\n", test->src);
-      error("%s", t.error.error);
+      error_ctx(&t.ctx);
+      exit(1);
     }
     vec_destroy(&t.tokens_vec);
   }
@@ -100,7 +101,7 @@ void test_parser(void) {
       {"(1+1)",  true },
   };
   parser_t p = mk_parser(grammar);
-  test_parser2(&p, LENGTH(testcases), testcases);
+  test_parser2(&p, LENGTH(testcases), testcases, WARN);
   destroy_parser(&p);
 }
 
@@ -188,10 +189,6 @@ static void print_first_sets(parser_t *g) {
     puts("");
     free(ident);
   }
-  {
-    v_foreach(production_t *, p, g->productions_vec)
-        vec_destroy(&p->header->first_vec);
-  }
 }
 
 static void print_follow_sets(parser_t *g) {
@@ -210,8 +207,6 @@ static void print_follow_sets(parser_t *g) {
     free(ident);
     // vec_destroy(&follow);
   }
-  v_foreach((void), p, g->productions_vec)
-      vec_destroy(&p->header->follow_vec);
 }
 
 static void print_enumerated_graph(vec all) {
@@ -266,7 +261,7 @@ void json_parser(void) {
     die("Expected json to be ll1");
   }
 
-  test_parser2(&p, LENGTH(testcases), testcases);
+  test_parser2(&p, LENGTH(testcases), testcases, DEBUG);
   destroy_parser(&p);
 }
 
@@ -406,7 +401,7 @@ void test_ll1(void) {
 int prev_test(void) {
 
   parser_t p = mk_parser(calc_grammar);
-  if (p.n_productions == 0) {
+  if (p.productions_vec.n == 0) {
     fprintf(stderr, "Failed to parse grammar.\n");
     return 1;
   }
@@ -414,7 +409,7 @@ int prev_test(void) {
   tokens t = {0};
   if (!parse(&p, program, &t)) {
     printf("Error parsing program %s:\n", program);
-    printf("%s", t.error.error);
+    error_ctx(&t.ctx);
     vec_destroy(&t.tokens_vec);
   }
 
@@ -440,7 +435,7 @@ void test_oberon2(void) {
   parser_t p = mk_parser(grammar);
   // print_first_sets(&p);
   // print_follow_sets(&p);
-  test_parser2(&p, LENGTH(testcases), testcases);
+  test_parser2(&p, LENGTH(testcases), testcases, WARN);
   destroy_parser(&p);
 }
 
@@ -505,7 +500,7 @@ void test_calculator(void) {
       {"1+2*3",   true},
       {"(1+2)*3", true},
   };
-  test_parser2(&p, LENGTH(testcases), testcases);
+  test_parser2(&p, LENGTH(testcases), testcases, WARN);
   destroy_parser(&p);
 }
 

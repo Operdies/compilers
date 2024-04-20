@@ -126,7 +126,7 @@ static bool populate_first_expr(struct header_t *h, expression_t *e) {
 }
 
 void populate_first(struct header_t *h) {
-  if (h->first) {
+  if (h->first_vec.n) {
     return;
   }
   h->first_vec = v_make(struct follow_t);
@@ -247,7 +247,7 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
         if (slow->is_nonterminal) {
           production_t *prod = slow->nonterminal->header->prod;
           { // apply rule 1 and 2
-            if (!prod->header->follow)
+            if (!prod->header->follow_vec.n)
               prod->header->follow_vec = v_make(struct follow_t);
             // Rule 1 is applied by walking the graph k symbols forward from where
             // this production was referenced. This also applies rule 2
@@ -330,10 +330,9 @@ typedef struct {
   production_t *owner;
 } conflict;
 
-vec populate_maps(production_t *owner, int n, struct follow_t follows[static n]) {
+vec populate_maps(production_t *owner, vec follows) {
   vec map = v_make(record);
-  for (int i = 0; i < n; i++) {
-    struct follow_t *follow = &follows[i];
+  v_foreach(struct follow_t *, follow, follows) {
     // in the first set of everything that can follow this production,
     // are there any intersections?
     record r = {.prod = owner};
@@ -388,7 +387,7 @@ bool get_conflicts(const header_t *h, conflict *c) {
   {
     // 1. term0 | term1    -> the terms must not have any common start symbols
     // 2. fac0 fac1        -> if fac0 contains the empty sequence, then the factors must not have any common start symbols
-    vec first_map = populate_maps(h->prod, h->n_first, h->first);
+    vec first_map = populate_maps(h->prod, h->first_vec);
     bool intersect = check_intersection(first_map.n, first_map.array, c);
     vec_destroy(&first_map);
     c->first = true;
@@ -396,7 +395,7 @@ bool get_conflicts(const header_t *h, conflict *c) {
       return true;
   }
 
-  vec follow_map = populate_maps(h->prod, h->n_follow, h->follow);
+  vec follow_map = populate_maps(h->prod, h->follow_vec);
   bool conflict = false;
 
   {
@@ -408,7 +407,7 @@ bool get_conflicts(const header_t *h, conflict *c) {
             (fac->type == F_PARENS && expression_optional(&fac->expression))) {
           optional = true;
           vec expr_first = first_expr_helper(&fac->expression);
-          vec map1 = populate_maps(h->prod, expr_first.n, expr_first.array);
+          vec map1 = populate_maps(h->prod, expr_first);
           vec_destroy(&expr_first);
           vec_push_slice(&map1, &follow_map.slice);
           conflict = check_intersection(map1.n, map1.array, c);
@@ -420,7 +419,7 @@ bool get_conflicts(const header_t *h, conflict *c) {
           if (expression_optional(&fac->identifier.production->expr)) {
             optional = true;
             production_t *p = fac->identifier.production;
-            vec map1 = populate_maps(p, p->header->n_first, p->header->first);
+            vec map1 = populate_maps(p, p->header->first_vec);
             vec_push_slice(&map1, &follow_map.slice);
             conflict = check_intersection(map1.n, map1.array, c);
             vec_destroy(&map1);
@@ -431,7 +430,7 @@ bool get_conflicts(const header_t *h, conflict *c) {
           if (regex_matches(fac->regex, &(match_context){.src = ""}).match) {
             optional = true;
             struct follow_t tmpf = {.prod = h->prod, .regex = fac->regex, .type = FOLLOW_SYMBOL};
-            vec map1 = populate_maps(h->prod, 1, &tmpf);
+            vec map1 = populate_maps(h->prod, (vec){.sz = sizeof(tmpf), .n = 1, .array = &tmpf});
             vec_push_slice(&map1, &follow_map.slice);
             conflict = check_intersection(map1.n, map1.array, c);
             vec_destroy(&map1);
