@@ -8,8 +8,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-static const char program[] = {"12-34+(3*(4+2)-1)/1-23"};
-
 void print_tokens(tokens tok) {
   v_foreach(struct token_t *, t, tok.tokens_vec) {
     if (strncmp(t->name.str, "sp", t->name.n) == 0)
@@ -44,11 +42,13 @@ void test_lookahead(void) {
     parser_t p = mk_parser(test->grammar);
     p.backtrack = true;
     tokens t = {0};
-    if (!parse(&p, "bc", &t)) {
+    AST *a;
+    if (!parse(&p, "bc", &t, &a)) {
       printf("Error parsing program %s:\n", "bc");
       error_ctx(&t.ctx);
       printf("With grammar %s\n", test->grammar);
     }
+    destroy_ast(a);
     vec_destroy(&t.tokens_vec);
     destroy_parser(&p);
   }
@@ -65,13 +65,15 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum 
   for (int i = 0; i < n; i++) {
     tokens t = {0};
     struct testcase *test = &testcases[i];
-    bool success = parse(g, test->src, &t);
+    AST *a;
+    bool success = parse(g, test->src, &t, &a);
     if (success != test->expected) {
       print_tokens(t);
       error("Error parsing program %s:\n", test->src);
       error_ctx(&t.ctx);
       exit(1);
     }
+    destroy_ast(a);
     vec_destroy(&t.tokens_vec);
   }
   set_loglevel(ll);
@@ -261,7 +263,7 @@ void json_parser(void) {
     die("Expected json to be ll1");
   }
 
-  test_parser2(&p, LENGTH(testcases), testcases, DEBUG);
+  test_parser2(&p, LENGTH(testcases), testcases, WARN);
   destroy_parser(&p);
 }
 
@@ -399,6 +401,7 @@ void test_ll1(void) {
 }
 
 int prev_test(void) {
+  static const char program[] = {"12-34+(3*(4+2)-1)/1-23"};
 
   parser_t p = mk_parser(calc_grammar);
   if (p.productions_vec.n == 0) {
@@ -407,12 +410,14 @@ int prev_test(void) {
   }
 
   tokens t = {0};
-  if (!parse(&p, program, &t)) {
+  AST *a;
+  if (!parse(&p, program, &t, &a)) {
     printf("Error parsing program %s:\n", program);
     error_ctx(&t.ctx);
     vec_destroy(&t.tokens_vec);
   }
 
+  destroy_ast(a);
   destroy_parser(&p);
   vec_destroy(&t.tokens_vec);
   return 0;
@@ -507,11 +512,11 @@ void test_calculator(void) {
 int main(void) {
   setup_crash_stacktrace_logger();
   test_parser();
+  test_calculator();
   test_lookahead();
   prev_test();
   json_parser();
   test_oberon2();
-  test_calculator();
   // test_oberon();
   test_ll1();
   return 0;

@@ -84,10 +84,13 @@ bool term(parser_t *g, term_t *t);
 bool factor(parser_t *g, factor_t *f);
 bool identifier(parser_t *g, string_slice *s);
 
-static void print_ast(AST *root, vec *parents) {
+void print_ast(AST *root, vec *parents) {
   static vec vbuf = {.sz = sizeof(char)};
   vbuf.n = 0;
-  #define arr ((char *)vbuf.array)
+  vec p2 = v_make(AST);
+  if (!parents)
+    parents = &p2;
+#define arr ((char *)vbuf.array)
   const char fork[] = "├";
   const char angle[] = "└";
   const char dash[] = "──";
@@ -147,9 +150,10 @@ static void print_ast(AST *root, vec *parents) {
     print_ast(root->first_child, parents);
     vec_pop(parents);
   }
+  vec_destroy(&p2);
 }
 
-static void destroy_ast(AST *root) {
+void destroy_ast(AST *root) {
   while (root) {
     destroy_ast(root->first_child);
     AST *tmp = root;
@@ -696,29 +700,23 @@ bool tokenize(header_t *hd, parse_context *ctx, vec *tokens, bool backtrack, AST
     (*node)->name = name;
   } else {
     destroy_ast(*node);
+    *node = NULL;
   }
   vec_destroy(&alt_stack);
   return match;
 }
 
-bool parse(parser_t *g, const char *program, tokens *result) {
+bool parse(parser_t *g, const char *program, tokens *result, AST **root) {
   if (result == NULL)
     return false;
   parse_context ctx = {.n = strlen(program), .src = program};
-  header_t *start = ((production_t*)g->productions_vec.array)->header;
-  AST *root = NULL;
+  header_t *start = ((production_t *)g->productions_vec.array)->header;
   vec tokens = v_make(struct token_t);
-  bool success = tokenize(start, &ctx, &tokens, g->backtrack, &root);
+  bool success = tokenize(start, &ctx, &tokens, g->backtrack, root);
   result->tokens_vec = tokens;
   success &= finished(&ctx);
   result->success = success;
   result->ctx = ctx;
-  if (result->success) {
-    vec v = v_make(AST);
-    print_ast(root, &v);
-    vec_destroy(&v);
-    destroy_ast(root);
-  }
 
   if (!result->success || !finished(&ctx)) {
     return false;

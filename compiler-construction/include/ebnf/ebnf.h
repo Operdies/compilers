@@ -102,8 +102,10 @@ struct AST {
 
 parser_t mk_parser(const char *grammar);
 void destroy_parser(parser_t *g);
-bool parse(parser_t *g, const char *program, tokens *result);
+bool parse(parser_t *g, const char *program, tokens *result, AST **ast);
 position_t get_position(const char *source, string_slice place);
+void print_ast(AST *root, vec *parents);
+void destroy_ast(AST *root);
 
 /* 5.4 exercise:
  * 1. List of terminal symbols
