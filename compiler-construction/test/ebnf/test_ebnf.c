@@ -238,11 +238,6 @@ static const char calc_grammar[] = {
  */
 
 void json_parser(void) {
-  struct testcase {
-    char *src;
-    bool expected;
-  };
-
   static const char json_grammar[] = {
       "object       = sp ( '{' keyvalues '}' | '\\[' list '\\]' | number | string | boolean ) sp.\n"
       "list         = [ object { ',' object } ] .\n"
@@ -272,18 +267,7 @@ void json_parser(void) {
     error("Expected json to be ll1");
   }
 
-  for (int i = 0; i < LENGTH(testcases); i++) {
-    tokens t = {0};
-    struct testcase *test = &testcases[i];
-    bool success = parse(&p, test->src, &t);
-    if (success != test->expected) {
-      error("Error parsing program %s:\n", test->src);
-      error("%s", t.error.error);
-      exit(1);
-    }
-    print_tokens(t);
-    vec_destroy(&t.tokens_vec);
-  }
+  test_parser2(&p, LENGTH(testcases), testcases);
   destroy_parser(&p);
 }
 
