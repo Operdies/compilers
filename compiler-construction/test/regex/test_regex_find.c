@@ -7,8 +7,8 @@ typedef struct {
   const char *pattern;
   char *string;
   bool match;
-  size_t start;
-  size_t length;
+  int start;
+  int length;
 } testcase;
 
 regex_match match(testcase *t) {
@@ -40,11 +40,11 @@ int main(void) {
       printf("test failed: match '%s' on '%s'\nyielded  %s\nexpected %s\n", t->pattern, t->string,
              m.match ? "match" : "no match", t->match ? "match" : "no match");
       if (m.match) {
-        printf("matched: %.*s\n", (int)m.length, t->string + m.start);
+        printf("matched: %.*s\n", m.matched.n, m.matched.str);
       }
-    } else if (t->match && (t->start != m.start || t->length != m.length)) {
+    } else if (t->match && ((t->string + t->start) != m.matched.str || t->length != m.matched.n)) {
       printf("test failed: match '%s' on '%s'\nyielded  %.*s\nexpected %.*s\n", t->pattern, t->string,
-             (int)m.length, t->string + m.start, (int)t->length, t->string + t->start);
+             m.matched.n, m.matched.str, (int)t->length, t->string + t->start);
     }
   }
   return 0;

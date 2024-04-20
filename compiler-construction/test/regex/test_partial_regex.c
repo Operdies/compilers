@@ -12,7 +12,7 @@ int match(testcase *t) {
   regex *r1 = mk_regex(t->pattern);
   regex_match r = regex_pos(r1, t->string, 0);
   destroy_regex(r1);
-  return r.length;
+  return r.matched.n;
 }
 
 int main(void) {

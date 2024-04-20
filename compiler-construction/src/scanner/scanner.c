@@ -1,6 +1,32 @@
 #include "scanner/scanner.h"
+#include "collections.h"
 #include "logging.h"
+#include <stdlib.h>
 #include <string.h>
+
+int next_token(scanner *s, const int *valid, string_slice *content) {
+  while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
+    advance(s->ctx);
+
+  if (finished(s->ctx))
+    return EOF_TOKEN;
+
+  v_foreach(token *, t, s->tokens) {
+    if (valid == NULL || valid[idx_t]) {
+      regex_match m = regex_matches(t->pattern, s->ctx);
+      if (m.match) {
+        if (content)
+          *content = m.matched;
+        return idx_t;
+      }
+    }
+  }
+  return ERROR_TOKEN;
+}
+
+void rewind_scanner(scanner *s, string_slice point) {
+  s->ctx->c = s->ctx->src - point.str;
+}
 
 static bool _tokenize(scanner *s, parse_context *ctx, vec *tokens) {
   while (!finished(ctx)) {

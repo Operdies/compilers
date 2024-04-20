@@ -4,14 +4,10 @@
 #include "macros.h"
 #include "scanner/scanner.h"
 #include "text.h"
+#include <string.h>
 
-static char program[] = {
-    "3*(4+2)",
-};
-
-int main(void) {
+void test_regex_scanner(void) {
   token_def token_definition[] = {
-      {"[ \n\t]+",                   "whitespace"   },
       {(char *)string_regex,         "string"       },
       {"(\\d+\\.\\d*|\\d*\\.\\d+)f", "float"        },
       {"(\\d+\\.\\d*|\\d*\\.\\d+)",  "double"       },
@@ -44,20 +40,59 @@ int main(void) {
       {"true|false",                 "bool"         },
       {"[a-zA-Z_][a-zA-Z_0-9]*",     "identifier"   },
   };
-  static char grammar[] = {
-      "expression = term {(plus | minus) term} \n"
-      "term       = factor {(div | mult) factor}\n"
-      "factor     = integer | identifier | lpar expression rpar\n"};
-  (void)grammar;
+
+  static char program[] = {
+      "303* (404+2) ",
+  };
   scanner s = {0};
-  vec tokens = v_make(token_t);
   mk_scanner(&s, LENGTH(token_definition), token_definition);
-  tokenize(&s, program, &tokens);
-  info("%-20s %s", "[type]", "[content]");
-  v_foreach(token_t *, t, tokens) {
-    if (t->id) {
-      token *actual = vec_nth(&s.tokens.slice, t->id);
-      info("%-20s %.*s", actual->name, t->value.n, t->value.str);
+  s.ctx = &mk_ctx(program);
+  int valid[LENGTH(token_definition)] = {0};
+  if (next_token(&s, valid, NULL) != ERROR_TOKEN)
+    die("Expected no valid tokens");
+
+  string_slice tmp;
+  if (next_token(&s, NULL, &tmp) != 3 /* int token */)
+    die("Expected int token.");
+  rewind_scanner(&s, tmp);
+
+  for (int i = 0; i < LENGTH(token_definition); i++) {
+    valid[i] = 1;
+  }
+
+  const char *expected[][2] = {
+      {"integer", "303"},
+      {"mult",    "*"  },
+      {"lpar",    "("  },
+      {"integer", "404"},
+      {"plus",    "+"  },
+      {"integer", "2"  },
+      {"rpar",    ")"  },
+  };
+
+  for (int i = 0; i < LENGTH(expected); i++) {
+    const char *type = expected[i][0];
+    const char *content = expected[i][1];
+    string_slice matched = {0};
+    int next = next_token(&s, valid, &matched);
+    if (next == EOF_TOKEN || next == ERROR_TOKEN) {
+      error("Unexpected token %d:", next);
+      error_ctx(s.ctx);
+    }
+    token *actual = vec_nth(&s.tokens.slice, next);
+
+    if (strcmp(type, actual->name) != 0) {
+      error("Token %d type mismatch. Expected %s, got %s", i, type, actual->name);
+    }
+    int l = strlen(content);
+    if (strncmp(content, matched.str, l) != 0) {
+      error("Token %d value mismatch. Expected %s, got %.*s", i, content, matched.n, matched.str);
     }
   }
+  if (next_token(&s, valid, NULL) != EOF_TOKEN)
+    die("Expected EOF");
+}
+
+int main(void) {
+  test_regex_scanner();
 }

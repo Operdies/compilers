@@ -643,13 +643,12 @@ static bool _parse(header_t *hd, parse_context *ctx, bool backtrack, AST **node)
       if (x->empty) {
         match = true;
       } else {
-        const char *match_start = ctx->src + ctx->c;
         regex_match m = regex_matches(x->regex, ctx);
         match = m.match;
         if (match) {
           next_child = mk_ast();
           next_child->name = (string_slice){.str = x->regex->ctx.src, .n = x->regex->ctx.n};
-          next_child->range = (string_slice){.str = match_start, .n = m.length};
+          next_child->range = m.matched;
         }
       }
     }

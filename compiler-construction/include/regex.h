@@ -34,8 +34,7 @@ struct dfa {
 
 typedef struct {
   bool match;
-  size_t start;
-  size_t length;
+  string_slice matched;
 } regex_match;
 
 typedef parse_context match_context;

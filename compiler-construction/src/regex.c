@@ -437,15 +437,18 @@ regex *mk_regex(const char *pattern) {
 }
 
 regex_match regex_pos(regex *r, const char *string, int len) {
-  regex_match d = {0};
+  regex_match result = {0};
   if (!string)
-    return d;
+    return result;
   if (len <= 0)
     len = strlen(string);
   match_context m = {.n = len, .c = 0, .src = string};
   reset(r->start);
   bool match = partial_match(r->start, &m);
-  regex_match result = match ? (regex_match){.match = true, .start = 0, .length = m.c} : d;
+  if (match) {
+    result.match = true;
+    result.matched = (string_slice){.n = m.c, .str = string};
+  }
   return result;
 }
 
@@ -456,7 +459,9 @@ regex_match regex_matches(regex *r, match_context *ctx) {
   reset(r->start);
   bool match = partial_match(r->start, ctx);
   if (match) {
-    regex_match result = {.match = true, .start = pos, .length = ctx->c - pos};
+    regex_match result = {0};
+    result.match = true;
+    result.matched = (string_slice){.n = ctx->c - pos, .str = ctx->src + pos};
     return result;
   } else {
     regex_match no_match = {0};
@@ -478,8 +483,7 @@ regex_match regex_find(regex *r, const char *string) {
     m.c = i;
     if (partial_match(r->start, &m)) {
       return (regex_match){
-          .start = i,
-          .length = m.c - i,
+          .matched = {.n = m.c - i, .str = m.src + i},
           .match = true,
       };
     }
@@ -516,3 +520,4 @@ void regex_first(regex *r, char map[static UINT8_MAX]) {
     _regex_first(r->start, map);
   }
 }
+
