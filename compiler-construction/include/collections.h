@@ -1,4 +1,5 @@
-#pragma once
+#ifndef COLLECTIONS_H
+#define COLLECTIONS_H
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -63,7 +64,7 @@ int slicecmp(string_slice s1, string_slice s2);
 void mk_vec(vec *v, int elem_size, int initial_capacity);
 void vec_destroy(vec *v);
 void vec_push(vec *v, void *elem);
-bool vec_push_array(vec *destination, int n, void *data);
+bool vec_push_array(vec *destination, int n, const void *data);
 void vec_insert(vec *v, int index, void *elem);
 void *vec_pop(vec *v);
 vec vec_clone(const vec *v);
@@ -105,3 +106,5 @@ void *ereallocarray(void *array, size_t nmemb, size_t size);
 int vec_vwrite(vec *v, const char *fmt, va_list ap);
 int vec_write(vec *v, const char *fmt, ...);
 char *string_slice_clone(string_slice s);
+
+#endif

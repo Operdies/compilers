@@ -104,7 +104,7 @@ bool vec_push_slice(vec *destination, const vslice *source) {
   return true;
 }
 
-bool vec_push_array(vec *v, int n, void *data) {
+bool vec_push_array(vec *v, int n, const void *data) {
   return vec_push_slice(v, &(vslice){.n = n, .sz = v->sz, .arr = data});
 }
 
@@ -169,8 +169,8 @@ vec vec_select(const vslice *v, int elem_size, vec_selector s) {
 }
 
 int slicecmp(string_slice s1, string_slice s2) {
-  int shortest = s1.n > s2.n ? s2.n : s1.n;
-  return strncmp(s1.str, s2.str, shortest);
+  int longest = s1.n > s2.n ? s1.n : s2.n;
+  return strncmp(s1.str, s2.str, longest);
 }
 
 vec vec_clone(const vec *v) { return vec_select(&v->slice, v->sz, identity); }

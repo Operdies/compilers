@@ -73,7 +73,6 @@ struct parser_t {
   parse_context ctx;
   arena *a;
   string body;
-  string error;
   bool backtrack;
   DECLARE_VEC(struct production_t, productions);
 };
@@ -98,15 +97,18 @@ struct token_t {
 };
 
 typedef struct {
-  parse_context ctx;
-  char error[200];
-} parse_error;
-
-typedef struct {
   DECLARE_VEC(struct token_t, tokens);
   bool success;
-  parse_error error;
+  parse_context ctx;
 } tokens;
+
+typedef struct AST AST;
+struct AST {
+  string_slice range;
+  string_slice name;
+  AST *next;
+  AST *first_child;
+};
 
 parser_t mk_parser(const char *grammar);
 void destroy_parser(parser_t *g);

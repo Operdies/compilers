@@ -1,5 +1,7 @@
 #include "ebnf/ebnf.h"
+#include "collections.h"
 #include "logging.h"
+#include "macros.h"
 #include "regex.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,6 +97,80 @@ bool expression(parser_t *g, expression_t *e);
 bool term(parser_t *g, term_t *t);
 bool factor(parser_t *g, factor_t *f);
 bool identifier(parser_t *g, string_slice *s);
+
+static void print_ast(AST *root, vec *parents) {
+  static vec vbuf = {.sz = sizeof(char)};
+  vbuf.n = 0;
+  const char fork[] = "├";
+  const char angle[] = "└";
+  const char dash[] = "──";
+  const char pipe[] = "│";
+  // Example output:
+  // expr
+  // └── term
+  //     ├── *
+  //     ├── factor
+  //     │   ├── (
+  //     │   ├── )
+  //     │   └── expr
+  //     │       └── term
+  //     │           ├── +
+  //     │           └── factor
+  //     │               ├── 1
+  //     │               └── 2
+  //     └── factor2
+  //         └── 3
+
+  for (; root; root = root->next) {
+    if (root->range.str) {
+      v_foreach(AST *, p, (*parents))
+          vec_write(&vbuf, "%s   ", p->next ? pipe : " ");
+      vec_write(&vbuf, "%s", root->next ? fork : angle);
+      vec_write(&vbuf, "%s ", dash);
+
+      int lim = root->range.n;
+      char *newline = strchr(root->range.str, '\n');
+      if (newline) {
+        lim = (newline - root->range.str - 1);
+        if (lim > root->range.n)
+          lim = root->range.n;
+      }
+
+      vec_write(&vbuf, "%.*s", root->name.n, root->name.str);
+      int wstrlen = 0;
+      int max = 70;
+
+      // count utf-8 code points
+      char *arr = (char *)vbuf.array;
+      for (int i = 0; i < vbuf.n; i++)
+        wstrlen += (arr[i] & 0xC0) != 0x80;
+      vec_write(&vbuf, "%*s '%.*s'%s", max - wstrlen, "<->   ", lim, root->range.str, lim < root->range.n ? "..." : "");
+
+      for (int i = 0; i < vbuf.n; i++)
+        if (arr[i] == '\n')
+          arr[i] = '^';
+        else if (arr[i] == '\t')
+          arr[i] = '>';
+
+      vec_push(&vbuf, &(char){0});
+      debug(arr);
+    }
+    vec_push(parents, root);
+    print_ast(root->first_child, parents);
+    vec_pop(parents);
+  }
+}
+
+static void destroy_ast(AST *root) {
+  while (root) {
+    destroy_ast(root->first_child);
+    AST *tmp = root;
+    root = root->next;
+    free(tmp);
+  }
+}
+
+#define mk_ast() ecalloc(1, sizeof(AST))
 
 static bool match_literal(parser_t *g, char literal) {
   if (finished(&g->ctx))
@@ -531,6 +607,8 @@ void destroy_expression(expression_t *e) {
 
 static void destroy_production(production_t *p) {
   destroy_expression(&p->expr);
+  vec_destroy(&p->header->first_vec);
+  vec_destroy(&p->header->follow_vec);
 }
 
 void destroy_parser(parser_t *g) {
@@ -542,7 +620,7 @@ void destroy_parser(parser_t *g) {
   }
 }
 
-bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
+bool tokenize(header_t *hd, parse_context *ctx, vec *tokens, bool backtrack, AST **node) {
   symbol_t *x;
   bool match;
   struct parse_frame {
@@ -556,24 +634,38 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
   x = hd->sym;
   string_slice name = hd->prod->identifier;
   int start = ctx->c;
+  *node = mk_ast();
+  AST **insert_child = &(*node)->first_child;
 
   while (x) {
-    struct parse_frame frame = {.source_cursor = ctx->c, .token_cursor = t->n_tokens};
+    AST *next_child = NULL;
+    struct parse_frame frame = {.source_cursor = ctx->c, .token_cursor = tokens->n};
 
     if (x->is_nonterminal) {
-      match = tokenize(x->nonterminal->header, ctx, t, backtrack);
+      match = tokenize(x->nonterminal->header, ctx, tokens, backtrack, &next_child);
       if (backtrack && !match) {
         // rewind
         ctx->c = frame.source_cursor;
-        t->n_tokens = frame.token_cursor;
+        tokens->n = frame.token_cursor;
       }
     } else {
       if (x->empty) {
         match = true;
       } else {
+        const char *match_start = ctx->src + ctx->c;
         regex_match m = regex_matches(x->regex, ctx);
         match = m.match;
+        if (match) {
+          next_child = mk_ast();
+          next_child->name = (string_slice){.str = x->regex->ctx.src, .n = x->regex->ctx.n};
+          next_child->range = (string_slice){.str = match_start, .n = m.length};
+        }
       }
+    }
+
+    if (match && !x->empty) {
+      *insert_child = next_child;
+      insert_child = &next_child->next;
     }
 
     { // pick next state, and potentially store the alt option for later
@@ -595,20 +687,27 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
           // If backtracking is enabled, rewind the cursors to the stored frame
           x = f->symbol;
           ctx->c = f->source_cursor;
-          t->n_tokens = f->token_cursor;
-        } else if (f->source_cursor == ctx->c && f->token_cursor == t->n_tokens) {
+          tokens->n = f->token_cursor;
+        } else if (f->source_cursor == ctx->c) {
           // Otherwise restore the symbol from the frame unless progress was made
           x = f->symbol;
+          // We could have potentially pushed optional tokens
+          tokens->n = f->token_cursor;
         }
       }
     }
   }
 
   int len = ctx->c - start;
-  if (match && len > 0) {
-    string_slice range = {.str = ctx->src + start, .n = len};
+  string_slice range = {.str = ctx->src + start, .n = len};
+  // NOTE: len > 0 is requires for allowing backtracking optional productions.
+  if (match) {
     struct token_t newtoken = {.name = name, .value = range};
-    vec_push(&t->tokens_vec, &newtoken);
+    vec_push(tokens, &newtoken);
+    (*node)->range = range;
+    (*node)->name = name;
+  } else {
+    destroy_ast(*node);
   }
   vec_destroy(&alt_stack);
   return match;
@@ -617,26 +716,23 @@ bool tokenize(header_t *hd, parse_context *ctx, tokens *t, bool backtrack) {
 bool parse(parser_t *g, const char *program, tokens *result) {
   if (result == NULL)
     return false;
-  if (result->tokens) {
-    vec_clear(&result->tokens_vec);
-  } else {
-    mk_vec(&result->tokens_vec, sizeof(struct token_t), 0);
-  }
   parse_context ctx = {.n = strlen(program), .src = program};
   header_t *start = g->productions[0].header;
-  result->success = tokenize(start, &ctx, result, g->backtrack) && finished(&ctx);
-  result->error.ctx = ctx;
+  AST *root = NULL;
+  vec tokens = v_make(struct token_t);
+  bool success = tokenize(start, &ctx, &tokens, g->backtrack, &root);
+  result->tokens_vec = tokens;
+  success &= finished(&ctx);
+  result->success = success;
+  result->ctx = ctx;
+  if (result->success) {
+    vec v = v_make(AST);
+    print_ast(root, &v);
+    vec_destroy(&v);
+    destroy_ast(root);
+  }
 
   if (!result->success || !finished(&ctx)) {
-    snprintf(result->error.error, sizeof(result->error.error),
-             "Parse error at:\n"
-             "%.*s\n"
-             " %*s\n",
-             (int)(ctx.n), ctx.src, (int)ctx.c, "^");
-    debug("Parse error at:\n"
-          "%.*s\n"
-          " %*s\n",
-          (int)(ctx.n), ctx.src, (int)ctx.c, "^");
     return false;
   }
   return true;

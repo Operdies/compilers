@@ -60,7 +60,7 @@ struct testcase {
 };
 
 void test_parser2(parser_t *g, int n, struct testcase testcases[static n]) {
-  int ll = set_loglevel(WARN);
+  int ll = set_loglevel(INFO);
   // this is a bit spammy for failing grammars
   for (int i = 0; i < n; i++) {
     tokens t = {0};
@@ -226,8 +226,7 @@ static const char calc_grammar[] = {
     "expression = term {('\\+' | '-' ) term } .\n"
     "term       = factor {('\\*' | '/') factor } .\n"
     "factor     = ( digits | '\\(' expression '\\)' ) .\n"
-    "digits     = digit { digit } .\n"
-    "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"
+    "digits     = ['-'] '[0-9]+' .\n"
     ""};
 /* Follow:
  * expression: ')'
@@ -256,7 +255,7 @@ void json_parser(void) {
       {"[1",          false},
       {"[1,2,45,-3]", true },
       {"{"
-       "\"mythingY\":[1,2,45,-3],"
+       "\"mythingY\":\n[1,2,45,-3],"
        "\"truth\":1,"
        "\"q\":[]"
        "}",
@@ -264,7 +263,7 @@ void json_parser(void) {
   };
 
   if (!is_ll1(&p)) {
-    error("Expected json to be ll1");
+    die("Expected json to be ll1");
   }
 
   test_parser2(&p, LENGTH(testcases), testcases);
@@ -394,8 +393,7 @@ void test_ll1(void) {
         "expression = term {('\\+' | '-' ) term } .\n"
         "term       = factor {('\\*' | '/') factor } .\n"
         "factor     = ( digits | '\\(' expression '\\)' ) .\n"
-        "digits     =  digit { digit } ['-'] .\n"
-        "digit      = '[0-9]' .\n"
+        "digits     = ['-'] '[0-9]+' .\n"
         ""};
     parser_t p = mk_parser(grammar);
     if (!is_ll1(&p)) {
@@ -501,6 +499,16 @@ void test_oberon(void) {
   destroy_parser(&p);
 }
 
+void test_calculator(void) {
+  parser_t p = mk_parser(calc_grammar);
+  struct testcase testcases[] = {
+      {"1+2*3",   true},
+      {"(1+2)*3", true},
+  };
+  test_parser2(&p, LENGTH(testcases), testcases);
+  destroy_parser(&p);
+}
+
 int main(void) {
   setup_crash_stacktrace_logger();
   test_parser();
@@ -508,6 +516,7 @@ int main(void) {
   prev_test();
   json_parser();
   test_oberon2();
+  test_calculator();
   // test_oberon();
   test_ll1();
   return 0;
