@@ -3,6 +3,7 @@
 #include "ebnf/ebnf.h"
 #include "logging.h"
 #include "macros.h"
+#include "text.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,15 +42,14 @@ void test_lookahead(void) {
     struct testcase *test = &testcases[i];
     parser_t p = mk_parser(test->grammar);
     p.backtrack = true;
-    tokens t = {0};
     AST *a;
-    if (!parse(&p, "bc", &t, &a)) {
+    parse_context ctx = mk_ctx("bc");
+    if (!parse(&p, &ctx, &a)) {
       printf("Error parsing program %s:\n", "bc");
-      error_ctx(&t.ctx);
+      error_ctx(&ctx);
       printf("With grammar %s\n", test->grammar);
     }
     destroy_ast(a);
-    vec_destroy(&t.tokens_vec);
     destroy_parser(&p);
   }
 }
@@ -63,18 +63,17 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum 
   int ll = set_loglevel(l);
   // this is a bit spammy for failing grammars
   for (int i = 0; i < n; i++) {
-    tokens t = {0};
     struct testcase *test = &testcases[i];
     AST *a;
-    bool success = parse(g, test->src, &t, &a);
+    parse_context ctx = {.src = test->src, .n = strlen(test->src)};
+    bool success = parse(g, &ctx, &a);
     if (success != test->expected) {
-      print_tokens(t);
+      print_ast(a, NULL);
       error("Error parsing program %s:\n", test->src);
-      error_ctx(&t.ctx);
+      error_ctx(&ctx);
       exit(1);
     }
     destroy_ast(a);
-    vec_destroy(&t.tokens_vec);
   }
   set_loglevel(ll);
 }
@@ -409,17 +408,15 @@ int prev_test(void) {
     return 1;
   }
 
-  tokens t = {0};
   AST *a;
-  if (!parse(&p, program, &t, &a)) {
+  parse_context ctx = mk_ctx(program);
+  if (!parse(&p, &ctx, &a)) {
     printf("Error parsing program %s:\n", program);
-    error_ctx(&t.ctx);
-    vec_destroy(&t.tokens_vec);
+    error_ctx(&ctx);
   }
 
   destroy_ast(a);
   destroy_parser(&p);
-  vec_destroy(&t.tokens_vec);
   return 0;
 }
 

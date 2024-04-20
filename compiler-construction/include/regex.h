@@ -39,6 +39,7 @@ typedef struct {
 } regex_match;
 
 typedef parse_context match_context;
+#define mk_ctx(string) (parse_context){.src = string, .n = strlen(string)};
 
 typedef struct {
   parse_context ctx;

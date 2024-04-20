@@ -612,7 +612,7 @@ void destroy_parser(parser_t *g) {
   }
 }
 
-bool tokenize(header_t *hd, parse_context *ctx, vec *tokens, bool backtrack, AST **node) {
+static bool _parse(header_t *hd, parse_context *ctx, bool backtrack, AST **node) {
   symbol_t *x;
   bool match;
   struct parse_frame {
@@ -631,14 +631,13 @@ bool tokenize(header_t *hd, parse_context *ctx, vec *tokens, bool backtrack, AST
 
   while (x) {
     AST *next_child = NULL;
-    struct parse_frame frame = {.source_cursor = ctx->c, .token_cursor = tokens->n};
+    struct parse_frame frame = {.source_cursor = ctx->c};
 
     if (x->is_nonterminal) {
-      match = tokenize(x->nonterminal->header, ctx, tokens, backtrack, &next_child);
+      match = _parse(x->nonterminal->header, ctx, backtrack, &next_child);
       if (backtrack && !match) {
         // rewind
         ctx->c = frame.source_cursor;
-        tokens->n = frame.token_cursor;
       }
     } else {
       if (x->empty) {
@@ -679,12 +678,10 @@ bool tokenize(header_t *hd, parse_context *ctx, vec *tokens, bool backtrack, AST
           // If backtracking is enabled, rewind the cursors to the stored frame
           x = f->symbol;
           ctx->c = f->source_cursor;
-          tokens->n = f->token_cursor;
         } else if (f->source_cursor == ctx->c) {
           // Otherwise restore the symbol from the frame unless progress was made
           x = f->symbol;
           // We could have potentially pushed optional tokens
-          tokens->n = f->token_cursor;
         }
       }
     }
@@ -694,8 +691,6 @@ bool tokenize(header_t *hd, parse_context *ctx, vec *tokens, bool backtrack, AST
   string_slice range = {.str = ctx->src + start, .n = len};
   // NOTE: len > 0 is requires for allowing backtracking optional productions.
   if (match) {
-    struct token_t newtoken = {.name = name, .value = range};
-    vec_push(tokens, &newtoken);
     (*node)->range = range;
     (*node)->name = name;
   } else {
@@ -706,20 +701,11 @@ bool tokenize(header_t *hd, parse_context *ctx, vec *tokens, bool backtrack, AST
   return match;
 }
 
-bool parse(parser_t *g, const char *program, tokens *result, AST **root) {
-  if (result == NULL)
+bool parse(parser_t *g, parse_context *ctx, AST **root) {
+  if (root == NULL || ctx == NULL)
     return false;
-  parse_context ctx = {.n = strlen(program), .src = program};
   header_t *start = ((production_t *)g->productions_vec.array)->header;
-  vec tokens = v_make(struct token_t);
-  bool success = tokenize(start, &ctx, &tokens, g->backtrack, root);
-  result->tokens_vec = tokens;
-  success &= finished(&ctx);
-  result->success = success;
-  result->ctx = ctx;
-
-  if (!result->success || !finished(&ctx)) {
-    return false;
-  }
-  return true;
+  bool success = _parse(start, ctx, g->backtrack, root);
+  success &= finished(ctx);
+  return success;
 }
