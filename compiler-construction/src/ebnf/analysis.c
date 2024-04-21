@@ -65,7 +65,7 @@ bool factor_optional(factor_t *fac) {
   }
   case F_TOKEN: {
     regex *r = fac->token->pattern;
-    regex_match m = regex_matches(r, &(match_context){.n = 0, .src = ""});
+    regex_match m = regex_matches(r, &mk_ctx(""));
     return m.match;
   }
   case F_STRING: {
@@ -244,6 +244,7 @@ const char *describe_symbol(symbol_t *s) {
     break;
   case token_symbol:
     sprintf(description, "token %.*s", s->token->name.n, s->token->name.str);
+    break;
   case string_symbol:
     sprintf(description, "literal %.*s", s->string.n, s->string.str);
     break;
@@ -379,7 +380,6 @@ vec populate_maps(production_t *owner, vec follows) {
       break;
     }
     case FOLLOW_CHAR:
-      r.prod = follow->prod;
       r.set[(int)follow->ch] = 1;
       break;
     }
@@ -423,9 +423,10 @@ bool get_conflicts(const header_t *h, conflict *c) {
     vec first_map = populate_maps(h->prod, h->first_vec);
     bool intersect = check_intersection(first_map.n, first_map.array, c);
     vec_destroy(&first_map);
-    c->first = true;
-    if (intersect)
+    if (intersect){
+      c->first = true;
       return true;
+    }
   }
 
   vec follow_map = populate_maps(h->prod, h->follow_vec);
@@ -461,13 +462,6 @@ bool get_conflicts(const header_t *h, conflict *c) {
           }
         } else if (fac->type == F_STRING) { // F_STRING
           optional = false;
-          struct follow_t tmpf = {.prod = h->prod, .ch = fac->string.str[0], .type = FOLLOW_CHAR};
-          vec map1 = populate_maps(h->prod, (vec){.sz = sizeof(tmpf), .n = 1, .array = &tmpf});
-          vec_push_slice(&map1, &follow_map.slice);
-          conflict = check_intersection(map1.n, map1.array, c);
-          vec_destroy(&map1);
-          if (conflict)
-            goto done;
         } else if (fac->type == F_TOKEN) { // F_STRING
           if (regex_matches(fac->token->pattern, &(match_context){.src = ""}).match) {
             optional = true;

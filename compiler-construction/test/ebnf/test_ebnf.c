@@ -231,14 +231,6 @@ static void print_enumerated_graph(vec all) {
   }
 }
 
-/* Follow:
- * expression: ')'
- * term: '+' '-' follow(expression)
- * factor: '*' '/' follow(term)
- * Digits: follow(factor)
- * digit: first(digit) follow(digits)
- */
-
 void json_parser(void) {
   static token_def json_tokens[] = {
       {(char *)string_regex,               "string"  },
@@ -285,9 +277,9 @@ void json_parser(void) {
   destroy_scanner(&s);
 }
 
-void test_ll12(bool expected, const char *grammar) {
-  scanner s = {0};
-  parser_t p = mk_parser(grammar, &s);
+void test_ll12(bool expected, const char *grammar, scanner *s) {
+  scanner s2 = {0};
+  parser_t p = mk_parser(grammar, s ? s : &s2);
   int ll = 0;
   if (!expected)
     ll = set_loglevel(WARN);
@@ -301,80 +293,103 @@ void test_ll12(bool expected, const char *grammar) {
 
 void test_ll1(void) {
   {
+    test_ll12(true, "dong         = 'a' strong | 'g' string.\n"
+                    "string       =  '\"' alpha { alpha } '\"' .\n"
+                    "strong       =  '\"' alpha { alpha } '\"' .\n"
+                    "alpha        = 'h' | 'n' | 'g' .\n",
+              NULL);
+  }
+  {
     // 1. term0 | term1    -> the terms must not have any common start symbols
     test_ll12(true,
               "A = B | C.\n"
               "B = 'b'.\n"
-              "C = 'c'.\n");
+              "C = 'c'.\n",
+              NULL);
     test_ll12(false,
               "A = B | C.\n"
               "B = 'b'.\n"
-              "C = 'b'.\n");
-    test_ll12(true, "A = 'b' | 'c'.");
-    test_ll12(false, "A = 'bc' | 'bb'.");
+              "C = 'b'.\n",
+              NULL);
+    test_ll12(true, "A = 'b' | 'c'.",
+              NULL);
+    test_ll12(false, "A = 'bc' | 'bb'.",
+              NULL);
   }
   {
     // 2. fac0 fac1        -> if fac0 contains the empty sequence, then the factors must not have any common start symbols
-    test_ll12(true, "A = 'b' 'b'.");
-    test_ll12(false, "A = [ 'b' ] 'b'.");
+    test_ll12(true, "A = 'b' 'b'.",
+              NULL);
+    test_ll12(false, "A = [ 'b' ] 'b'.",
+              NULL);
     test_ll12(true, "A = B 'b'.\n"
-                    "B = [ 'a' ] { 'd' }.");
+                    "B = [ 'a' ] { 'd' }.",
+              NULL);
     test_ll12(false, "A = B 'b'.\n"
-                     "B = 'a' { 'b' }.");
+                     "B = 'a' { 'b' }.",
+              NULL);
     test_ll12(false, "A = B 'b'.\n"
-                     "B = [ 'a' ] { 'b' }.");
+                     "B = [ 'a' ] { 'b' }.",
+              NULL);
   }
 
-  {
-    test_ll12(true, "dong         = 'a' strong | 'g' string.\n"
-                    "string       =  '\"' alpha { alpha } '\"' .\n"
-                    "strong       =  '\"' alpha { alpha } '\"' .\n"
-                    "alpha        = '[hng]' .\n");
-  }
   {
     // 3 [exp] or {exp}    -> the sets of start symbols of exp and of symbols that may follow K must be disjoint
 
     { // scenario 1: term ends with an optional
       test_ll12(false,
                 "A = B 'x' .\n"
-                "B = 'b' { 'x' } .");
+                "B = 'b' { 'x' } .",
+                NULL);
       test_ll12(false,
                 "A = B 'x' .\n"
-                "B = 'b' [ 'x' ] .");
+                "B = 'b' [ 'x' ] .",
+                NULL);
       test_ll12(false,
                 "A = B 'x' .\n"
-                "B = 'b' { [ 'x' ] } .");
+                "B = 'b' { [ 'x' ] } .",
+                NULL);
       test_ll12(true,
                 "A = B 'x' .\n"
-                "B = 'b' { [ 'x' ] } 'x' .");
+                "B = 'b' { [ 'x' ] } 'x' .",
+                NULL);
       test_ll12(true,
                 "A = B 'x' .\n"
-                "B = 'b' 'x' .");
+                "B = 'b' 'x' .",
+                NULL);
       test_ll12(false,
                 "A = B 'x' .\n"
-                "B = { 'x' } .");
+                "B = { 'x' } .",
+                NULL);
     }
 
     { // scenario 2: term ends with a production which contains the empty set
       test_ll12(false,
                 "A = B 'x' .\n"
                 "B = 'a' C .\n"
-                "C = { 'x' } .");
+                "C = { 'x' } .",
+                NULL);
       test_ll12(true,
                 "A = B 'x' .\n"
                 "B = 'a' C .\n"
-                "C = 'x' { 'y' } 'x' .");
+                "C = 'x' { 'y' } 'x' .",
+                NULL);
     }
 
     { // scenario 3: term ends with a regex which can match the empty set
+      scanner s = {0};
+      token_def tokens[] = {
+          {"x*", "X"}
+      };
+      mk_scanner(&s, 1, tokens);
       test_ll12(false,
                 "A = B 'x' .\n"
-                "B = 'a' 'x*' .\n"
-                "");
+                "B = 'a' X .\n",
+                &s);
       test_ll12(true,
                 "A = B 'x' .\n"
-                "B = 'a' 'x*x' .\n"
-                "");
+                "B = 'a' X 'x' .\n",
+                &s);
 
       // scenario 3.b: regex can end with repeating a character from the first set
       // test_ll12(false,
@@ -397,16 +412,16 @@ void test_ll1(void) {
         "B = '[a-f]' 'b'.\n"
         "C = '[e-k]' 'c'.\n"
         ""};
-    test_ll12(false, grammar);
+    test_ll12(false, grammar, NULL);
   }
   {
     static const char grammar[] = {
-        "expression = term {('\\+' | '-' ) term } .\n"
-        "term       = factor {('\\*' | '/') factor } .\n"
-        "factor     = ( digits | '\\(' expression '\\)' ) .\n"
+        "expression = term {('+' | '-' ) term } .\n"
+        "term       = factor {('*' | '/') factor } .\n"
+        "factor     = ( digits | '(' expression ')' ) .\n"
         "digits     = ['-'] '[0-9]+' .\n"
         ""};
-    test_ll12(true, grammar);
+    test_ll12(true, grammar, NULL);
   }
 }
 
@@ -523,6 +538,6 @@ int main(void) {
   json_parser();
   test_oberon2();
   // test_oberon();
-  // test_ll1();
+  test_ll1();
   return 0;
 }

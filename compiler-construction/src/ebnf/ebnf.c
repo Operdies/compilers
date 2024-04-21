@@ -678,7 +678,7 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
       break;
     case string_symbol:
       if (current_token) {
-        error("This is not good");
+        die("This is not good");
       }
       // TODO: this fails because the scanner context was progressed by call to next_token()
       // Ideally, we should eliminate all manual modifications of the scanner...
@@ -726,7 +726,6 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
       }
     }
   }
-
 
   int len = g->s->ctx->c - start;
   string_slice range = {.str = g->s->ctx->src + start, .n = len};
