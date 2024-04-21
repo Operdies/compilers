@@ -9,9 +9,9 @@
 
 typedef struct {
   // cursor
-  size_t c;
+  int c;
   // length
-  size_t n;
+  int n;
   // text being parsed
   const char *src;
   // A description of the parse error when a matcher returns NULL

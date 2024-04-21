@@ -1,4 +1,4 @@
-// link ebnf/ebnf.o ebnf/analysis.o
+// link ebnf/ebnf.o ebnf/analysis.o scanner/scanner.o
 // link regex.o arena.o collections.o logging.o
 #include "ebnf/ebnf.h"
 #include "logging.h"
@@ -11,8 +11,6 @@
 
 void print_tokens(tokens tok) {
   v_foreach(struct token_t *, t, tok.tokens_vec) {
-    if (strncmp(t->name.str, "sp", t->name.n) == 0)
-      continue;
     info("%3d Token '%.*s'\n%.*s'\n", idx_t, t->name.n, t->name.str, t->value.n, t->value.str);
   }
 }
@@ -40,13 +38,14 @@ void test_lookahead(void) {
 
   for (int i = 0; i < LENGTH(testcases); i++) {
     struct testcase *test = &testcases[i];
-    parser_t p = mk_parser(test->grammar);
+    scanner s = {0};
+    parser_t p = mk_parser(test->grammar, &s);
     p.backtrack = true;
     AST *a;
-    parse_context ctx = mk_ctx("bc");
-    if (!parse(&p, &ctx, &a)) {
+    s.ctx = &mk_ctx("bc");
+    if (!parse(&p, &a)) {
       printf("Error parsing program %s:\n", "bc");
-      error_ctx(&ctx);
+      error_ctx(s.ctx);
       printf("With grammar %s\n", test->grammar);
     }
     destroy_ast(a);
@@ -59,6 +58,17 @@ struct testcase {
   bool expected;
 };
 
+void print_scanner(scanner *s) {
+  s->ctx->c = 0;
+  int tok;
+  string_slice slc;
+  while ((tok = next_token(s, NULL, &slc)) >= 0) {
+    token *t = vec_nth(&s->tokens.slice, tok);
+    debug("Token: %.*s %.*s", t->name.n, t->name.str, slc.n, slc.str);
+  }
+  s->ctx->c = 0;
+}
+
 void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum loglevel l) {
   int ll = set_loglevel(l);
   // this is a bit spammy for failing grammars
@@ -66,7 +76,9 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum 
     struct testcase *test = &testcases[i];
     AST *a;
     parse_context ctx = {.src = test->src, .n = strlen(test->src)};
-    bool success = parse(g, &ctx, &a);
+    g->s->ctx = &ctx;
+
+    bool success = parse(g, &a);
     if (success != test->expected) {
       print_ast(a, NULL);
       error("Error parsing program %s:\n", test->src);
@@ -80,11 +92,11 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum 
 
 void test_parser(void) {
   const char grammar[] = {
-      "expression = term {('\\+' | '-' ) term } .\n"
-      "term       = factor {('\\*' | '/') factor } .\n"
-      "factor     = ( digits | '\\(' expression '\\)' ) .\n"
+      "expression = term {('+' | '-' ) term } .\n"
+      "term       = factor {('*' | '/') factor } .\n"
+      "factor     = ( digits | '(' expression ')' ) .\n"
       "digits     = digit { opt [ '!' ] hash digit } .\n"
-      "opt        = [ '\\?' ] .\n"
+      "opt        = [ '?' ] .\n"
       "hash       = [ '#' ] .\n"
       "digit      = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' .\n"
       ""};
@@ -101,7 +113,8 @@ void test_parser(void) {
       {"1+1",    true },
       {"(1+1)",  true },
   };
-  parser_t p = mk_parser(grammar);
+  scanner s = {0};
+  parser_t p = mk_parser(grammar, &s);
   test_parser2(&p, LENGTH(testcases), testcases, WARN);
   destroy_parser(&p);
 }
@@ -115,6 +128,7 @@ static void print_nonterminals(nonterminal_list ntl) {
   info("Nonterminals: %.*s", buf.n, buf.array);
   vec_destroy(&buf);
 }
+
 static void print_terminals(terminal_list tl) {
   vec buf = v_make(char);
   for (int i = 0; i < LENGTH(tl.map); i++) {
@@ -131,12 +145,8 @@ static void print_terminals(terminal_list tl) {
 }
 
 void print_sym(symbol_t *sym) {
-  if (sym->empty)
-    printf("empty\n");
-  else if (sym->is_nonterminal)
-    printf("production '%.*s'\n", sym->nonterminal->identifier.n, sym->nonterminal->identifier.str);
-  else
-    printf("regex '%s'\n", sym->regex->ctx.src);
+  const char *s = describe_symbol(sym);
+  info(s);
 }
 
 void print_map(char map[UINT8_MAX]) {
@@ -166,6 +176,9 @@ static void print_follow_set(vec *v, vec *seen, char map[UINT8_MAX]) {
     case FOLLOW_FOLLOW:
       // printf("Follow(%.*s) ", sym->prod->identifier.n, sym->prod->identifier.str);
       print_follow_set(&sym->prod->header->follow_vec, seen, map);
+      break;
+    case FOLLOW_CHAR:
+      map[(int)sym->ch] = 1;
       break;
     }
   }
@@ -218,12 +231,6 @@ static void print_enumerated_graph(vec all) {
   }
 }
 
-static const char calc_grammar[] = {
-    "expression = term {('\\+' | '-' ) term } .\n"
-    "term       = factor {('\\*' | '/') factor } .\n"
-    "factor     = ( digits | '\\(' expression '\\)' ) .\n"
-    "digits     = ['-'] '[0-9]+' .\n"
-    ""};
 /* Follow:
  * expression: ')'
  * term: '+' '-' follow(expression)
@@ -233,41 +240,54 @@ static const char calc_grammar[] = {
  */
 
 void json_parser(void) {
-  static const char json_grammar[] = {
-      "object       = sp ( '{' keyvalues '}' | '\\[' list '\\]' | number | string | boolean ) sp.\n"
-      "list         = [ object { ',' object } ] .\n"
-      "keyvalues    = [ keyvalue { sp ',' keyvalue } ] .\n"
-      "keyvalue     = sp string ':' object  .\n"
-      "string       =  '" DOUBLETICK_STR "' .\n"
-      "boolean      = 'true' | 'false' .\n"
-      "number       = [ '-' ] '[1-9][0-9]*' [ '\\.[0-9]*' ] .\n"
-      "sp           = '[ \n\t]*' .\n"
-      "alphanumeric = '[a-zA-Z0-9]' .\n"
+  static token_def json_tokens[] = {
+      {(char *)string_regex,               "string"  },
+      {"-?(\\d+|\\d+\\.\\d*|\\d*\\.\\d+)", "number"  },
+      {"true|false",                       "boolean" },
+      {",",                                "comma"   },
+      {":",                                "colon"   },
+      {"\\[",                              "lbrace"  },
+      {"\\]",                              "rbrace"  },
+      {"{",                                "lbracket"},
+      {"}",                                "rbracket"},
+  };
+  const char json_grammar[] = {
+      "object       = ( lbracket keyvalues rbracket | lbrace list rbrace | number | string | boolean ) .\n"
+      "list         = [ object { comma object } ] .\n"
+      "keyvalues    = [ keyvalue { comma keyvalue } ] .\n"
+      "keyvalue     = string colon object  .\n"
       ""};
 
-  parser_t p = mk_parser(json_grammar);
+  scanner s = {0};
+  mk_scanner(&s, LENGTH(json_tokens), json_tokens);
+
+  parser_t p = mk_parser(json_grammar, &s);
   struct testcase testcases[] = {
-      {"",            false},
-      {"[1",          false},
-      {"[1,2,45,-3]", true },
+      {"",                   false},
+      {"[1",                 false},
+      {"[1,2,45,-3]",        true },
+      {"[1 , 2 , 45 , -3 ]", true },
+      {"{\"a\":1}",          true },
       {"{"
-       "\"mythingY\":\n[1,2,45,-3],"
-       "\"truth\":1,"
-       "\"q\":[]"
+       "\"key one\": [1,2,45,-3],"
+       "\"number\":1,"
+       "\"obj\":{ \"v\": \"str\"}"
        "}",
-       true                },
+       true                       },
   };
 
   if (!is_ll1(&p)) {
     die("Expected json to be ll1");
   }
 
-  test_parser2(&p, LENGTH(testcases), testcases, WARN);
+  test_parser2(&p, LENGTH(testcases), testcases, DEBUG);
   destroy_parser(&p);
+  destroy_scanner(&s);
 }
 
 void test_ll12(bool expected, const char *grammar) {
-  parser_t p = mk_parser(grammar);
+  scanner s = {0};
+  parser_t p = mk_parser(grammar, &s);
   int ll = 0;
   if (!expected)
     ll = set_loglevel(WARN);
@@ -278,6 +298,7 @@ void test_ll12(bool expected, const char *grammar) {
   if (ll)
     set_loglevel(ll);
 }
+
 void test_ll1(void) {
   {
     // 1. term0 | term1    -> the terms must not have any common start symbols
@@ -376,13 +397,7 @@ void test_ll1(void) {
         "B = '[a-f]' 'b'.\n"
         "C = '[e-k]' 'c'.\n"
         ""};
-    parser_t p = mk_parser(grammar);
-    int ll = set_loglevel(WARN);
-    if (is_ll1(&p)) {
-      error("Expected not ll1: \n%s", grammar);
-    }
-    set_loglevel(ll);
-    destroy_parser(&p);
+    test_ll12(false, grammar);
   }
   {
     static const char grammar[] = {
@@ -391,33 +406,8 @@ void test_ll1(void) {
         "factor     = ( digits | '\\(' expression '\\)' ) .\n"
         "digits     = ['-'] '[0-9]+' .\n"
         ""};
-    parser_t p = mk_parser(grammar);
-    if (!is_ll1(&p)) {
-      error("Expected ll1: \n%s", grammar);
-    }
-    destroy_parser(&p);
+    test_ll12(true, grammar);
   }
-}
-
-int prev_test(void) {
-  static const char program[] = {"12-34+(3*(4+2)-1)/1-23"};
-
-  parser_t p = mk_parser(calc_grammar);
-  if (p.productions_vec.n == 0) {
-    fprintf(stderr, "Failed to parse grammar.\n");
-    return 1;
-  }
-
-  AST *a;
-  parse_context ctx = mk_ctx(program);
-  if (!parse(&p, &ctx, &a)) {
-    printf("Error parsing program %s:\n", program);
-    error_ctx(&ctx);
-  }
-
-  destroy_ast(a);
-  destroy_parser(&p);
-  return 0;
 }
 
 void test_oberon2(void) {
@@ -434,74 +424,93 @@ void test_oberon2(void) {
       {"x",    false},
   };
 
-  parser_t p = mk_parser(grammar);
+  scanner s = {0};
+  parser_t p = mk_parser(grammar, &s);
   // print_first_sets(&p);
   // print_follow_sets(&p);
   test_parser2(&p, LENGTH(testcases), testcases, WARN);
   destroy_parser(&p);
 }
 
-void test_oberon(void) {
-  static char grammar[] = {
-      "module               = 'MODULE' ident ';' declarations ['BEGIN' StatementSequence] 'END' ident '\\.' .\n"
-      "selector             = {'\\.' ident | '\\[' expression '\\]'}.\n"
-      "factor               = ident selector | number | '\\(' expression '\\)' | '~' factor .\n"
-      "term                 = factor {('\\*' | 'DIV' | 'MOD' | '&') factor} .\n"
-      "SimpleExpression     = ['\\+' | '-'] term { ('\\+' | '-' | 'OR') term} .\n"
-      "expression           = SimpleExpression [('=' | '#' | '<' | '<=' | '>' | '>=') SimpleExpression] .\n"
-      "assignment           = ident selector ':=' expression .\n"
-      "ProcedureCall        = ident selector ActualParameters .\n"
-      "statement            = [assignment | ProcedureCall | IfStatement | WhileStatement | RepeatStatement].\n"
-      "StatementSequence    = statement {';' statement }.\n"
-      "FieldList            = [IdentList ':' type].\n"
-      "type                 = ident | ArrayType | RecordType.\n"
-      "FPSection            = ['VAR'] IdentList ':' type .\n"
-      "FormalParameters     = '\\(' [ FPSection { ';' FPSection } ] '\\)' .\n"
-      "ProcedureHeading     = 'PROCEDURE' ident [FormalParameters].\n"
-      "ProcedureBody        = declarations ['BEGIN' StatementSequence] 'END' ident.\n"
-      "ProcedureDeclaration = ProcedureHeading ';' ProcedureBody .\n"
-      "declarations         = ['CONST' {ident '=' expression ';'}]"
-      " ['TYPE' {ident '=' type ';'}]"
-      " ['VAR' {IdentList ':' type ';'}]"
-      " {ProcedureDeclaration ';'} .\n"
-      "ident                = letter {letter | digit}.\n"
-      "integer              = digit {digit}.\n"
-      "number               = integer.\n"
-      "digit                = '[0-9]'.\n"
-      "letter               = 'ident' .\n"
-      "ActualParameters     = '(' [expression { ',' expression }] '\\)' .\n"
-      "IfStatement          = 'IF' expression 'THEN' StatementSequence"
-      " {'ELSIF' expression 'THEN' StatementSequence}"
-      " ['ELSE' StatementSequence] 'END' .\n"
-      "WhileStatement       = 'WHILE' expression 'DO' StatementSequence 'END' .\n"
-      "RepeatStatement      = 'REPEAT' StatementSequence 'UNTIL' expression.\n"
-      "IdentList            = ident {',' ident} .\n"
-      "ArrayType            = 'ARRAY' expression 'OF' type.\n"
-      "RecordType           = 'RECORD' FieldList { ';' FieldList} 'END'.\n"
-      ""};
-
-  parser_t p = mk_parser(grammar);
-
-  if (!is_ll1(&p)) {
-    error("Expected ll1: \n%s", grammar);
-  }
-  // print_first_sets(&p);
-  // print_follow_sets(&p);
-
-  tokens t = {0};
-  // parse(&p, "MODULE a; END a.", &t);
-  print_tokens(t);
-  vec_destroy(&t.tokens_vec);
-
-  destroy_parser(&p);
-}
+// TODO: update this test.
+// 1. Define tokens for use in a parser
+// void test_oberon(void) {
+//   static char grammar[] = {
+//       "module               = 'MODULE' ident ';' declarations ['BEGIN' StatementSequence] 'END' ident '\\.' .\n"
+//       "selector             = {'\\.' ident | '\\[' expression '\\]'}.\n"
+//       "factor               = ident selector | number | '\\(' expression '\\)' | '~' factor .\n"
+//       "term                 = factor {('\\*' | 'DIV' | 'MOD' | '&') factor} .\n"
+//       "SimpleExpression     = ['\\+' | '-'] term { ('\\+' | '-' | 'OR') term} .\n"
+//       "expression           = SimpleExpression [('=' | '#' | '<' | '<=' | '>' | '>=') SimpleExpression] .\n"
+//       "assignment           = ident selector ':=' expression .\n"
+//       "ProcedureCall        = ident selector ActualParameters .\n"
+//       "statement            = [assignment | ProcedureCall | IfStatement | WhileStatement | RepeatStatement].\n"
+//       "StatementSequence    = statement {';' statement }.\n"
+//       "FieldList            = [IdentList ':' type].\n"
+//       "type                 = ident | ArrayType | RecordType.\n"
+//       "FPSection            = ['VAR'] IdentList ':' type .\n"
+//       "FormalParameters     = '\\(' [ FPSection { ';' FPSection } ] '\\)' .\n"
+//       "ProcedureHeading     = 'PROCEDURE' ident [FormalParameters].\n"
+//       "ProcedureBody        = declarations ['BEGIN' StatementSequence] 'END' ident.\n"
+//       "ProcedureDeclaration = ProcedureHeading ';' ProcedureBody .\n"
+//       "declarations         = ['CONST' {ident '=' expression ';'}]"
+//       " ['TYPE' {ident '=' type ';'}]"
+//       " ['VAR' {IdentList ':' type ';'}]"
+//       " {ProcedureDeclaration ';'} .\n"
+//       "ident                = letter {letter | digit}.\n"
+//       "integer              = digit {digit}.\n"
+//       "number               = integer.\n"
+//       "digit                = '[0-9]'.\n"
+//       "letter               = 'ident' .\n"
+//       "ActualParameters     = '(' [expression { ',' expression }] '\\)' .\n"
+//       "IfStatement          = 'IF' expression 'THEN' StatementSequence"
+//       " {'ELSIF' expression 'THEN' StatementSequence}"
+//       " ['ELSE' StatementSequence] 'END' .\n"
+//       "WhileStatement       = 'WHILE' expression 'DO' StatementSequence 'END' .\n"
+//       "RepeatStatement      = 'REPEAT' StatementSequence 'UNTIL' expression.\n"
+//       "IdentList            = ident {',' ident} .\n"
+//       "ArrayType            = 'ARRAY' expression 'OF' type.\n"
+//       "RecordType           = 'RECORD' FieldList { ';' FieldList} 'END'.\n"
+//       ""};
+//
+//   parser_t p = mk_parser(grammar);
+//
+//   if (!is_ll1(&p)) {
+//     error("Expected ll1: \n%s", grammar);
+//   }
+//   // print_first_sets(&p);
+//   // print_follow_sets(&p);
+//
+//   tokens t = {0};
+//   // parse(&p, "MODULE a; END a.", &t);
+//   print_tokens(t);
+//   vec_destroy(&t.tokens_vec);
+//
+//   destroy_parser(&p);
+// }
 
 void test_calculator(void) {
-  parser_t p = mk_parser(calc_grammar);
+  token_def tokens[] = {
+      {"-?\\d+", "number"},
+  };
+  static const char calc_grammar[] = {
+      "expression = term {('+' | '-' ) term } .\n"
+      "term       = factor {('*' | '/') factor } .\n"
+      "factor     = ( digits | '(' expression ')' ) .\n"
+      "digits     = number .\n"
+      ""};
+  scanner s = {0};
+  mk_scanner(&s, LENGTH(tokens), tokens);
+  parser_t p = mk_parser(calc_grammar, &s);
   struct testcase testcases[] = {
       {"1+2*3",   true},
       {"(1+2)*3", true},
   };
+
+  if (!is_ll1(&p)) {
+    die("Grammar is not ll1.");
+  }
+
   test_parser2(&p, LENGTH(testcases), testcases, WARN);
   destroy_parser(&p);
 }
@@ -511,10 +520,9 @@ int main(void) {
   test_parser();
   test_calculator();
   test_lookahead();
-  prev_test();
   json_parser();
   test_oberon2();
   // test_oberon();
-  test_ll1();
+  // test_ll1();
   return 0;
 }

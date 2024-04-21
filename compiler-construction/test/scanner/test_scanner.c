@@ -12,6 +12,7 @@ void test_regex_scanner(void) {
       {"(\\d+\\.\\d*|\\d*\\.\\d+)f", "float"        },
       {"(\\d+\\.\\d*|\\d*\\.\\d+)",  "double"       },
       {"\\d+",                       "integer"      },
+      {"true|false",                 "bool"         },
       {",",                          "comma"        },
       {"\\.",                        "period"       },
       {":",                          "colon"        },
@@ -37,7 +38,6 @@ void test_regex_scanner(void) {
       {"\\]",                        "rbrace"       },
       {"{",                          "lbracket"     },
       {"}",                          "rbracket"     },
-      {"true|false",                 "bool"         },
       {"[a-zA-Z_][a-zA-Z_0-9]*",     "identifier"   },
   };
 
@@ -47,7 +47,7 @@ void test_regex_scanner(void) {
   scanner s = {0};
   mk_scanner(&s, LENGTH(token_definition), token_definition);
   s.ctx = &mk_ctx(program);
-  int valid[LENGTH(token_definition)] = {0};
+  bool valid[LENGTH(token_definition)] = {0};
   if (next_token(&s, valid, NULL) != ERROR_TOKEN)
     die("Expected no valid tokens");
 
@@ -81,7 +81,7 @@ void test_regex_scanner(void) {
     }
     token *actual = vec_nth(&s.tokens.slice, next);
 
-    if (strcmp(type, actual->name) != 0) {
+    if (strncmp(type, actual->name.str, actual->name.n) != 0) {
       error("Token %d type mismatch. Expected %s, got %s", i, type, actual->name);
     }
     int l = strlen(content);
@@ -91,6 +91,7 @@ void test_regex_scanner(void) {
   }
   if (next_token(&s, valid, NULL) != EOF_TOKEN)
     die("Expected EOF");
+  destroy_scanner(&s);
 }
 
 int main(void) {

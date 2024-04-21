@@ -3,6 +3,7 @@
 #include "logging.h"
 #include "macros.h"
 #include "regex.h"
+#include "scanner/scanner.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -85,36 +86,25 @@ bool factor(parser_t *g, factor_t *f);
 bool identifier(parser_t *g, string_slice *s);
 
 void print_ast(AST *root, vec *parents) {
-  static vec vbuf = {.sz = sizeof(char)};
-  vbuf.n = 0;
-  vec p2 = v_make(AST);
-  if (!parents)
-    parents = &p2;
 #define arr ((char *)vbuf.array)
+  static vec vbuf = {.sz = sizeof(char)};
   const char fork[] = "├";
   const char angle[] = "└";
   const char dash[] = "──";
   const char pipe[] = "│";
-  // Example output:
-  // expr
-  // └── term
-  //     ├── *
-  //     ├── factor
-  //     │   ├── (
-  //     │   ├── )
-  //     │   └── expr
-  //     │       └── term
-  //     │           ├── +
-  //     │           └── factor
-  //     │               ├── 1
-  //     │               └── 2
-  //     └── factor2
-  //         └── 3
+
+  if (!root)
+    return;
+
+  vbuf.n = 0;
+  vec _marker = v_make(AST);
+
+  if (!parents)
+    parents = &_marker;
 
   for (; root; root = root->next) {
+    vbuf.n = 0;
     if (root->range.str) {
-      if (strncmp("sp", root->name.str, 2) == 0)
-        continue;
       v_foreach(AST *, p, (*parents))
           vec_write(&vbuf, "%s   ", p->next ? pipe : " ");
       vec_write(&vbuf, "%s", root->next ? fork : angle);
@@ -144,13 +134,16 @@ void print_ast(AST *root, vec *parents) {
           arr[i] = '>';
 
       vec_push(&vbuf, &(char){0});
-      debug(arr);
+      debug(vbuf.array);
+    } else {
+      debug("Nothing?");
     }
     vec_push(parents, root);
     print_ast(root->first_child, parents);
     vec_pop(parents);
   }
-  vec_destroy(&p2);
+  vec_destroy(&_marker);
+#undef arr
 }
 
 void destroy_ast(AST *root) {
@@ -196,9 +189,9 @@ bool factor(parser_t *g, factor_t *f) {
       return 0;
     }
     string.n = POINT - string.str - 1;
-    f->regex = mk_regex_from_slice(string);
-    if (f->regex == NULL)
-      die("Failed to construct regex from '%.*s'", string.n, string.str);
+    f->string = string;
+    if (string.n == 0)
+      die("String of length 0 in grammar.");
     break;
   case '(':
     f->type = F_PARENS;
@@ -329,11 +322,19 @@ production_t *find_production(parser_t *g, string_slice name) {
   return NULL;
 }
 
+token *find_token(parser_t *g, string_slice name) {
+  v_foreach(token *, t, g->s->tokens) {
+    if (t->name.n == name.n)
+      if (slicecmp(t->name, name) == 0)
+        return t;
+  }
+  return NULL;
+}
+
 static bool init_expressions(parser_t *g, expression_t *expr) {
   v_foreach(term_t *, t, expr->terms_vec) {
     v_foreach(factor_t *, f, t->factors_vec) {
       switch (f->type) {
-
       case F_OPTIONAL:
       case F_REPEAT:
       case F_PARENS: {
@@ -344,14 +345,24 @@ static bool init_expressions(parser_t *g, expression_t *expr) {
       case F_IDENTIFIER: {
         string_slice name = f->identifier.name;
         production_t *p = find_production(g, name);
-        if (p == NULL) {
-          fprintf(stderr, "Production '%.*s' not found\n", name.n, name.str);
-          return false;
+        if (p) {
+          f->identifier.production = p;
+          break;
         }
-        f->identifier.production = p;
+        token *t = find_token(g, name);
+        if (t) {
+          f->type = F_TOKEN;
+          f->token = t;
+          break;
+        }
+        error("Production '%.*s' not found\n", name.n, name.str);
+        return false;
         break;
       }
       case F_STRING:
+        break;
+      case F_TOKEN:
+        die("How can this happen??");
         break;
       }
     }
@@ -439,7 +450,7 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
     symbol_t *subexpression = expression_symbol(g, &factor->expression);
     if (factor->type == F_REPEAT) {
       symbol_t *loop = MKSYM();
-      *loop = (symbol_t){.empty = true};
+      *loop = (symbol_t){.type = empty_symbol};
       {
         // ensure that all nexts of the subexpression can repeat the loop
         vec seen = v_make(symbol_t);
@@ -449,11 +460,11 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
       loop->next = subexpression;
       subexpression = loop;
       symbol_t *empty = MKSYM();
-      *empty = (symbol_t){.empty = true};
+      *empty = (symbol_t){.type = empty_symbol};
       loop->alt = empty;
     } else if (factor->type == F_OPTIONAL) {
       symbol_t *empty = MKSYM();
-      *empty = (symbol_t){.empty = true};
+      *empty = (symbol_t){.type = empty_symbol};
       {
         // ensure that all nexts of the subexpression lead to the thing that follows this optional
         vec seen = v_make(symbol_t);
@@ -473,31 +484,21 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
       return NULL;
     }
     symbol_t *prod = MKSYM();
-    *prod = (symbol_t){.is_nonterminal = true, .nonterminal = p};
+    *prod = (symbol_t){.type = nonterminal_symbol, .nonterminal = p};
     return prod;
   }
   case F_STRING: {
     symbol_t *s = MKSYM();
-    *s = (symbol_t){.regex = factor->regex};
-    // symbol_t *s, *last;
-    // s = last = NULL;
-    // string_slice str = factor->string;
-    // for (int i = 0; i < str.n; i++) {
-    //   char ch = str.str[i];
-    //   symbol_t *charsym = MKSYM();
-    //   *charsym = (symbol_t){.sym = ch};
-    //   if (s == NULL)
-    //     last = s = charsym;
-    //   else {
-    //     last->next = charsym;
-    //     last = charsym;
-    //   }
-    // }
+    *s = (symbol_t){.type = string_symbol, .string = factor->string};
+    return s;
+  }
+  case F_TOKEN: {
+    symbol_t *s = MKSYM();
+    *s = (symbol_t){.type = token_symbol, .token = factor->token};
     return s;
   }
   default:
-    printf("What??\n");
-    exit(1);
+    die("What??\n");
   }
 }
 
@@ -549,12 +550,13 @@ static void build_parse_table(parser_t *g) {
   }
 }
 
-parser_t mk_parser(const char *text) {
+parser_t mk_parser(const char *text, scanner *s) {
   parser_t g = {0};
   if (!text)
     return g;
   g.body = string_from_chars(text, strlen(text));
   g.a = mk_arena();
+  g.s = s;
 
   for (int i = 0; i < LAST_TERMINAL; i++) {
     if (regexes[i])
@@ -585,9 +587,6 @@ static void destroy_term(term_t *t) {
   v_foreach(factor_t *, f, t->factors_vec) {
     if (f->type == F_OPTIONAL || f->type == F_REPEAT || f->type == F_PARENS)
       destroy_expression(&f->expression);
-    else if (f->type == F_STRING) {
-      destroy_regex(f->regex);
-    }
   }
   vec_destroy(&t->factors_vec);
 }
@@ -612,11 +611,13 @@ void destroy_parser(parser_t *g) {
   }
 }
 
-static bool _parse(header_t *hd, parse_context *ctx, bool backtrack, AST **node) {
+static bool _parse(header_t *hd, parser_t *g, AST **node) {
+  static token *current_token = NULL;
+  static string_slice current_slice = {0};
   symbol_t *x;
   bool match;
   struct parse_frame {
-    size_t source_cursor;
+    int source_cursor;
     int token_cursor;
     symbol_t *symbol;
   };
@@ -625,35 +626,75 @@ static bool _parse(header_t *hd, parse_context *ctx, bool backtrack, AST **node)
 
   x = hd->sym;
   string_slice name = hd->prod->identifier;
-  int start = ctx->c;
   *node = mk_ast();
   AST **insert_child = &(*node)->first_child;
+  int start = current_token ? (current_slice.str - g->s->ctx->src) : g->s->ctx->c;
 
   while (x) {
-    AST *next_child = NULL;
-    struct parse_frame frame = {.source_cursor = ctx->c};
-
-    if (x->is_nonterminal) {
-      match = _parse(x->nonterminal->header, ctx, backtrack, &next_child);
-      if (backtrack && !match) {
-        // rewind
-        ctx->c = frame.source_cursor;
-      }
-    } else {
-      if (x->empty) {
-        match = true;
+    if (!current_token) {
+      // TODO: compute the possible token set for this symbol
+      // and use it as input to next_token for contextual parsing
+      int tok = peek_token(g->s, NULL, &current_slice);
+      if (tok == ERROR_TOKEN) {
+        // This is fine. We can still match a literal string from the grammar.
+        // OPTIM: This is inefficient. If there are multiple options like 'a' | 'b' | id,
+        // we will check for tokens in each case (including any options from id)
+        // This is probably fine though, since literal options should not be super common,
+        // and with contextual parsing we only need to check a few different patterns
+      } else if (tok == EOF_TOKEN) {
+        // might also be fine ?
+        // debug("Unexpected EOF.");
       } else {
-        regex_match m = regex_matches(x->regex, ctx);
-        match = m.match;
-        if (match) {
-          next_child = mk_ast();
-          next_child->name = (string_slice){.str = x->regex->ctx.src, .n = x->regex->ctx.n};
-          next_child->range = m.matched;
-        }
+        current_token = vec_nth(&g->s->tokens.slice, tok);
       }
     }
 
-    if (match && !x->empty) {
+    AST *next_child = NULL;
+    struct parse_frame frame = {.source_cursor = g->s->ctx->c};
+
+    switch (x->type) {
+    case error_symbol:
+      die("Error symbol ??");
+    case empty_symbol:
+      match = true;
+      break;
+    case nonterminal_symbol:
+      match = _parse(x->nonterminal->header, g, &next_child);
+      if (g->backtrack && !match) {
+        // rewind
+        g->s->ctx->c = frame.source_cursor;
+      }
+      break;
+    case token_symbol:
+      match = x->token == current_token;
+      if (match) {
+        g->s->ctx->c = (current_slice.str + current_slice.n) - g->s->ctx->src;
+        // roughly equivalent to next_token(g->s, NULL, NULL);
+        next_child = mk_ast();
+        next_child->name = x->token->name;
+        next_child->range = current_slice;
+        current_token = NULL;
+      }
+      break;
+    case string_symbol:
+      if (current_token) {
+        error("This is not good");
+      }
+      // TODO: this fails because the scanner context was progressed by call to next_token()
+      // Ideally, we should eliminate all manual modifications of the scanner...
+      // Update: Maybe it's fine since a conflict should have been reported by the ll1 check?
+      // In this case the token should be null
+      match = strncmp(x->string.str, g->s->ctx->src + g->s->ctx->c, x->string.n) == 0;
+      if (match) {
+        next_child = mk_ast();
+        next_child->name = x->string;
+        next_child->range = (string_slice){.n = x->string.n, .str = g->s->ctx->src + g->s->ctx->c};
+        g->s->ctx->c += x->string.n;
+      }
+      break;
+    }
+
+    if (match && x->type != empty_symbol) {
       *insert_child = next_child;
       insert_child = &next_child->next;
     }
@@ -673,11 +714,11 @@ static bool _parse(header_t *hd, parse_context *ctx, bool backtrack, AST **node)
     if (x == NULL && match == false) {
       struct parse_frame *f = NULL;
       if ((f = vec_pop(&alt_stack))) {
-        if (backtrack) {
+        if (g->backtrack) {
           // If backtracking is enabled, rewind the cursors to the stored frame
           x = f->symbol;
-          ctx->c = f->source_cursor;
-        } else if (f->source_cursor == ctx->c) {
+          g->s->ctx->c = f->source_cursor;
+        } else if (f->source_cursor == g->s->ctx->c) {
           // Otherwise restore the symbol from the frame unless progress was made
           x = f->symbol;
           // We could have potentially pushed optional tokens
@@ -686,8 +727,9 @@ static bool _parse(header_t *hd, parse_context *ctx, bool backtrack, AST **node)
     }
   }
 
-  int len = ctx->c - start;
-  string_slice range = {.str = ctx->src + start, .n = len};
+
+  int len = g->s->ctx->c - start;
+  string_slice range = {.str = g->s->ctx->src + start, .n = len};
   // NOTE: len > 0 is requires for allowing backtracking optional productions.
   if (match) {
     (*node)->range = range;
@@ -700,11 +742,11 @@ static bool _parse(header_t *hd, parse_context *ctx, bool backtrack, AST **node)
   return match;
 }
 
-bool parse(parser_t *g, parse_context *ctx, AST **root) {
-  if (root == NULL || ctx == NULL)
+bool parse(parser_t *g, AST **root) {
+  if (root == NULL || g == NULL)
     return false;
   header_t *start = ((production_t *)g->productions_vec.array)->header;
-  bool success = _parse(start, ctx, g->backtrack, root);
-  success &= finished(ctx);
+  bool success = _parse(start, g, root);
+  success &= next_token(g->s, NULL, NULL) == EOF_TOKEN;
   return success;
 }

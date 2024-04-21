@@ -7,7 +7,7 @@
 #include "regex.h"
 typedef struct {
   regex *pattern;
-  char *name;
+  string_slice name;
   int id;
 } token;
 
@@ -26,10 +26,12 @@ typedef struct {
   parse_context *ctx;
 } scanner;
 
-int next_token(scanner *s, const int *valid, string_slice *content);
+int peek_token(scanner *s, const bool *valid, string_slice *content);
+int next_token(scanner *s, const bool *valid, string_slice *content);
 void tokenize(scanner *s, const char *body, vec *tokens);
 void add_token(scanner *s, const char *expression, const char *name);
 void mk_scanner(scanner *s, int n, token_def tokens[static n]);
 void rewind_scanner(scanner *s, string_slice point);
+void destroy_scanner(scanner *s);
 
 #endif // SCANNER_H

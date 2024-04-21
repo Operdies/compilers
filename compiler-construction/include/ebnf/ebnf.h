@@ -4,6 +4,7 @@
 #include "collections.h"
 #include "regex.h"
 #include "text.h"
+#include "scanner/scanner.h"
 #include <stdint.h>
 
 // * factor     = identifier | string | "(" expression ")" | "[" expression "]" | "{" expression "}".
@@ -13,6 +14,7 @@ enum factor_switch {
   F_PARENS,   // ( expression )
   F_IDENTIFIER,
   F_STRING,
+  F_TOKEN,
 };
 
 typedef struct symbol_t symbol_t;
@@ -43,9 +45,10 @@ struct identifier_t {
 struct factor_t {
   string_slice range;
   union {
-    regex *regex;
+    string_slice string;
     struct identifier_t identifier;
     struct expression_t expression;
+    token *token;
   };
   enum factor_switch type;
 };
@@ -65,15 +68,25 @@ struct parser_t {
   string body;
   bool backtrack;
   vec productions_vec;
+  scanner *s;
 };
 
+enum symbol_type {
+  error_symbol,
+  empty_symbol,
+  nonterminal_symbol,
+  token_symbol,
+  string_symbol,
+};
+
+
 struct symbol_t {
-  regex *regex;
+  string_slice string;
   symbol_t *next;
   symbol_t *alt;
   production_t *nonterminal;
-  bool is_nonterminal;
-  bool empty;
+  token *token;
+  enum symbol_type type;
 };
 
 struct position_t {
@@ -100,9 +113,9 @@ struct AST {
   AST *first_child;
 };
 
-parser_t mk_parser(const char *grammar);
+parser_t mk_parser(const char *grammar, scanner *s);
 void destroy_parser(parser_t *g);
-bool parse(parser_t *g, parse_context *ctx, AST **root);
+bool parse(parser_t *g, AST **root);
 position_t get_position(const char *source, string_slice place);
 void print_ast(AST *root, vec *parents);
 void destroy_ast(AST *root);
@@ -125,6 +138,7 @@ typedef struct {
 } nonterminal_list;
 
 enum follow_type {
+  FOLLOW_CHAR,
   FOLLOW_SYMBOL,
   FOLLOW_FIRST,
   FOLLOW_FOLLOW,
@@ -132,6 +146,7 @@ enum follow_type {
 
 struct follow_t {
   enum follow_type type;
+  char ch;
   regex *regex;
   production_t *prod;
 };
@@ -151,5 +166,6 @@ bool is_ll1(const parser_t *g);
 void graph_walk(symbol_t *start, vec *all);
 vec populate_maps(production_t *owner, vec follows);
 void add_symbols(symbol_t *start, int k, vec *follows);
+const char *describe_symbol(symbol_t *s);
 
 #endif // !EBNF_H

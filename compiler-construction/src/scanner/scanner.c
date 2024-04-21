@@ -4,7 +4,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-int next_token(scanner *s, const int *valid, string_slice *content) {
+int peek_token(scanner *s, const bool *valid, string_slice *content) {
+  int here = s->ctx->c;
+  int token = next_token(s, valid, content);
+  s->ctx->c = here;
+  return token;
+}
+
+int next_token(scanner *s, const bool *valid, string_slice *content) {
+  int tok = ERROR_TOKEN;
   while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
     advance(s->ctx);
 
@@ -17,15 +25,18 @@ int next_token(scanner *s, const int *valid, string_slice *content) {
       if (m.match) {
         if (content)
           *content = m.matched;
-        return idx_t;
+        tok = idx_t;
+        break;
       }
     }
   }
-  return ERROR_TOKEN;
+  while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
+    advance(s->ctx);
+  return tok;
 }
 
 void rewind_scanner(scanner *s, string_slice point) {
-  s->ctx->c = s->ctx->src - point.str;
+  s->ctx->c = point.str - s->ctx->src;
 }
 
 static bool _tokenize(scanner *s, parse_context *ctx, vec *tokens) {
@@ -48,16 +59,11 @@ static bool _tokenize(scanner *s, parse_context *ctx, vec *tokens) {
   }
   return true;
 }
+
 void tokenize(scanner *s, const char *body, vec *tokens) {
   parse_context ctx = {.src = body, .n = strlen(body)};
   if (!_tokenize(s, &ctx, tokens))
     die("No match");
-}
-
-void add_token(scanner *s, const char *expression, const char *name) {
-  regex *r = mk_regex(expression);
-  int id = s->tokens.n;
-  vec_push(&s->tokens, &(token){.pattern = r, .name = strdup(name), .id = id});
 }
 
 void mk_scanner(scanner *s, int n, token_def tokens[static n]) {
@@ -68,7 +74,12 @@ void mk_scanner(scanner *s, int n, token_def tokens[static n]) {
     regex *r = mk_regex(t->pattern);
     if (r == NULL)
       die("Failed to parse regex from %s", t->pattern);
-    token n = {.pattern = r, .name = t->name, .id = i};
+    token n = {.pattern = r, .name = mk_slice(t->name), .id = i};
     vec_push(&s->tokens, &n);
+  }
+}
+void destroy_scanner(scanner *s) {
+  v_foreach(token *, t, s->tokens) {
+    destroy_regex(t->pattern);
   }
 }

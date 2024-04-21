@@ -9,6 +9,8 @@ typedef struct {
   const char *str;
 } string_slice;
 
+#define mk_slice(string) (string_slice) { .str = string, .n = strlen(string)}
+
 // A view into a vector
 typedef struct {
   // number of elements

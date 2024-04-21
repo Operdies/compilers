@@ -28,7 +28,8 @@ void populate_terminals(terminal_list *terminals, expression_t *e) {
       if (f->type == F_PARENS || f->type == F_OPTIONAL || f->type == F_REPEAT) {
         populate_terminals(terminals, &f->expression);
       } else if (f->type == F_STRING) {
-        regex_first(f->regex, terminals->map);
+        int fst = f->string.str[0];
+        terminals->map[fst] = 1;
       }
     }
   }
@@ -62,11 +63,14 @@ bool factor_optional(factor_t *fac) {
   case F_IDENTIFIER: {
     return expression_optional(&fac->identifier.production->expr);
   }
-  case F_STRING: {
-    regex *r = fac->regex;
+  case F_TOKEN: {
+    regex *r = fac->token->pattern;
     regex_match m = regex_matches(r, &(match_context){.n = 0, .src = ""});
     return m.match;
-  } break;
+  }
+  case F_STRING: {
+    return false;
+  }
   }
   return false;
 }
@@ -103,9 +107,15 @@ static bool populate_first_term(struct header_t *h, term_t *t) {
       return false;
     }
     case F_STRING: {
-      struct follow_t fst = {.type = FOLLOW_SYMBOL, .regex = fac->regex};
+      struct follow_t fst = {.type = FOLLOW_CHAR, .ch = fac->string.str[0]};
       vec_push(&h->first_vec, &fst);
-      regex *r = fac->regex;
+      return false;
+      break;
+    }
+    case F_TOKEN: {
+      regex *r = fac->token->pattern;
+      struct follow_t fst = {.type = FOLLOW_SYMBOL, .regex = r};
+      vec_push(&h->first_vec, &fst);
       regex_match m = regex_matches(r, &(match_context){.n = 0, .src = ""});
       if (m.match)
         continue;
@@ -151,7 +161,7 @@ void graph_walk(symbol_t *start, vec *all) {
       if (!vec_contains(all, slow)) {
         vec_push(all, slow);
         graph_walk(slow, all);
-        if (slow->is_nonterminal) {
+        if (slow->type == nonterminal_symbol) {
           production_t *prod = slow->nonterminal->header->prod;
           graph_walk(prod->header->sym, all);
         }
@@ -172,23 +182,30 @@ void graph_walk(symbol_t *start, vec *all) {
 void add_symbols(symbol_t *start, int k, vec *follows) {
   if (k > 0) {
     for (symbol_t *alt = start; alt; alt = alt->alt) {
-      if (alt->empty) {
-        // If the symbol is empty, we should include its continuation
+      struct follow_t f = {0};
+      switch (alt->type) {
+      case error_symbol:
+        die("Error symbol??");
+      case empty_symbol:
         add_symbols(alt->next, k, follows);
-      } else {
-        // Otherwise, the symbol is either a literal or a production.
-        struct follow_t f = {0};
-        if (alt->is_nonterminal) {
-          f.type = FOLLOW_FIRST;
-          f.prod = alt->nonterminal;
-        } else {
-          f.type = FOLLOW_SYMBOL;
-          f.regex = alt->regex;
-        }
-        if (!vec_contains(follows, &f)) {
-          vec_push(follows, &f);
-          add_symbols(alt->next, k - 1, follows);
-        }
+        continue;
+        break;
+      case nonterminal_symbol:
+        f.type = FOLLOW_FIRST;
+        f.prod = alt->nonterminal;
+        break;
+      case token_symbol:
+        f.type = FOLLOW_SYMBOL;
+        f.regex = alt->token->pattern;
+        break;
+      case string_symbol:
+        f.type = FOLLOW_CHAR;
+        f.ch = alt->string.str[0];
+        break;
+      }
+      if (!vec_contains(follows, &f)) {
+        vec_push(follows, &f);
+        add_symbols(alt->next, k - 1, follows);
       }
     }
   }
@@ -203,12 +220,12 @@ bool symbol_at_end(symbol_t *start, int k) {
     return true;
   for (symbol_t *alt = start; alt; alt = alt->alt) {
     // TODO: this doesn't generalize to k > 1
-    if (alt->is_nonterminal && expression_optional(&alt->nonterminal->expr)) {
+    if (alt->type == nonterminal_symbol && expression_optional(&alt->nonterminal->expr)) {
       return symbol_at_end(alt->next, k);
     }
     // if (alt->next == NULL)
     //   return true;
-    if (symbol_at_end(alt->next, alt->empty ? k : k - 1))
+    if (symbol_at_end(alt->next, alt->type == empty_symbol ? k : k - 1))
       return true;
   }
   return false;
@@ -216,12 +233,21 @@ bool symbol_at_end(symbol_t *start, int k) {
 
 const char *describe_symbol(symbol_t *s) {
   static char description[100];
-  if (s->empty)
+  switch (s->type) {
+  case error_symbol:
+    die("Error symbol ??");
+  case empty_symbol:
     sprintf(description, "empty");
-  else if (s->is_nonterminal)
+    break;
+  case nonterminal_symbol:
     sprintf(description, "prod %.*s", s->nonterminal->identifier.n, s->nonterminal->identifier.str);
-  else
-    sprintf(description, "reg %.*s", (int)s->regex->ctx.n, s->regex->ctx.src);
+    break;
+  case token_symbol:
+    sprintf(description, "token %.*s", s->token->name.n, s->token->name.str);
+  case string_symbol:
+    sprintf(description, "literal %.*s", s->string.n, s->string.str);
+    break;
+  }
   return description;
 }
 void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, production_t *owner) {
@@ -244,7 +270,7 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
         mega_follow_walker(g, slow, seen, owner);
         // It this is a nontermninal, we should add all the symbols that
         // could follow it to its follow set.
-        if (slow->is_nonterminal) {
+        if (slow->type == nonterminal_symbol) {
           production_t *prod = slow->nonterminal->header->prod;
           { // apply rule 1 and 2
             if (!prod->header->follow_vec.n)
@@ -314,6 +340,9 @@ void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec
   } break;
   case FOLLOW_FOLLOW: {
   } break;
+  case FOLLOW_CHAR: {
+    reachable[(int)follow->ch] = 1;
+  } break;
   }
 }
 
@@ -349,6 +378,10 @@ vec populate_maps(production_t *owner, vec follows) {
       vec_destroy(&seen);
       break;
     }
+    case FOLLOW_CHAR:
+      r.prod = follow->prod;
+      r.set[(int)follow->ch] = 1;
+      break;
     }
     vec_push(&map, &r);
   }
@@ -427,9 +460,18 @@ bool get_conflicts(const header_t *h, conflict *c) {
               goto done;
           }
         } else if (fac->type == F_STRING) { // F_STRING
-          if (regex_matches(fac->regex, &(match_context){.src = ""}).match) {
+          optional = false;
+          struct follow_t tmpf = {.prod = h->prod, .ch = fac->string.str[0], .type = FOLLOW_CHAR};
+          vec map1 = populate_maps(h->prod, (vec){.sz = sizeof(tmpf), .n = 1, .array = &tmpf});
+          vec_push_slice(&map1, &follow_map.slice);
+          conflict = check_intersection(map1.n, map1.array, c);
+          vec_destroy(&map1);
+          if (conflict)
+            goto done;
+        } else if (fac->type == F_TOKEN) { // F_STRING
+          if (regex_matches(fac->token->pattern, &(match_context){.src = ""}).match) {
             optional = true;
-            struct follow_t tmpf = {.prod = h->prod, .regex = fac->regex, .type = FOLLOW_SYMBOL};
+            struct follow_t tmpf = {.prod = h->prod, .regex = fac->token->pattern, .type = FOLLOW_SYMBOL};
             vec map1 = populate_maps(h->prod, (vec){.sz = sizeof(tmpf), .n = 1, .array = &tmpf});
             vec_push_slice(&map1, &follow_map.slice);
             conflict = check_intersection(map1.n, map1.array, c);

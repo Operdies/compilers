@@ -478,7 +478,7 @@ bool regex_matches_strict(regex *r, const char *string) {
 
 regex_match regex_find(regex *r, const char *string) {
   match_context m = {.n = strlen(string), .c = 0, .src = string};
-  for (size_t i = 0; i < m.n; i++) {
+  for (int i = 0; i < m.n; i++) {
     reset(r->start);
     m.c = i;
     if (partial_match(r->start, &m)) {
