@@ -2,6 +2,7 @@
 #include "collections.h"
 #include "logging.h"
 #include "macros.h"
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,6 +71,7 @@ void test_vec_write(void) {
   vec v = v_make(char);
   vec_write(&v, "Hello %d %s\n", 1, "guy");
   vec_write(&v, "Hello %d %s\n", 2, "bro");
+  vec_push(&v, &(char){0});
   if (strcmp("Hello 1 guy\nHello 2 bro\n", v.array) != 0)
     die("vec write broken");
   vec_destroy(&v);
@@ -86,6 +88,19 @@ void test_push_string(void) {
   }
 
   destroy_string(&s);
+}
+
+void test_slice_cmp(void) {
+  char *str1 = "abcdefg";
+  string_slice s1 = mk_slice(str1);
+  string_slice s2 = mk_slice(str1);
+  s1.n -= 1;
+  s2.n -= 1;
+
+  s2.n -= 1;
+  assert(slicecmp(s1, s2) != 0);
+  s2.n += 1;
+  assert(slicecmp(s1, s2) == 0);
 }
 
 void test_vec_insert(void) {
@@ -118,9 +133,10 @@ void test_vec_insert(void) {
 
 int main(void) {
   setup_crash_stacktrace_logger();
-  // test_push_string();
-  // test_vec_write();
-  // return test_vec();
+  test_push_string();
+  test_vec_write();
+  test_vec();
   test_vec_insert();
+  test_slice_cmp();
   return 0;
 }

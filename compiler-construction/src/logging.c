@@ -202,7 +202,7 @@ static void handler(int sig) {
 }
 
 static void print_ctx(logger_sig_fn f, parse_context *ctx) {
-  size_t start, end;
+  int start, end;
   start = ctx->c;
   while (start > 0 && ctx->src[start] != '\n')
     start--;

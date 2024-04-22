@@ -12,8 +12,8 @@ typedef struct {
 } token;
 
 typedef struct {
-  char *pattern;
   char *name;
+  char *pattern;
 } token_def;
 
 typedef struct {

@@ -1,4 +1,5 @@
 // link: regex.o arena.o collections.o logging.o
+#include "logging.h"
 #include "regex.h"
 #include <stdio.h>
 #include <unistd.h>
@@ -12,7 +13,6 @@ typedef struct {
 int main(void) {
   pair testcases[] = {
   // simple test cases
-      {"h+*",                 "hhh",             false},
       {"h+",                  "h",               true },
       {"h+",                  "",                false},
       {"h+",                  "hh",              true },
@@ -129,15 +129,16 @@ int main(void) {
     bool is_match = matches(p->pattern, p->test);
     if (is_match != p->match) {
       char *strings[] = {"false", "true"};
-      char buf1[50];
-      char buf2[50];
-      sprintf(buf1, "'%s'", p->pattern);
-      sprintf(buf2, "'%s'", p->test);
-      printf("Match %4s\n      %4s\n"
-             "Expect %s\n    is %s\n",
-             buf1, buf2, strings[p->match], strings[is_match]);
+      error("Match %4s\n      %4s\n"
+            "Expect %s\n    is %s\n",
+            p->pattern, p->test, strings[p->match], strings[is_match]);
       status++;
     }
   }
+  set_loglevel(INFO);
+  pair invalid = {"h+*", "hhh", false};
+  regex *r = mk_regex(invalid.pattern);
+  if (r != NULL)
+    die("Parsing %s succeeded. Should fail.");
   return status;
 }

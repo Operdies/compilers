@@ -105,7 +105,7 @@ bool vec_push_slice(vec *destination, const vslice *source) {
 }
 
 bool vec_push_array(vec *v, int n, const void *data) {
-  return vec_push_slice(v, &(vslice){.n = n, .sz = v->sz, .arr = data});
+  return vec_push_slice(v, &(vslice){.n = n, .sz = v->sz, .arr = (void *)data});
 }
 
 static int roll(int x, int n) {
@@ -141,6 +141,11 @@ void *vec_nth(const vslice *v, int n) {
 }
 
 void vec_clear(vec *v) { v->n = 0; }
+void vec_zero(vec *v) {
+  if (v->sz == 0)
+    die("vec_zero on zero sized vector");
+  memset(v->array, 0, v->c * v->sz);
+}
 
 void vec_destroy(vec *v) {
   free(v->array);
@@ -169,8 +174,16 @@ vec vec_select(const vslice *v, int elem_size, vec_selector s) {
 }
 
 int slicecmp(string_slice s1, string_slice s2) {
-  int longest = s1.n > s2.n ? s1.n : s2.n;
-  return strncmp(s1.str, s2.str, longest);
+  char c1, c2;
+  c1 = c2 = 0;
+  for (int i = 0; i < s1.n || i < s2.n; i++) {
+    c1 = i >= s1.n ? 0 : s1.str[i];
+    c2 = i >= s2.n ? 0 : s2.str[i];
+
+    if (c1 == 0 || c2 == 0 || c1 != c2)
+      break;
+  }
+  return c2 - c1;
 }
 
 vec vec_clone(const vec *v) { return vec_select(&v->slice, v->sz, identity); }

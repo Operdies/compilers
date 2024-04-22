@@ -3,8 +3,8 @@
 
 #include "collections.h"
 #include "regex.h"
-#include "text.h"
 #include "scanner/scanner.h"
+#include "text.h"
 #include <stdint.h>
 
 // * factor     = identifier | string | "(" expression ")" | "[" expression "]" | "{" expression "}".
@@ -60,14 +60,20 @@ struct production_t {
   struct expression_t expr;
   // Header used in the parsing table
   header_t *header;
+  int id;
 };
 
 struct parser_t {
   parse_context ctx;
   arena *a;
-  string body;
   bool backtrack;
-  vec productions_vec;
+  union {
+    vec productions_vec;
+    struct {
+      int n;
+      production_t *productions;
+    };
+  };
   scanner *s;
 };
 
@@ -78,7 +84,6 @@ enum symbol_type {
   token_symbol,
   string_symbol,
 };
-
 
 struct symbol_t {
   string_slice string;
@@ -109,13 +114,20 @@ typedef struct AST AST;
 struct AST {
   string_slice range;
   string_slice name;
+  int node_id;
   AST *next;
   AST *first_child;
 };
 
-parser_t mk_parser(const char *grammar, scanner *s);
+struct rule_def {
+  char *id;
+  char *rule;
+};
+
+parser_t mk_parser(int n, const struct rule_def rules[static n], scanner *s);
+parser_t mk_parser_raw(const char *grammar, scanner *s);
 void destroy_parser(parser_t *g);
-bool parse(parser_t *g, AST **root);
+bool parse(parser_t *g, parse_context *ctx, AST **root, int start);
 position_t get_position(const char *source, string_slice place);
 void print_ast(AST *root, vec *parents);
 void destroy_ast(AST *root);

@@ -77,7 +77,7 @@ static regex *regexes[LAST_TERMINAL] = {0};
   }
 
 void destroy_expression(expression_t *e);
-bool match(parser_t *g, int expr);
+static bool match(parser_t *g, enum terminals expr);
 bool syntax(parser_t *g);
 bool production(parser_t *g, production_t *p);
 bool expression(parser_t *g, expression_t *e);
@@ -167,7 +167,7 @@ static bool match_literal(parser_t *g, char literal) {
   return false;
 }
 
-bool match(parser_t *g, int expr) {
+bool match(parser_t *g, enum terminals expr) {
   regex *r = regexes[expr];
   return regex_matches(r, &g->ctx).match;
 }
@@ -374,6 +374,7 @@ static bool init_productions(parser_t *g) {
   // Iterate through all factors that are identifiers
   // and link back to the production with the matching name
   v_foreach(production_t *, p, g->productions_vec) {
+    p->id = idx_p;
     if (!init_expressions(g, &p->expr))
       return false;
   }
@@ -539,7 +540,7 @@ static symbol_t *expression_symbol(parser_t *g, expression_t *expr) {
   return new_expression;
 }
 
-static void build_parse_table(parser_t *g) {
+static bool build_parse_table(parser_t *g) {
   v_foreach(production_t *, prod, g->productions_vec) {
     prod->header = arena_alloc(g->a, 1, sizeof(header_t));
     prod->header->prod = prod;
@@ -548,36 +549,68 @@ static void build_parse_table(parser_t *g) {
   v_foreach((void), prod, g->productions_vec) {
     prod->header->sym = expression_symbol(g, &prod->expr);
   }
+  return true;
 }
 
-parser_t mk_parser(const char *text, scanner *s) {
+static void init_parser(parser_t *g, scanner *s) {
+  *g = (parser_t){0};
+  g->a = mk_arena();
+  g->s = s;
+  if (!regexes[0]) {
+    for (int i = 0; i < LAST_TERMINAL; i++) {
+      string_slice s = {.n = strlen(patterns[i]), .str = patterns[i]};
+      regexes[i] = mk_regex_from_slice(s);
+      if (!regexes[i]) {
+        die("Failed to compile regex %s\n", patterns[i]);
+      }
+    }
+  }
+}
+
+static bool finalize_parser(parser_t *g) {
+  if (!init_productions(g))
+    return false;
+
+  return build_parse_table(g);
+}
+
+parser_t mk_parser(int n, const struct rule_def rules[static n], scanner *s) {
+  parser_t g = {0};
+  init_parser(&g, s);
+  g.productions_vec = v_make(production_t);
+
+  for (int i = 0; i < n; i++) {
+    struct rule_def r = rules[i];
+    production_t p = {0};
+    // Allow skipping productions.
+    // This is useful if rules are backed by an enum
+    // and this enum does not start at 0 / has skips
+    if (r.id) {
+      p.identifier = mk_slice(r.id);
+      g.ctx = mk_ctx(r.rule);
+      if (!expression(&g, &p.expr))
+        die("Failed to parse grammar.");
+    }
+    vec_push(&g.productions_vec, &p);
+  }
+
+  if (!finalize_parser(&g))
+    die("Failed to construct parser.");
+  return g;
+}
+
+parser_t mk_parser_raw(const char *text, scanner *s) {
   parser_t g = {0};
   if (!text)
     return g;
-  g.body = string_from_chars(text, strlen(text));
-  g.a = mk_arena();
-  g.s = s;
+  init_parser(&g, s);
 
-  for (int i = 0; i < LAST_TERMINAL; i++) {
-    if (regexes[i])
-      continue;
-    string_slice s = {.n = strlen(patterns[i]), .str = patterns[i]};
-    regexes[i] = mk_regex_from_slice(s);
-    if (!regexes[i]) {
-      die("Failed to compile regex %s\n", patterns[i]);
-    }
-  }
-
-  g.ctx = (match_context){.src = g.body.chars, .n = g.body.n};
+  g.ctx = mk_ctx(text);
   bool success = syntax(&g);
   if (!success)
     die("Failed to parse grammar.");
-
-  if (!init_productions(&g))
-    return g;
-
-  build_parse_table(&g);
-
+  if (!finalize_parser(&g))
+    die("Failed to construct parser.");
   return g;
 }
 
@@ -606,7 +639,6 @@ void destroy_parser(parser_t *g) {
   if (g) {
     v_foreach(production_t *, p, g->productions_vec) { destroy_production(p); }
     vec_destroy(&g->productions_vec);
-    destroy_string(&g->body);
     destroy_arena(g->a);
   }
 }
@@ -614,6 +646,13 @@ void destroy_parser(parser_t *g) {
 static bool _parse(header_t *hd, parser_t *g, AST **node) {
   static token *current_token = NULL;
   static string_slice current_slice = {0};
+  static bool *bmap = NULL;
+  bool do_free = false;
+  if (!bmap && g->s->tokens.n) {
+    do_free = true;
+    bmap = ecalloc(g->s->tokens.n, sizeof(bool));
+  }
+
   symbol_t *x;
   bool match;
   struct parse_frame {
@@ -627,6 +666,7 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
   x = hd->sym;
   string_slice name = hd->prod->identifier;
   *node = mk_ast();
+  (*node)->node_id = hd->prod->id;
   AST **insert_child = &(*node)->first_child;
   int start = current_token ? (current_slice.str - g->s->ctx->src) : g->s->ctx->c;
 
@@ -668,10 +708,14 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
     case token_symbol:
       match = x->token == current_token;
       if (match) {
-        g->s->ctx->c = (current_slice.str + current_slice.n) - g->s->ctx->src;
-        // roughly equivalent to next_token(g->s, NULL, NULL);
+        memset(bmap, 0, g->s->tokens.n * sizeof(bool));
+        bmap[current_token->id] = 1;
+        // Advance the token that was previously peeked.
+        next_token(g->s, bmap, NULL);
+
         next_child = mk_ast();
         next_child->name = x->token->name;
+        next_child->node_id = x->token->id;
         next_child->range = current_slice;
         current_token = NULL;
       }
@@ -687,6 +731,7 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
       match = strncmp(x->string.str, g->s->ctx->src + g->s->ctx->c, x->string.n) == 0;
       if (match) {
         next_child = mk_ast();
+        next_child->node_id = -1;
         next_child->name = x->string;
         next_child->range = (string_slice){.n = x->string.n, .str = g->s->ctx->src + g->s->ctx->c};
         g->s->ctx->c += x->string.n;
@@ -738,14 +783,19 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
     *node = NULL;
   }
   vec_destroy(&alt_stack);
+  if (do_free) {
+    free(bmap);
+    bmap = NULL;
+  }
   return match;
 }
 
-bool parse(parser_t *g, AST **root) {
+bool parse(parser_t *g, parse_context *ctx, AST **root, int start_rule) {
   if (root == NULL || g == NULL)
     return false;
-  header_t *start = ((production_t *)g->productions_vec.array)->header;
-  bool success = _parse(start, g, root);
+  g->s->ctx = ctx;
+  production_t *start = &g->productions[start_rule];
+  bool success = _parse(start->header, g, root);
   success &= next_token(g->s, NULL, NULL) == EOF_TOKEN;
   return success;
 }

@@ -4,12 +4,16 @@
 #include "logging.h"
 #include "macros.h"
 #include "text.h"
+#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-void print_tokens(tokens tok) {
+#define tok(key, pattern) [key] = {#key, \
+                                   (char *)pattern}
+
+static void print_tokens(tokens tok) {
   v_foreach(struct token_t *, t, tok.tokens_vec) {
     info("%3d Token '%.*s'\n%.*s'\n", idx_t, t->name.n, t->name.str, t->value.n, t->value.str);
   }
@@ -39,11 +43,10 @@ void test_lookahead(void) {
   for (int i = 0; i < LENGTH(testcases); i++) {
     struct testcase *test = &testcases[i];
     scanner s = {0};
-    parser_t p = mk_parser(test->grammar, &s);
+    parser_t p = mk_parser_raw(test->grammar, &s);
     p.backtrack = true;
     AST *a;
-    s.ctx = &mk_ctx("bc");
-    if (!parse(&p, &a)) {
+    if (!parse(&p, &mk_ctx("bc"), &a, 0)) {
       printf("Error parsing program %s:\n", "bc");
       error_ctx(s.ctx);
       printf("With grammar %s\n", test->grammar);
@@ -69,20 +72,18 @@ void print_scanner(scanner *s) {
   s->ctx->c = 0;
 }
 
-void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum loglevel l) {
+void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum loglevel l, int start_rule) {
   int ll = set_loglevel(l);
   // this is a bit spammy for failing grammars
   for (int i = 0; i < n; i++) {
     struct testcase *test = &testcases[i];
     AST *a;
-    parse_context ctx = {.src = test->src, .n = strlen(test->src)};
-    g->s->ctx = &ctx;
 
-    bool success = parse(g, &a);
+    bool success = parse(g, &mk_ctx(test->src), &a, start_rule);
     if (success != test->expected) {
       print_ast(a, NULL);
       error("Error parsing program %s:\n", test->src);
-      error_ctx(&ctx);
+      error_ctx(g->s->ctx);
       exit(1);
     }
     destroy_ast(a);
@@ -114,8 +115,8 @@ void test_parser(void) {
       {"(1+1)",  true },
   };
   scanner s = {0};
-  parser_t p = mk_parser(grammar, &s);
-  test_parser2(&p, LENGTH(testcases), testcases, WARN);
+  parser_t p = mk_parser_raw(grammar, &s);
+  test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
   destroy_parser(&p);
 }
 
@@ -232,28 +233,49 @@ static void print_enumerated_graph(vec all) {
 }
 
 void json_parser(void) {
-  static token_def json_tokens[] = {
-      {(char *)string_regex,               "string"  },
-      {"-?(\\d+|\\d+\\.\\d*|\\d*\\.\\d+)", "number"  },
-      {"true|false",                       "boolean" },
-      {",",                                "comma"   },
-      {":",                                "colon"   },
-      {"\\[",                              "lbrace"  },
-      {"\\]",                              "rbrace"  },
-      {"{",                                "lbracket"},
-      {"}",                                "rbracket"},
+  enum json_tokens {
+    string,
+    number,
+    boolean,
+    comma,
+    colon,
+    lbrace,
+    rbrace,
+    lbracket,
+    rbracket,
+    object,
+    list,
+    keyvalues,
+    keyvalue
   };
-  const char json_grammar[] = {
-      "object       = ( lbracket keyvalues rbracket | lbrace list rbrace | number | string | boolean ) .\n"
-      "list         = [ object { comma object } ] .\n"
-      "keyvalues    = [ keyvalue { comma keyvalue } ] .\n"
-      "keyvalue     = string colon object  .\n"
-      ""};
+
+  static token_def json_tokens[] = {
+      tok(string, string_regex),
+      tok(number, "-?(\\d+|\\d+\\.\\d*|\\d*\\.\\d+)"),
+      tok(boolean, "true|false"),
+      tok(comma, ","),
+      tok(colon, ":"),
+      tok(lbrace, "\\["),
+      tok(rbrace, "\\]"),
+      tok(lbracket, "{"),
+      tok(rbracket, "}"),
+  };
+  const struct rule_def rules[] = {
+      tok(object, "( lbracket keyvalues rbracket | lbrace list rbrace | number | string | boolean )"),
+      tok(list, "[ object { comma object } ] "),
+      tok(keyvalues, "[ keyvalue { comma keyvalue } ]"),
+      tok(keyvalue, "string colon object"),
+  };
 
   scanner s = {0};
   mk_scanner(&s, LENGTH(json_tokens), json_tokens);
 
-  parser_t p = mk_parser(json_grammar, &s);
+  parser_t p = mk_parser(LENGTH(rules), rules, &s);
+
+  if (!is_ll1(&p)) {
+    die("Expected json to be ll1");
+  }
+
   struct testcase testcases[] = {
       {"",                   false},
       {"[1",                 false},
@@ -268,18 +290,37 @@ void json_parser(void) {
        true                       },
   };
 
-  if (!is_ll1(&p)) {
-    die("Expected json to be ll1");
+  test_parser2(&p, LENGTH(testcases), testcases, DEBUG, object);
+
+  {
+    AST *a;
+    if (!parse(&p, &mk_ctx(" 1 "), &a, object)) {
+      die("Failed to parse %.*s as object", p.s->ctx->n, p.s->ctx->src);
+    }
+    assert(a->node_id == object);
+    assert(a->next == NULL);
+    assert(slicecmp(a->range, mk_slice(" 1 ")) == 0);
+    AST *chld = a->first_child;
+    assert(chld != NULL);
+    assert(chld->node_id == number);
+    assert(slicecmp(chld->range, mk_slice("1")) == 0);
+    destroy_ast(a);
   }
 
-  test_parser2(&p, LENGTH(testcases), testcases, DEBUG);
+  {
+    AST *a;
+    if (parse(&p, &mk_ctx("\"a\":\"b\""), &a, keyvalue)) {
+      die("Failed to parse %.*s as keyvalue", p.s->ctx->n, p.s->ctx->src);
+    }
+    destroy_ast(a);
+  }
   destroy_parser(&p);
   destroy_scanner(&s);
 }
 
 void test_ll12(bool expected, const char *grammar, scanner *s) {
   scanner s2 = {0};
-  parser_t p = mk_parser(grammar, s ? s : &s2);
+  parser_t p = mk_parser_raw(grammar, s ? s : &s2);
   int ll = 0;
   if (!expected)
     ll = set_loglevel(WARN);
@@ -379,7 +420,7 @@ void test_ll1(void) {
     { // scenario 3: term ends with a regex which can match the empty set
       scanner s = {0};
       token_def tokens[] = {
-          {"x*", "X"}
+          {"X", "x*"}
       };
       mk_scanner(&s, 1, tokens);
       test_ll12(false,
@@ -440,10 +481,10 @@ void test_oberon2(void) {
   };
 
   scanner s = {0};
-  parser_t p = mk_parser(grammar, &s);
+  parser_t p = mk_parser_raw(grammar, &s);
   // print_first_sets(&p);
   // print_follow_sets(&p);
-  test_parser2(&p, LENGTH(testcases), testcases, WARN);
+  test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
   destroy_parser(&p);
 }
 
@@ -506,7 +547,7 @@ void test_oberon2(void) {
 
 void test_calculator(void) {
   token_def tokens[] = {
-      {"-?\\d+", "number"},
+      {"number", "-?\\d+"}
   };
   static const char calc_grammar[] = {
       "expression = term {('+' | '-' ) term } .\n"
@@ -516,7 +557,7 @@ void test_calculator(void) {
       ""};
   scanner s = {0};
   mk_scanner(&s, LENGTH(tokens), tokens);
-  parser_t p = mk_parser(calc_grammar, &s);
+  parser_t p = mk_parser_raw(calc_grammar, &s);
   struct testcase testcases[] = {
       {"1+2*3",   true},
       {"(1+2)*3", true},
@@ -526,7 +567,7 @@ void test_calculator(void) {
     die("Grammar is not ll1.");
   }
 
-  test_parser2(&p, LENGTH(testcases), testcases, WARN);
+  test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
   destroy_parser(&p);
 }
 
@@ -537,7 +578,7 @@ int main(void) {
   test_lookahead();
   json_parser();
   test_oberon2();
-  // test_oberon();
   test_ll1();
+  // test_oberon();
   return 0;
 }
