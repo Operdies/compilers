@@ -59,7 +59,7 @@ typedef struct {
       int c;
     };
   };
-} string;
+} string_t;
 
 typedef int (*comparer_t)(const void *a, const void *b);
 int slicecmp(string_slice s1, string_slice s2);
@@ -73,6 +73,7 @@ vec vec_clone(const vec *v);
 void vec_clear(vec *v);
 void vec_zero(vec *v);
 void vec_sort(vec *v, comparer_t comp_fn);
+void vec_fcopy(vec *v, FILE *f);
 void vec_reverse(vec *v);
 void *vec_nth(const vslice *v, int n);
 void vec_ensure_capacity(vec *v, int c);
@@ -92,17 +93,17 @@ vec vec_select(const vslice *v, int elem_size, vec_selector s);
 /* Initializes s on success.
  * On failure, do nothing
  */
-void mk_string(string *s, int initial_capacity);
+void mk_string(string_t *s, int initial_capacity);
 /* Append data to string, resizing if needed
  */
-void push_char(string *s, char ch);
-void push_str(string *s, int n, const char data[static n]);
-bool string_contains(const string *s, char ch);
+void push_char(string_t *s, char ch);
+void push_str(string_t *s, int n, const char data[static n]);
+bool string_contains(const string_t *s, char ch);
 /* Free all data associated with the string
  */
-void destroy_string(string *s);
+void destroy_string(string_t *s);
 // Create a new string from an existing char array
-string string_from_chars(const char *src, int n);
+string_t string_from_chars(const char *src, int n);
 
 void *ecalloc(size_t nmemb, size_t size);
 void *ereallocarray(void *array, size_t nmemb, size_t size);

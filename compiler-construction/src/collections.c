@@ -7,13 +7,13 @@
 
 static void *identity(void *v) { return v; }
 
-void mk_string(string *s, int initial_capacity) {
+void mk_string(string_t *s, int initial_capacity) {
   mk_vec(&s->v, 1, initial_capacity);
 }
 
-void destroy_string(string *s) { vec_destroy(&s->v); }
+void destroy_string(string_t *s) { vec_destroy(&s->v); }
 
-void push_str(string *s, int n, const char data[static n]) {
+void push_str(string_t *s, int n, const char data[static n]) {
   if (s) {
     vslice vec = {.n = n, .sz = 1, .arr = (char *)data};
     vec_push_slice(&s->v, &vec);
@@ -188,15 +188,15 @@ int slicecmp(string_slice s1, string_slice s2) {
 
 vec vec_clone(const vec *v) { return vec_select(&v->slice, v->sz, identity); }
 
-string string_from_chars(const char *src, int n) {
-  string s = {0};
+string_t string_from_chars(const char *src, int n) {
+  string_t s = {0};
   mk_string(&s, n);
   push_str(&s, n, src);
   return s;
 }
 
-void push_char(string *s, char ch) { vec_push(&s->v, &ch); }
-bool string_contains(const string *s, char ch) {
+void push_char(string_t *s, char ch) { vec_push(&s->v, &ch); }
+bool string_contains(const string_t *s, char ch) {
   for (int i = 0; i < s->n; i++) {
     if (s->chars[i] == ch)
       return true;
@@ -252,6 +252,14 @@ int vec_write(vec *v, const char *fmt, ...) {
   va_end(ap);
   return written;
 #undef wrt
+}
+
+void vec_fcopy(vec *v, FILE *f) {
+  int read;
+  char buf[4096];
+  while ((read = fread(buf, 1, sizeof(buf), f)) > 0) {
+    vec_push_array(v, read, buf);
+  }
 }
 
 char *string_slice_clone(string_slice s) {

@@ -113,7 +113,7 @@ void print_ast(AST *root, vec *parents) {
       int lim = root->range.n;
       char *newline = strchr(root->range.str, '\n');
       if (newline) {
-        lim = (newline - root->range.str - 1);
+        lim = (newline - root->range.str);
         if (lim > root->range.n)
           lim = root->range.n;
       }

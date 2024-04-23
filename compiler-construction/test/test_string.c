@@ -78,7 +78,7 @@ void test_vec_write(void) {
 }
 
 void test_push_string(void) {
-  string s = {0};
+  string_t s = {0};
   char *something = "something";
   mk_string(&s, 1);
   push_str(&s, strlen(something), something);

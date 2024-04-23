@@ -4,7 +4,6 @@
 #include "logging.h"
 #include "macros.h"
 #include "text.h"
-#include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,6 +11,13 @@
 
 #define tok(key, pattern) [key] = {#key, \
                                    (char *)pattern}
+#define assert(expr)                                                                 \
+  if (expr)                                                                          \
+    ;                                                                                \
+  else {                                                                             \
+    error("%s %s:%d:\nAssertion `%s' failed.", __func__, __FILE__, __LINE__, #expr); \
+    abort();                                                                         \
+  }
 
 static void print_tokens(tokens tok) {
   v_foreach(struct token_t *, t, tok.tokens_vec) {
@@ -298,20 +304,36 @@ void json_parser(void) {
       die("Failed to parse %.*s as object", p.s->ctx->n, p.s->ctx->src);
     }
     assert(a->node_id == object);
-    assert(a->next == NULL);
-    assert(slicecmp(a->range, mk_slice(" 1 ")) == 0);
+    assert(!a->next);
+    assert(0 == slicecmp(a->range, mk_slice(" 1 ")));
     AST *chld = a->first_child;
     assert(chld != NULL);
     assert(chld->node_id == number);
-    assert(slicecmp(chld->range, mk_slice("1")) == 0);
+    assert(0 == slicecmp(chld->range, mk_slice("1")));
     destroy_ast(a);
   }
 
   {
     AST *a;
-    if (parse(&p, &mk_ctx("\"a\":\"b\""), &a, keyvalue)) {
+    if (!parse(&p, &mk_ctx("\"a\":\"b\""), &a, keyvalue)) {
       die("Failed to parse %.*s as keyvalue", p.s->ctx->n, p.s->ctx->src);
     }
+    assert(a->node_id == keyvalue);
+    assert(!a->next);
+    assert(0 == slicecmp(a->range, mk_slice("\"a\":\"b\"")));
+    AST *chld = a->first_child;
+    assert(chld->node_id == string);
+    assert(chld->first_child == NULL);
+    chld = chld->next;
+    assert(chld->node_id == colon);
+    assert(chld->first_child == NULL);
+    chld = chld->next;
+    assert(chld->node_id == object);
+    assert(chld->next == NULL);
+    chld = chld->first_child;
+    assert(chld->node_id == string);
+    assert(chld->first_child == NULL);
+    assert(0 == slicecmp(chld->range, mk_slice("\"b\"")));
     destroy_ast(a);
   }
   destroy_parser(&p);
@@ -488,6 +510,44 @@ void test_oberon2(void) {
   destroy_parser(&p);
 }
 
+void test_calculator(void) {
+  token_def tokens[] = {
+      {"number", "-?\\d+"}
+  };
+  static const char calc_grammar[] = {
+      "expression = term {('+' | '-' ) term } .\n"
+      "term       = factor {('*' | '/') factor } .\n"
+      "factor     = ( digits | '(' expression ')' ) .\n"
+      "digits     = number .\n"
+      ""};
+  scanner s = {0};
+  mk_scanner(&s, LENGTH(tokens), tokens);
+  parser_t p = mk_parser_raw(calc_grammar, &s);
+  struct testcase testcases[] = {
+      {"1+2*3",   true},
+      {"(1+2)*3", true},
+  };
+
+  if (!is_ll1(&p)) {
+    die("Grammar is not ll1.");
+  }
+
+  test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
+  destroy_parser(&p);
+}
+
+int main(void) {
+  setup_crash_stacktrace_logger();
+  test_parser();
+  test_calculator();
+  test_lookahead();
+  json_parser();
+  test_oberon2();
+  test_ll1();
+  // test_oberon();
+  return 0;
+}
+
 // TODO: update this test.
 // 1. Define tokens for use in a parser
 // void test_oberon(void) {
@@ -544,41 +604,3 @@ void test_oberon2(void) {
 //
 //   destroy_parser(&p);
 // }
-
-void test_calculator(void) {
-  token_def tokens[] = {
-      {"number", "-?\\d+"}
-  };
-  static const char calc_grammar[] = {
-      "expression = term {('+' | '-' ) term } .\n"
-      "term       = factor {('*' | '/') factor } .\n"
-      "factor     = ( digits | '(' expression ')' ) .\n"
-      "digits     = number .\n"
-      ""};
-  scanner s = {0};
-  mk_scanner(&s, LENGTH(tokens), tokens);
-  parser_t p = mk_parser_raw(calc_grammar, &s);
-  struct testcase testcases[] = {
-      {"1+2*3",   true},
-      {"(1+2)*3", true},
-  };
-
-  if (!is_ll1(&p)) {
-    die("Grammar is not ll1.");
-  }
-
-  test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
-  destroy_parser(&p);
-}
-
-int main(void) {
-  setup_crash_stacktrace_logger();
-  test_parser();
-  test_calculator();
-  test_lookahead();
-  json_parser();
-  test_oberon2();
-  test_ll1();
-  // test_oberon();
-  return 0;
-}
