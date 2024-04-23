@@ -13,7 +13,7 @@ int main(int argc, char *argv[argc + 1]) {
     }
     regex_match m = regex_find(r, test);
     if (m.match) {
-      printf("%.*s\n", (int)m.length, test + m.start);
+      printf("%.*s\n", m.matched.n, m.matched.str);
     } else {
       fprintf(stderr, "No match.\n");
     }

@@ -5,8 +5,6 @@
 #include "macros.h"
 #include "text.h"
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #define tok(key, pattern) [key] = {#key, \
                                    (char *)pattern}
@@ -45,9 +43,8 @@ const struct rule_def rules[] = {
 };
 
 void visit(AST *a, int indent) {
-#define print(a)                            \
-  printf("%.*s", a->range.n, a->range.str); \
-  fflush(stdout);
+#define print(a) \
+  printf("%.*s", a->range.n, a->range.str);
 
   for (; a; a = a->next) {
     enum json_tokens node = a->node_id;
@@ -91,10 +88,12 @@ void _format(parse_context *ctx) {
   mk_scanner(&s, LENGTH(json_tokens), json_tokens);
   parser_t p = mk_parser(LENGTH(rules), rules, &s);
   AST *a;
-  if (parse(&p, ctx, &a, object))
-    // print_ast(a, NULL);
+  if (parse(&p, ctx, &a, object)) {
     visit(a, 0);
-  destroy_ast(a);
+    destroy_ast(a);
+  } else {
+    error_ctx(s.ctx);
+  }
   destroy_parser(&p);
   destroy_scanner(&s);
 }

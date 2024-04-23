@@ -257,9 +257,10 @@ int vec_write(vec *v, const char *fmt, ...) {
 void vec_fcopy(vec *v, FILE *f) {
   int read;
   char buf[4096];
-  while ((read = fread(buf, 1, sizeof(buf), f)) > 0) {
+  do {
+    read = fread(buf, 1, sizeof(buf), f);
     vec_push_array(v, read, buf);
-  }
+  } while (read == 4096);
 }
 
 char *string_slice_clone(string_slice s) {
