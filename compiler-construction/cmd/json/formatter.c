@@ -81,6 +81,7 @@ void visit(AST *a, int indent) {
     if (a->first_child)
       visit(a->first_child, indent);
   }
+  #undef print
 }
 
 void _format(parse_context *ctx) {

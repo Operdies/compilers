@@ -7,6 +7,33 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef char MAP[UINT8_MAX];
+typedef struct {
+  MAP set;
+  production_t *prod;
+} record;
+
+typedef struct {
+  production_t *A;
+  production_t *B;
+  char ch;
+  bool first;
+  production_t *owner;
+} conflict;
+
+static bool populate_first_expr(struct header_t *h, expression_t *e);
+static bool expression_optional(expression_t *expr);
+static bool factor_optional(factor_t *fac);
+static bool expression_optional(expression_t *expr);
+static bool populate_first_term(struct header_t *h, term_t *t);
+static bool populate_first_expr(struct header_t *h, expression_t *e);
+static bool symbol_at_end(symbol_t *start, int k);
+static void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, production_t *owner);
+static void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec *seen);
+static bool check_intersection(int n, record records[static n], conflict *c);
+static vec first_expr_helper(expression_t *expr);
+static bool get_conflicts(const header_t *h, conflict *c);
+
 position_t get_position(const char *source, string_slice place) {
   int line, column;
   line = column = 1;
@@ -42,16 +69,13 @@ terminal_list get_terminals(const parser_t *g) {
   }
   return t;
 }
+
 nonterminal_list get_nonterminals(const parser_t *g) {
   nonterminal_list t = {.nonterminals_vec = v_make(header_t)};
   v_foreach(production_t *, p, g->productions_vec)
       vec_push(&t.nonterminals_vec, p->header);
   return t;
 }
-
-static bool populate_first_expr(struct header_t *h, expression_t *e);
-
-bool expression_optional(expression_t *expr);
 
 bool factor_optional(factor_t *fac) {
   switch (fac->type) {
@@ -86,7 +110,7 @@ bool expression_optional(expression_t *expr) {
   return true;
 }
 
-static bool populate_first_term(struct header_t *h, term_t *t) {
+bool populate_first_term(struct header_t *h, term_t *t) {
   v_foreach(factor_t *, fac, t->factors_vec) {
     switch (fac->type) {
     case F_OPTIONAL:
@@ -126,7 +150,7 @@ static bool populate_first_term(struct header_t *h, term_t *t) {
   return true;
 }
 
-static bool populate_first_expr(struct header_t *h, expression_t *e) {
+bool populate_first_expr(struct header_t *h, expression_t *e) {
   bool all_optional = true;
   v_foreach(term_t *, t, e->terms_vec) {
     if (!populate_first_term(h, t))
@@ -251,6 +275,7 @@ const char *describe_symbol(symbol_t *s) {
   }
   return description;
 }
+
 void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, production_t *owner) {
   const int k = 1;
   // NOTE: we assume that alt loops are not possible.
@@ -324,7 +349,6 @@ void populate_follow(const parser_t *g) {
   vec_destroy(&seen);
 }
 
-typedef char MAP[UINT8_MAX];
 // populate a map of all the symbols that can be reached
 void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec *seen) {
   if (vec_contains(seen, follow))
@@ -346,19 +370,6 @@ void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec
   } break;
   }
 }
-
-typedef struct {
-  MAP set;
-  production_t *prod;
-} record;
-
-typedef struct {
-  production_t *A;
-  production_t *B;
-  char ch;
-  bool first;
-  production_t *owner;
-} conflict;
 
 vec populate_maps(production_t *owner, vec follows) {
   vec map = v_make(record);
@@ -423,7 +434,7 @@ bool get_conflicts(const header_t *h, conflict *c) {
     vec first_map = populate_maps(h->prod, h->first_vec);
     bool intersect = check_intersection(first_map.n, first_map.array, c);
     vec_destroy(&first_map);
-    if (intersect){
+    if (intersect) {
       c->first = true;
       return true;
     }
@@ -521,3 +532,131 @@ bool is_ll1(const parser_t *g) {
 
   return isll1;
 }
+
+/*
+ * Utilities for printing information about a grammar
+
+void print_sym(symbol_t *sym) {
+  const char *s = describe_symbol(sym);
+  info(s);
+}
+
+static void print_follow_set(vec *v, vec *seen, char map[UINT8_MAX]);
+static void print_tokens(tokens tok);
+static void print_map(char map[UINT8_MAX]);
+static void print_nonterminals(nonterminal_list ntl);
+static void print_terminals(terminal_list tl);
+static void print_first_sets(parser_t *g);
+static void print_follow_sets(parser_t *g);
+static void print_enumerated_graph(vec all);
+static void print_follow_set(vec *v, vec *seen, char map[UINT8_MAX]);
+
+void print_map(char map[UINT8_MAX]) {
+  for (int sym = 0; sym < UINT8_MAX; sym++) {
+    if (map[sym]) {
+      if (isgraph(sym))
+        printf("%c ", sym);
+      else
+        printf("0x%x ", sym);
+    }
+  }
+}
+
+void print_tokens(tokens tok) {
+  v_foreach(struct token_t *, t, tok.tokens_vec) {
+    info("%3d Token '%.*s'\n%.*s'\n", idx_t, t->name.n, t->name.str, t->value.n, t->value.str);
+  }
+}
+void print_nonterminals(nonterminal_list ntl) {
+  vec buf = v_make(char);
+  v_foreach(header_t *, h, ntl.nonterminals_vec) {
+    production_t *p = h->prod;
+    vec_write(&buf, "%.*s, ", p->identifier.n, p->identifier.str);
+  }
+  info("Nonterminals: %.*s", buf.n, buf.array);
+  vec_destroy(&buf);
+}
+void print_terminals(terminal_list tl) {
+  vec buf = v_make(char);
+  for (int i = 0; i < LENGTH(tl.map); i++) {
+    if (tl.map[i]) {
+      char ch = (char)i;
+      if (isgraph(ch))
+        vec_write(&buf, "%c, ", ch);
+      else
+        vec_write(&buf, "%02x, ", (int)ch);
+    }
+  }
+  info("Terminals: %.*s", buf.n, buf.array);
+  vec_destroy(&buf);
+}
+void print_first_sets(parser_t *g) {
+  {
+    v_foreach(production_t *, p, g->productions_vec) {
+      header_t *h = p->header;
+      populate_first(h);
+    }
+  }
+  v_foreach(production_t *, p, g->productions_vec) {
+    header_t *h = p->header;
+    char *ident = string_slice_clone(p->identifier);
+    printf(" First(%22s) %2c  ", ident, '=');
+    vec seen = v_make(vec);
+    char map[UINT8_MAX] = {0};
+    print_follow_set(&h->first_vec, &seen, map);
+    vec_destroy(&seen);
+    print_map(map);
+    puts("");
+    free(ident);
+  }
+}
+void print_follow_sets(parser_t *g) {
+  populate_follow(g);
+  v_foreach(production_t *, p, g->productions_vec) {
+    header_t *h = p->header;
+    // vec follow = populate_maps(p, h->n_follow, h->follow);
+    char *ident = string_slice_clone(p->identifier);
+    printf("Follow(%22s) %2c  ", ident, '=');
+    vec seen = v_make(vec);
+    char map[UINT8_MAX] = {0};
+    print_follow_set(&h->follow_vec, &seen, map);
+    vec_destroy(&seen);
+    print_map(map);
+    puts("");
+    free(ident);
+    // vec_destroy(&follow);
+  }
+}
+void print_enumerated_graph(vec all) {
+  v_foreach(symbol_t *, sym, all) {
+    int idx = idx_sym;
+    printf("%2d) ", idx);
+    print_sym(sym);
+  }
+}
+
+void print_follow_set(vec *v, vec *seen, char map[UINT8_MAX]) {
+  if (vec_contains(seen, v))
+    return;
+  vec_push(seen, v);
+  v_foreach(struct follow_t *, sym, (*v)) {
+    switch (sym->type) {
+    case FOLLOW_SYMBOL: {
+      regex_first(sym->regex, map);
+      break;
+    }
+    case FOLLOW_FIRST:
+      // printf("First(%.*s) ", sym->prod->identifier.n, sym->prod->identifier.str);
+      print_follow_set(&sym->prod->header->first_vec, seen, map);
+      break;
+    case FOLLOW_FOLLOW:
+      // printf("Follow(%.*s) ", sym->prod->identifier.n, sym->prod->identifier.str);
+      print_follow_set(&sym->prod->header->follow_vec, seen, map);
+      break;
+    case FOLLOW_CHAR:
+      map[(int)sym->ch] = 1;
+      break;
+    }
+  }
+}
+ */

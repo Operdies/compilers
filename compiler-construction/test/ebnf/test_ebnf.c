@@ -1,29 +1,18 @@
 // link ebnf/ebnf.o ebnf/analysis.o scanner/scanner.o
 // link regex.o arena.o collections.o logging.o
+#include "../unittest.h"
 #include "ebnf/ebnf.h"
 #include "logging.h"
 #include "macros.h"
 #include "text.h"
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define tok(key, pattern) [key] = {#key, \
-                                   (char *)pattern}
-#define assert(expr)                                                                 \
-  if (expr)                                                                          \
-    ;                                                                                \
-  else {                                                                             \
-    error("%s %s:%d:\nAssertion `%s' failed.", __func__, __FILE__, __LINE__, #expr); \
-    abort();                                                                         \
-  }
-
-static void print_tokens(tokens tok) {
-  v_foreach(struct token_t *, t, tok.tokens_vec) {
-    info("%3d Token '%.*s'\n%.*s'\n", idx_t, t->name.n, t->name.str, t->value.n, t->value.str);
-  }
-}
+struct testcase {
+  char *src;
+  bool expected;
+};
 
 void test_lookahead(void) {
   struct testcase {
@@ -60,22 +49,6 @@ void test_lookahead(void) {
     destroy_ast(a);
     destroy_parser(&p);
   }
-}
-
-struct testcase {
-  char *src;
-  bool expected;
-};
-
-void print_scanner(scanner *s) {
-  s->ctx->c = 0;
-  int tok;
-  string_slice slc;
-  while ((tok = next_token(s, NULL, &slc)) >= 0) {
-    token *t = vec_nth(&s->tokens.slice, tok);
-    debug("Token: %.*s %.*s", t->name.n, t->name.str, slc.n, slc.str);
-  }
-  s->ctx->c = 0;
 }
 
 void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum loglevel l, int start_rule) {
@@ -126,118 +99,6 @@ void test_parser(void) {
   destroy_parser(&p);
 }
 
-static void print_nonterminals(nonterminal_list ntl) {
-  vec buf = v_make(char);
-  v_foreach(header_t *, h, ntl.nonterminals_vec) {
-    production_t *p = h->prod;
-    vec_write(&buf, "%.*s, ", p->identifier.n, p->identifier.str);
-  }
-  info("Nonterminals: %.*s", buf.n, buf.array);
-  vec_destroy(&buf);
-}
-
-static void print_terminals(terminal_list tl) {
-  vec buf = v_make(char);
-  for (int i = 0; i < LENGTH(tl.map); i++) {
-    if (tl.map[i]) {
-      char ch = (char)i;
-      if (isgraph(ch))
-        vec_write(&buf, "%c, ", ch);
-      else
-        vec_write(&buf, "%02x, ", (int)ch);
-    }
-  }
-  info("Terminals: %.*s", buf.n, buf.array);
-  vec_destroy(&buf);
-}
-
-void print_sym(symbol_t *sym) {
-  const char *s = describe_symbol(sym);
-  info(s);
-}
-
-void print_map(char map[UINT8_MAX]) {
-  for (int sym = 0; sym < UINT8_MAX; sym++) {
-    if (map[sym]) {
-      if (isgraph(sym))
-        printf("%c ", sym);
-      else
-        printf("0x%x ", sym);
-    }
-  }
-}
-static void print_follow_set(vec *v, vec *seen, char map[UINT8_MAX]) {
-  if (vec_contains(seen, v))
-    return;
-  vec_push(seen, v);
-  v_foreach(struct follow_t *, sym, (*v)) {
-    switch (sym->type) {
-    case FOLLOW_SYMBOL: {
-      regex_first(sym->regex, map);
-      break;
-    }
-    case FOLLOW_FIRST:
-      // printf("First(%.*s) ", sym->prod->identifier.n, sym->prod->identifier.str);
-      print_follow_set(&sym->prod->header->first_vec, seen, map);
-      break;
-    case FOLLOW_FOLLOW:
-      // printf("Follow(%.*s) ", sym->prod->identifier.n, sym->prod->identifier.str);
-      print_follow_set(&sym->prod->header->follow_vec, seen, map);
-      break;
-    case FOLLOW_CHAR:
-      map[(int)sym->ch] = 1;
-      break;
-    }
-  }
-}
-
-static void print_first_sets(parser_t *g) {
-  {
-    v_foreach(production_t *, p, g->productions_vec) {
-      header_t *h = p->header;
-      populate_first(h);
-    }
-  }
-  v_foreach(production_t *, p, g->productions_vec) {
-    header_t *h = p->header;
-    char *ident = string_slice_clone(p->identifier);
-    printf(" First(%22s) %2c  ", ident, '=');
-    vec seen = v_make(vec);
-    char map[UINT8_MAX] = {0};
-    print_follow_set(&h->first_vec, &seen, map);
-    vec_destroy(&seen);
-    print_map(map);
-    puts("");
-    free(ident);
-  }
-}
-
-static void print_follow_sets(parser_t *g) {
-  populate_follow(g);
-  v_foreach(production_t *, p, g->productions_vec) {
-    header_t *h = p->header;
-    // vec follow = populate_maps(p, h->n_follow, h->follow);
-    char *ident = string_slice_clone(p->identifier);
-    printf("Follow(%22s) %2c  ", ident, '=');
-    vec seen = v_make(vec);
-    char map[UINT8_MAX] = {0};
-    print_follow_set(&h->follow_vec, &seen, map);
-    vec_destroy(&seen);
-    print_map(map);
-    puts("");
-    free(ident);
-    // vec_destroy(&follow);
-  }
-}
-
-static void print_enumerated_graph(vec all) {
-  v_foreach(symbol_t *, sym, all) {
-    int idx = idx_sym;
-    printf("%2d) ", idx);
-    print_sym(sym);
-  }
-}
-
 void json_parser(void) {
   enum json_tokens {
     string,
@@ -254,6 +115,9 @@ void json_parser(void) {
     keyvalues,
     keyvalue
   };
+
+#define tok(key, pattern) [key] = { #key, \
+                                    (char *)pattern }
 
   static token_def json_tokens[] = {
       tok(string, string_regex),
@@ -272,6 +136,7 @@ void json_parser(void) {
       tok(keyvalues, "[ keyvalue { comma keyvalue } ]"),
       tok(keyvalue, "string colon object"),
   };
+#undef tok
 
   scanner s = {0};
   mk_scanner(&s, LENGTH(json_tokens), json_tokens);
@@ -303,13 +168,13 @@ void json_parser(void) {
     if (!parse(&p, &mk_ctx(" 1 "), &a, object)) {
       die("Failed to parse %.*s as object", p.s->ctx->n, p.s->ctx->src);
     }
-    assert(a->node_id == object);
-    assert(!a->next);
-    assert(0 == slicecmp(a->range, mk_slice(" 1 ")));
+    assert2(a->node_id == object);
+    assert2(!a->next);
+    assert2(0 == slicecmp(a->range, mk_slice(" 1 ")));
     AST *chld = a->first_child;
-    assert(chld != NULL);
-    assert(chld->node_id == number);
-    assert(0 == slicecmp(chld->range, mk_slice("1")));
+    assert2(chld != NULL);
+    assert2(chld->node_id == number);
+    assert2(0 == slicecmp(chld->range, mk_slice("1")));
     destroy_ast(a);
   }
 
@@ -318,22 +183,22 @@ void json_parser(void) {
     if (!parse(&p, &mk_ctx("\"a\":\"b\""), &a, keyvalue)) {
       die("Failed to parse %.*s as keyvalue", p.s->ctx->n, p.s->ctx->src);
     }
-    assert(a->node_id == keyvalue);
-    assert(!a->next);
-    assert(0 == slicecmp(a->range, mk_slice("\"a\":\"b\"")));
+    assert2(a->node_id == keyvalue);
+    assert2(!a->next);
+    assert2(0 == slicecmp(a->range, mk_slice("\"a\":\"b\"")));
     AST *chld = a->first_child;
-    assert(chld->node_id == string);
-    assert(chld->first_child == NULL);
+    assert2(chld->node_id == string);
+    assert2(chld->first_child == NULL);
     chld = chld->next;
-    assert(chld->node_id == colon);
-    assert(chld->first_child == NULL);
+    assert2(chld->node_id == colon);
+    assert2(chld->first_child == NULL);
     chld = chld->next;
-    assert(chld->node_id == object);
-    assert(chld->next == NULL);
+    assert2(chld->node_id == object);
+    assert2(chld->next == NULL);
     chld = chld->first_child;
-    assert(chld->node_id == string);
-    assert(chld->first_child == NULL);
-    assert(0 == slicecmp(chld->range, mk_slice("\"b\"")));
+    assert2(chld->node_id == string);
+    assert2(chld->first_child == NULL);
+    assert2(0 == slicecmp(chld->range, mk_slice("\"b\"")));
     destroy_ast(a);
   }
   destroy_parser(&p);
@@ -504,8 +369,6 @@ void test_oberon2(void) {
 
   scanner s = {0};
   parser_t p = mk_parser_raw(grammar, &s);
-  // print_first_sets(&p);
-  // print_follow_sets(&p);
   test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
   destroy_parser(&p);
 }
@@ -545,6 +408,7 @@ int main(void) {
   test_oberon2();
   test_ll1();
   // test_oberon();
+  assert2(log_severity() <= INFO);
   return 0;
 }
 
@@ -594,8 +458,6 @@ int main(void) {
 //   if (!is_ll1(&p)) {
 //     error("Expected ll1: \n%s", grammar);
 //   }
-//   // print_first_sets(&p);
-//   // print_follow_sets(&p);
 //
 //   tokens t = {0};
 //   // parse(&p, "MODULE a; END a.", &t);

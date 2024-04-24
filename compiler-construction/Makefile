@@ -30,7 +30,7 @@ TEST_RESULT = $(TEST_OUT:=.log)
 MMD_FILES = $(call rwildcard,$(BIN_DIR),*.d)
 DIRECTORIES = $(call uniq,$(dir $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)))
 
-CFLAGS += -std=c1x -pedantic -Wall -Wextra -Wno-unused-function -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -I$(INCLUDE_DIR) -rdynamic -O0 -g -MMD -MF $@.d
+CFLAGS += -std=c1x -pedantic -Wall -Wextra -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -I$(INCLUDE_DIR) -rdynamic -O0 -g -MMD -MF $@.d
 
 .PHONY: all
 all: $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
@@ -49,10 +49,11 @@ $(CMD_OUT_DIR)%: $(CMD_DIR)%.c | $(DIRECTORIES)
 
 .PHONY: clean
 clean:
-	rm -f $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT) $(MMD_FILES) $(TEST_RESULT) $(COMPILE_COMMANDS)
+	rm -f $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT) $(MMD_FILES) $(TEST_RESULT) $(COMPILE_COMMANDS) $(TEST_RESULT:=.error)
+	find out -type d -empty -delete
 
 $(COMPILE_COMMANDS): Makefile $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
-	bear -- make all -B
+	bear -- make all -j -B
 
 # Run all tests
 .PHONY: test
@@ -64,9 +65,11 @@ test: $(TEST_OUT)
 
 # Run tests if input changed
 $(TEST_OUT_DIR)%.log: $(TEST_OUT_DIR)%
-	@(set -o pipefail;         \
-		echo "====== $< ======"; \
-		./$< |& tee $@;          \
+	@(set -eo pipefail;           \
+		echo "====== $< ======";   \
+		./$< |& tee $@.error;      \
+		mv $@.error $@;            \
+		echo "====== PASS ======"; \
 		)
 
 # Run tests where input changed

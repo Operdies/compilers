@@ -132,15 +132,6 @@ position_t get_position(const char *source, string_slice place);
 void print_ast(AST *root, vec *parents);
 void destroy_ast(AST *root);
 
-/* 5.4 exercise:
- * 1. List of terminal symbols
- * 2. List of nonterminal symbols
- * 3. The sets of start and follow symbols for each nonterminal
- *
- * Determine whether a given grammar is LL(1)
- * If not, show the conflicting productions
- */
-
 typedef struct {
   char map[UINT8_MAX];
 } terminal_list;

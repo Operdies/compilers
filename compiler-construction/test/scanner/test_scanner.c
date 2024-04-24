@@ -1,5 +1,6 @@
 // link scanner/scanner.o
 // link regex.o arena.o collections.o logging.o
+#include "../unittest.h"
 #include "logging.h"
 #include "macros.h"
 #include "scanner/scanner.h"
@@ -96,4 +97,6 @@ void test_regex_scanner(void) {
 
 int main(void) {
   test_regex_scanner();
+  assert2(log_severity() <= INFO);
+  return 0;
 }

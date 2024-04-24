@@ -14,6 +14,7 @@
 #define RESET_COLOR "\033[0m"
 
 enum loglevel loglevel = DEBUG;
+enum loglevel most_severe_log = DEBUG;
 
 static const char *log_headers[] = {
     [WARN] = "\033[1;30;43m",
@@ -40,12 +41,13 @@ static const char *headers[] = {
 };
 
 static FILE *log = NULL;
-int set_loglevel(enum loglevel level) {
+enum loglevel set_loglevel(enum loglevel level) {
   int current = loglevel;
   loglevel = level;
   return current;
 }
-int get_loglevel(void) { return loglevel; }
+enum loglevel get_loglevel(void) { return loglevel; }
+enum loglevel log_severity(void) { return most_severe_log; }
 
 bool set_log_location(const char *filename) {
   if (log)
@@ -61,7 +63,7 @@ static bool add_colors(FILE *fp) {
 }
 static bool should_log(FILE *fp, enum loglevel level) {
   if (fp->_fileno == stdout->_fileno || fp->_fileno == stderr->_fileno)
-    return loglevel >= level;
+    return loglevel <= level;
   return true;
 }
 
@@ -100,6 +102,8 @@ void colored_log(FILE *fp, enum loglevel level, const char *fmt, va_list ap) {
       fprintf(fp, RESET_COLOR);
 
     fflush(fp);
+    if (level > most_severe_log)
+      most_severe_log = level;
   }
 }
 

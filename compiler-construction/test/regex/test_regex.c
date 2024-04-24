@@ -1,4 +1,5 @@
 // link: regex.o arena.o collections.o logging.o
+#include "../unittest.h"
 #include "logging.h"
 #include "regex.h"
 #include <stdio.h>
@@ -140,5 +141,6 @@ int main(void) {
   regex *r = mk_regex(invalid.pattern);
   if (r != NULL)
     die("Parsing %s succeeded. Should fail.");
+  assert2(log_severity() <= INFO);
   return status;
 }

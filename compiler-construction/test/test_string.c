@@ -2,9 +2,7 @@
 #include "collections.h"
 #include "logging.h"
 #include "macros.h"
-#include <assert.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include "unittest.h"
 #include <string.h>
 #include <unistd.h>
 
@@ -98,9 +96,9 @@ void test_slice_cmp(void) {
   s2.n -= 1;
 
   s2.n -= 1;
-  assert(slicecmp(s1, s2) != 0);
+  assert2(slicecmp(s1, s2) != 0);
   s2.n += 1;
-  assert(slicecmp(s1, s2) == 0);
+  assert2(slicecmp(s1, s2) == 0);
 }
 
 void test_vec_insert(void) {
@@ -138,5 +136,6 @@ int main(void) {
   test_vec();
   test_vec_insert();
   test_slice_cmp();
+  assert2(log_severity() <= INFO);
   return 0;
 }

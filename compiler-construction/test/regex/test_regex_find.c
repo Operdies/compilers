@@ -1,4 +1,5 @@
 // link: regex.o arena.o collections.o logging.o
+#include "../unittest.h"
 #include "macros.h"
 #include "regex.h"
 #include "text.h"
@@ -47,5 +48,6 @@ int main(void) {
              m.matched.n, m.matched.str, (int)t->length, t->string + t->start);
     }
   }
+  assert2(log_severity() <= INFO);
   return 0;
 }

@@ -1,4 +1,6 @@
 // link: regex.o arena.o collections.o logging.o
+#include "../unittest.h"
+#include "logging.h"
 #include "macros.h"
 #include "regex.h"
 
@@ -36,5 +38,6 @@ int main(void) {
       fail = true;
     }
   }
+  assert2(log_severity() <= INFO);
   return fail ? 1 : 0;
 }
