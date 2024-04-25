@@ -179,7 +179,7 @@ void die(const char *fmt, ...) {
   colored_log(stderr, FATAL, fmt, ap);
   va_end(ap);
 
-  if (fmt[0] && fmt[strlen(fmt) - 1] == ':' && errno != 0) {
+  if (fmt[0] && fmt[strlen(fmt) - 1] == ':') {
     colored_log(stderr, FATAL, strerror(errno), NULL);
   }
 
