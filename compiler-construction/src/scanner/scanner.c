@@ -82,4 +82,5 @@ void destroy_scanner(scanner *s) {
   v_foreach(token *, t, s->tokens) {
     destroy_regex(t->pattern);
   }
+  vec_destroy(&s->tokens);
 }

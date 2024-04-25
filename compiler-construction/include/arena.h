@@ -7,7 +7,6 @@ struct arena;
 typedef struct arena {
   size_t size;        // Number of mapped bytes.
   size_t cursor;      // Index to end of buffer.
-  size_t committed;   // Number of mapped bytes that are allocated. Increased as needed in arena_alloc
   struct arena *next; // The next arena in a linked list.
   struct arena *tail; // The tail of the linked list of arenas. This is only guaranteed to be correct on the head of the list.
   char buffer[];      // the start of user allocated data

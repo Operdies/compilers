@@ -181,7 +181,7 @@ bool factor(parser_t *g, factor_t *f) {
   case '"':
   case '\'':
     f->type = F_STRING;
-    string_slice string;
+    string_slice string = {0};
     string.str = POINT + 1;
 
     if (!match(g, STRING)) {

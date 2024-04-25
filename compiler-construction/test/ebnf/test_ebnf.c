@@ -4,6 +4,7 @@
 #include "ebnf/ebnf.h"
 #include "logging.h"
 #include "macros.h"
+#include "scanner/scanner.h"
 #include "text.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -97,6 +98,7 @@ void test_parser(void) {
   parser_t p = mk_parser_raw(grammar, &s);
   test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
   destroy_parser(&p);
+  destroy_scanner(&s);
 }
 
 void json_parser(void) {
@@ -323,6 +325,7 @@ void test_ll1(void) {
       // test_ll12(false,
       //           "A = B 'x' .\n"
       //           "B = 'a' 'x+' .\n");
+      destroy_scanner(&s);
     }
   }
   {
@@ -397,6 +400,7 @@ void test_calculator(void) {
 
   test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
   destroy_parser(&p);
+  destroy_scanner(&s);
 }
 
 int main(void) {
