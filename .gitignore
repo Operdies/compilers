@@ -1,4 +1,3 @@
-compiler-construction/bin
-compiler/.cache/clangd/index
-compiler/out
-compiler/compile_commands.json
+.cache/clangd/index
+out
+compile_commands.json
