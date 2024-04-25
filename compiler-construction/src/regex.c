@@ -405,16 +405,25 @@ static void reset(dfa *d) {
 }
 
 void destroy_regex(regex *r) {
-  if (r)
-    destroy_arena(r->ctx.a);
+  (void)r;
+}
+
+static arena *regex_arena = NULL;
+static void destroy_regex_arena(void) {
+  destroy_arena(regex_arena);
 }
 
 regex *mk_regex_from_slice(string_slice slice) {
+  if (!regex_arena) {
+    regex_arena = mk_arena();
+    atexit(destroy_regex_arena);
+  }
+
   regex *r = NULL;
   if (slice.str == NULL)
     die("NULL string");
   if (slice.str) {
-    arena *a = mk_arena();
+    arena *a = regex_arena;
     char *pattern = arena_alloc(a, slice.n + 1, 1);
     strncpy(pattern, slice.str, slice.n);
     r = arena_alloc(a, 1, sizeof(regex));
@@ -520,4 +529,3 @@ void regex_first(regex *r, char map[static UINT8_MAX]) {
     _regex_first(r->start, map);
   }
 }
-
