@@ -20,9 +20,24 @@ int main(void) {
 
   size_t to_allocate = 1l << 16;
   int steps = 500;
+  char *middle = NULL;
   // Allocate some new crap
+  int sz = to_allocate / steps;
   for (int i = 0; i < steps; i++) {
-    arena_alloc(a, to_allocate / steps, 1);
+    char *arr = arena_alloc(a, sz, 1);
+
+    if (i == steps / 2) {
+      middle = arr;
+      for (int j = 0; j < sz; j++) {
+        arr[j] = (char)(j % 128);
+      }
+    }
+  }
+
+  assert2(middle);
+
+  for (int i = 0; i < sz; i++) {
+    assert2(middle[i] == i % 128);
   }
   // Verify the original allocation
   for (int i = 0; i < initial_alloc; i++) {
