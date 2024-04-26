@@ -3,10 +3,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-static long __pagesize = 0;
-#define PAGESIZE (__pagesize ? __pagesize : (__pagesize = sysconf(_SC_PAGESIZE)))
+// Arenas should be aligned to page boundaries
+#define PAGESIZE 4096 // (PAGESIZE ? PAGESIZE : (PAGESIZE = sysconf(_SC_PAGESIZE)))
 
 static arena *mk_arena_sized(size_t size) {
+  size += offsetof(arena, buffer);
+  size = size - (size % PAGESIZE) + PAGESIZE;
   arena *a;
   a = ecalloc(1, size);
   *a = (arena){.size = size, .cursor = 0};
@@ -34,10 +36,7 @@ void *arena_alloc(arena *head, size_t nmemb, size_t mem_size) {
   required = tail->cursor + size + offsetof(arena, buffer);
 
   if (required > tail->size) {
-    size_t sz = size + offsetof(arena, buffer);
-    // Create new arena aligned to the next pagesize boundary
-    size_t new_arena_size = sz - (sz % __pagesize) + __pagesize;
-    arena *new_tail = mk_arena_sized(new_arena_size);
+    arena *new_tail = mk_arena_sized(size);
     head->tail = tail->tail = new_tail;
     tail->next = new_tail;
 
