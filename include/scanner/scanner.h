@@ -28,6 +28,8 @@ typedef struct {
 
 int peek_token(scanner *s, const bool *valid, string_slice *content);
 int next_token(scanner *s, const bool *valid, string_slice *content);
+bool match_slice(scanner *s, string_slice slice, string_slice *content);
+bool match_token(scanner *s, int kind, string_slice *content);
 void tokenize(scanner *s, const char *body, vec *tokens);
 void add_token(scanner *s, const char *expression, const char *name);
 void mk_scanner(scanner *s, int n, token_def tokens[static n]);

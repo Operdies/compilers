@@ -11,6 +11,38 @@ int peek_token(scanner *s, const bool *valid, string_slice *content) {
   return token;
 }
 
+bool match_slice(scanner *s, string_slice slice, string_slice *content) {
+  string_slice compare = {.str = s->ctx->src + s->ctx->c, .n = slice.n};
+  if (s->ctx->n < s->ctx->c + compare.n) 
+    return false;
+
+  if (slicecmp(slice, compare) == 0) {
+    s->ctx->c += compare.n;
+    if (content)
+      *content = compare;
+    return true;
+  }
+
+  return false;
+}
+
+bool match_token(scanner *s, int kind, string_slice *content) {
+  while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
+    advance(s->ctx);
+  if (finished(s->ctx))
+    return false;
+
+  token *t = (token *)s->tokens.array + kind;
+
+  regex_match m = regex_matches(t->pattern, s->ctx);
+  if (m.match && content)
+    *content = m.matched;
+
+  while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
+    advance(s->ctx);
+  return m.match;
+}
+
 int next_token(scanner *s, const bool *valid, string_slice *content) {
   int tok = ERROR_TOKEN;
   while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')

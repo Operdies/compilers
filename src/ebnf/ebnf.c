@@ -644,51 +644,28 @@ void destroy_parser(parser_t *g) {
 }
 
 static bool _parse(header_t *hd, parser_t *g, AST **node) {
-  static token *current_token = NULL;
-  static string_slice current_slice = {0};
-  static bool *bmap = NULL;
-  bool do_free = false;
-  if (!bmap && g->s->tokens.n) {
-    do_free = true;
-    bmap = ecalloc(g->s->tokens.n, sizeof(bool));
-  }
-
-  symbol_t *x;
-  bool match;
   struct parse_frame {
     int source_cursor;
     int token_cursor;
     symbol_t *symbol;
   };
 
-  vec alt_stack = {.sz = sizeof(struct parse_frame)};
+  AST **insert_child;
+  int start;
+  string_slice name;
+  vec alt_stack;
+  symbol_t *x;
+  bool match;
 
-  x = hd->sym;
-  string_slice name = hd->prod->identifier;
+  alt_stack = v_make(struct parse_frame);
+  name = hd->prod->identifier;
   *node = mk_ast();
   (*node)->node_id = hd->prod->id;
-  AST **insert_child = &(*node)->first_child;
-  int start = current_token ? (current_slice.str - g->s->ctx->src) : g->s->ctx->c;
+  insert_child = &(*node)->first_child;
+  start = g->s->ctx->c;
 
+  x = hd->sym;
   while (x) {
-    if (!current_token) {
-      // TODO: compute the possible token set for this symbol
-      // and use it as input to next_token for contextual parsing
-      int tok = peek_token(g->s, NULL, &current_slice);
-      if (tok == ERROR_TOKEN) {
-        // This is fine. We can still match a literal string from the grammar.
-        // OPTIM: This is inefficient. If there are multiple options like 'a' | 'b' | id,
-        // we will check for tokens in each case (including any options from id)
-        // This is probably fine though, since literal options should not be super common,
-        // and with contextual parsing we only need to check a few different patterns
-      } else if (tok == EOF_TOKEN) {
-        // might also be fine ?
-        // debug("Unexpected EOF.");
-      } else {
-        current_token = vec_nth(&g->s->tokens.slice, tok);
-      }
-    }
-
     AST *next_child = NULL;
     struct parse_frame frame = {.source_cursor = g->s->ctx->c};
 
@@ -705,38 +682,26 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
         g->s->ctx->c = frame.source_cursor;
       }
       break;
-    case token_symbol:
-      match = x->token == current_token;
+    case token_symbol: {
+      string_slice content = {0};
+      match = match_token(g->s, x->token->id, &content);
       if (match) {
-        memset(bmap, 0, g->s->tokens.n * sizeof(bool));
-        bmap[current_token->id] = 1;
-        // Advance the token that was previously peeked.
-        next_token(g->s, bmap, NULL);
-
         next_child = mk_ast();
         next_child->name = x->token->name;
         next_child->node_id = x->token->id;
-        next_child->range = current_slice;
-        current_token = NULL;
+        next_child->range = content;
       }
-      break;
-    case string_symbol:
-      if (current_token) {
-        die("This is not good");
-      }
-      // TODO: this fails because the scanner context was progressed by call to next_token()
-      // Ideally, we should eliminate all manual modifications of the scanner...
-      // Update: Maybe it's fine since a conflict should have been reported by the ll1 check?
-      // In this case the token should be null
-      match = strncmp(x->string.str, g->s->ctx->src + g->s->ctx->c, x->string.n) == 0;
+    } break;
+    case string_symbol: {
+      string_slice content = {0};
+      match = match_slice(g->s, x->string, &content);
       if (match) {
         next_child = mk_ast();
         next_child->node_id = -1;
         next_child->name = x->string;
         next_child->range = (string_slice){.n = x->string.n, .str = g->s->ctx->src + g->s->ctx->c};
-        g->s->ctx->c += x->string.n;
       }
-      break;
+    } break;
     }
 
     if (match && x->type != empty_symbol) {
@@ -783,10 +748,6 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
     *node = NULL;
   }
   vec_destroy(&alt_stack);
-  if (do_free) {
-    free(bmap);
-    bmap = NULL;
-  }
   return match;
 }
 
