@@ -14,10 +14,10 @@ enum json_tokens {
   boolean,
   comma,
   colon,
-  lbrace,
-  rbrace,
-  lbracket,
-  rbracket,
+  lsqbrk,
+  rsqbrk,
+  lcbrk,
+  rcbrk,
   object,
   list,
   keyvalues,
@@ -30,13 +30,13 @@ static token_def json_tokens[] = {
     tok(boolean, "true|false"),
     tok(comma, ","),
     tok(colon, ":"),
-    tok(lbrace, "\\["),
-    tok(rbrace, "\\]"),
-    tok(lbracket, "{"),
-    tok(rbracket, "}"),
+    tok(lsqbrk, "\\["),
+    tok(rsqbrk, "\\]"),
+    tok(lcbrk, "{"),
+    tok(rcbrk, "}"),
 };
 const struct rule_def rules[] = {
-    tok(object, "( lbracket keyvalues rbracket | lbrace list rbrace | number | string | boolean )"),
+    tok(object, "( lcbrk keyvalues rcbrk | lsqbrk list rsqbrk | number | string | boolean )"),
     tok(list, "[ object { comma object } ] "),
     tok(keyvalues, "[ keyvalue { comma keyvalue } ]"),
     tok(keyvalue, "string colon object"),
@@ -60,14 +60,14 @@ void visit(AST *a, int indent) {
       else if (node == comma)
         printf("\n%*s", indent, " ");
       break;
-    case lbrace:
-    case lbracket:
+    case lsqbrk:
+    case lcbrk:
       indent += 2;
       print(a);
       printf("\n%*s", indent, " ");
       break;
-    case rbrace:
-    case rbracket:
+    case rsqbrk:
+    case rcbrk:
       indent -= 2;
       printf("\n%*s", indent, "");
       print(a);

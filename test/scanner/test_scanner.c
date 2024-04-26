@@ -35,10 +35,10 @@ void test_regex_scanner(void) {
       {"complement",    "~"                         },
       {"lpar",          "\\("                       },
       {"rpar",          "\\)"                       },
-      {"lbrace",        "\\["                       },
-      {"rbrace",        "\\]"                       },
-      {"lbracket",      "{"                         },
-      {"rbracket",      "}"                         },
+      {"lsqbrk",        "\\["                       },
+      {"rsqbrk",        "\\]"                       },
+      {"lcbrk",      "{"                         },
+      {"rcbrk",      "}"                         },
       {"identifier",    "[a-zA-Z_][a-zA-Z_0-9]*"    },
   };
 
