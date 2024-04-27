@@ -13,7 +13,7 @@ int peek_token(scanner *s, const bool *valid, string_slice *content) {
 
 bool match_slice(scanner *s, string_slice slice, string_slice *content) {
   string_slice compare = {.str = s->ctx->src + s->ctx->c, .n = slice.n};
-  if (s->ctx->n < s->ctx->c + compare.n) 
+  if (s->ctx->n < s->ctx->c + compare.n)
     return false;
 
   if (slicecmp(slice, compare) == 0) {
@@ -98,17 +98,21 @@ void tokenize(scanner *s, const char *body, vec *tokens) {
     die("No match");
 }
 
-void mk_scanner(scanner *s, int n, token_def tokens[static n]) {
-  *s = (scanner){0};
-  s->tokens.sz = sizeof(token);
-  for (int i = 0; i < n; i++) {
-    token_def *t = &tokens[i];
-    regex *r = mk_regex(t->pattern);
-    if (r == NULL)
-      die("Failed to parse regex from %s", t->pattern);
-    token n = {.pattern = r, .name = mk_slice(t->name), .id = i};
-    vec_push(&s->tokens, &n);
+scanner mk_scanner(const scanner_tokens tokens) {
+  scanner s = {0};
+  s.tokens.sz = sizeof(token);
+  for (int i = 0; i < tokens.n; i++) {
+    const token_def *t = &tokens.tokens[i];
+    token n = {0};
+    if (t->pattern) {
+      regex *r = mk_regex(t->pattern);
+      if (r == NULL)
+        die("Failed to parse regex from %s", t->pattern);
+      n = (token){.pattern = r, .name = mk_slice(t->name), .id = i};
+    }
+    vec_push(&s.tokens, &n);
   }
+  return s;
 }
 void destroy_scanner(scanner *s) {
   v_foreach(token *, t, s->tokens) {

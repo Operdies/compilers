@@ -26,13 +26,19 @@ typedef struct {
   parse_context *ctx;
 } scanner;
 
+typedef struct {
+  int n;
+  const token_def *tokens;
+} scanner_tokens;
+#define mk_tokens(t) (scanner_tokens) { .n = LENGTH(t), .tokens = t }
+
 int peek_token(scanner *s, const bool *valid, string_slice *content);
 int next_token(scanner *s, const bool *valid, string_slice *content);
 bool match_slice(scanner *s, string_slice slice, string_slice *content);
 bool match_token(scanner *s, int kind, string_slice *content);
 void tokenize(scanner *s, const char *body, vec *tokens);
 void add_token(scanner *s, const char *expression, const char *name);
-void mk_scanner(scanner *s, int n, token_def tokens[static n]);
+scanner mk_scanner(const scanner_tokens tokens);
 void rewind_scanner(scanner *s, string_slice point);
 void destroy_scanner(scanner *s);
 

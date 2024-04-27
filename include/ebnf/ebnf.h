@@ -119,12 +119,19 @@ struct AST {
   AST *first_child;
 };
 
-struct rule_def {
-  char *id;
-  char *rule;
-};
+typedef struct {
+  const char *id;
+  const char *rule;
+} rule_def;
 
-parser_t mk_parser(int n, const struct rule_def rules[static n], scanner *s);
+typedef struct {
+  int n;
+  const rule_def *rules;
+} grammar_rules;
+
+#define mk_rules(r) (grammar_rules) { .n = LENGTH(r), .rules = r }
+
+parser_t mk_parser(grammar_rules rules, scanner_tokens tokens);
 parser_t mk_parser_raw(const char *grammar, scanner *s);
 void destroy_parser(parser_t *g);
 bool parse(parser_t *g, parse_context *ctx, AST **root, int start);

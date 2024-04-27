@@ -6,8 +6,7 @@
 #include "text.h"
 #include <stdio.h>
 
-#define tok(key, pattern) [key] = {#key, \
-                                   (char *)pattern}
+#define tok(key, pattern) [key] = {#key, (char *)pattern}
 enum json_tokens {
   string,
   number,
@@ -35,16 +34,16 @@ static token_def json_tokens[] = {
     tok(lcbrk, "{"),
     tok(rcbrk, "}"),
 };
-const struct rule_def rules[] = {
-    tok(object, "( lcbrk keyvalues rcbrk | lsqbrk list rsqbrk | number | string | boolean )"),
+const rule_def rules[] = {
+    tok(object, "( lcbrk keyvalues rcbrk | lsqbrk list rsqbrk | number | "
+                "string | boolean )"),
     tok(list, "[ object { comma object } ] "),
     tok(keyvalues, "[ keyvalue { comma keyvalue } ]"),
     tok(keyvalue, "string colon object"),
 };
 
 void visit(AST *a, int indent) {
-#define print(a) \
-  printf("%.*s", a->range.n, a->range.str);
+#define print(a) printf("%.*s", a->range.n, a->range.str);
 
   for (; a; a = a->next) {
     enum json_tokens node = a->node_id;
@@ -81,22 +80,19 @@ void visit(AST *a, int indent) {
     if (a->first_child)
       visit(a->first_child, indent);
   }
-  #undef print
+#undef print
 }
 
 void _format(parse_context *ctx) {
-  scanner s = {0};
-  mk_scanner(&s, LENGTH(json_tokens), json_tokens);
-  parser_t p = mk_parser(LENGTH(rules), rules, &s);
+  parser_t p = mk_parser(mk_rules(rules), mk_tokens(json_tokens));
   AST *a;
   if (parse(&p, ctx, &a, object)) {
     visit(a, 0);
     destroy_ast(a);
   } else {
-    error_ctx(s.ctx);
+    error_ctx(p.s->ctx);
   }
   destroy_parser(&p);
-  destroy_scanner(&s);
 }
 
 void format(FILE *f) {

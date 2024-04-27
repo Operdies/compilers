@@ -37,16 +37,15 @@ void test_regex_scanner(void) {
       {"rpar",          "\\)"                       },
       {"lsqbrk",        "\\["                       },
       {"rsqbrk",        "\\]"                       },
-      {"lcbrk",      "{"                         },
-      {"rcbrk",      "}"                         },
+      {"lcbrk",         "{"                         },
+      {"rcbrk",         "}"                         },
       {"identifier",    "[a-zA-Z_][a-zA-Z_0-9]*"    },
   };
 
   static char program[] = {
       "303* (404+2) ",
   };
-  scanner s = {0};
-  mk_scanner(&s, LENGTH(token_definition), token_definition);
+  scanner s = mk_scanner(mk_tokens(token_definition));
   s.ctx = &mk_ctx(program);
   bool valid[LENGTH(token_definition)] = {0};
   if (next_token(&s, valid, NULL) != ERROR_TOKEN)

@@ -568,10 +568,11 @@ static bool build_parse_table(parser_t *g) {
   return true;
 }
 
-static void init_parser(parser_t *g, scanner *s) {
+static void init_parser(parser_t *g, scanner s) {
   *g = (parser_t){0};
   g->a = mk_arena();
-  g->s = s;
+  g->s = arena_alloc(g->a, 1, sizeof(scanner));
+  *g->s = s;
   if (!regexes[0]) {
     for (int i = 0; i < LAST_TERMINAL; i++) {
       string_slice s = {.n = strlen(patterns[i]), .str = patterns[i]};
@@ -590,13 +591,14 @@ static bool finalize_parser(parser_t *g) {
   return build_parse_table(g);
 }
 
-parser_t mk_parser(int n, const struct rule_def rules[static n], scanner *s) {
+parser_t mk_parser(grammar_rules rules, scanner_tokens tokens) {
+  scanner s = mk_scanner(tokens);
   parser_t g = {0};
   init_parser(&g, s);
   g.productions_vec = v_make(production_t);
 
-  for (int i = 0; i < n; i++) {
-    struct rule_def r = rules[i];
+  for (int i = 0; i < rules.n; i++) {
+    rule_def r = rules.rules[i];
     production_t p = {0};
     // Allow skipping productions.
     // This is useful if rules are backed by an enum
@@ -619,7 +621,7 @@ parser_t mk_parser_raw(const char *text, scanner *s) {
   parser_t g = {0};
   if (!text)
     return g;
-  init_parser(&g, s);
+  init_parser(&g, *s);
 
   g.ctx = mk_ctx(text);
   bool success = syntax(&g);
@@ -653,6 +655,7 @@ static void destroy_production(production_t *p) {
 
 void destroy_parser(parser_t *g) {
   if (g) {
+    destroy_scanner(g->s);
     v_foreach(production_t *, p, g->productions_vec) { destroy_production(p); }
     vec_destroy(&g->productions_vec);
     destroy_arena(g->a);
