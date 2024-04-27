@@ -7,6 +7,8 @@
 #define PAGESIZE 4096 // (PAGESIZE ? PAGESIZE : (PAGESIZE = sysconf(_SC_PAGESIZE)))
 
 static arena *mk_arena_sized(size_t size) {
+  // PERFORMANCE: I don't think calloc guarantees a page aligned memory region just because the region would align with a page boundary.
+  // Use something like memalign instead.
   size += offsetof(arena, buffer);
   size = size - (size % PAGESIZE) + PAGESIZE;
   arena *a;
@@ -17,7 +19,8 @@ static arena *mk_arena_sized(size_t size) {
 }
 
 arena *mk_arena(void) {
-  return mk_arena_sized(PAGESIZE);
+  // NULL creates an arena with a single page.
+  return mk_arena_sized(0);
 }
 
 void destroy_arena(arena *a) {

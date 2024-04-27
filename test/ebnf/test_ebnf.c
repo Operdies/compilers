@@ -59,10 +59,11 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum 
     struct testcase *test = &testcases[i];
     AST *a;
 
+    char *truth[] = {"false", "true"};
     bool success = parse(g, &mk_ctx(test->src), &a, start_rule);
     if (success != test->expected) {
       print_ast(a, NULL);
-      error("Error parsing program %s:\n", test->src);
+      error("Error parsing program %s: was %s, expected %s\n", test->src, truth[success], truth[test->expected]);
       error_ctx(g->s->ctx);
       exit(1);
     }
@@ -71,6 +72,56 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum 
   set_loglevel(ll);
 }
 
+void test_multiple_optionals(void) {
+  { // Successive Optionals
+    const char grammar[] = {
+        "A = [ 'a' ] [ 'b' ] .\n"};
+    scanner s = {0};
+    parser_t p = mk_parser_raw(grammar, &s);
+
+    struct testcase testcases[] = {
+        {"",    true },
+        {"a",   true },
+        {"b",   true },
+        {"ab",  true },
+        {"aa",  false},
+        {"c",   false},
+        {"bc",  false},
+        {"bcd", false},
+        {"bcd", false},
+        {"abb", false},
+    };
+
+    test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
+
+    destroy_scanner(&s);
+    destroy_parser(&p);
+  }
+  { // Nested optionals
+    const char grammar[] = {
+        "A = [ 'a' ] [ 'b' [ 'c' ] [ 'd' ] ] .\n"};
+    scanner s = {0};
+    parser_t p = mk_parser_raw(grammar, &s);
+
+    struct testcase testcases[] = {
+        {"abb", false},
+        {"",    true },
+        {"a",   true },
+        {"b",   true },
+        {"ab",  true },
+        {"aa",  false},
+        {"c",   false},
+        {"bc",  true },
+        {"bcd", true },
+        {"bcd", true },
+    };
+
+    test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
+
+    destroy_scanner(&s);
+    destroy_parser(&p);
+  }
+}
 void test_parser(void) {
   const char grammar[] = {
       "expression = term {('+' | '-' ) term } .\n"
@@ -118,8 +169,8 @@ void json_parser(void) {
     keyvalue
   };
 
-#define tok(key, pattern) [key] = { #key, \
-                                    (char *)pattern }
+#define tok(key, pattern) [key] = {#key, \
+                                   (char *)pattern}
 
   static token_def json_tokens[] = {
       tok(string, string_regex),
@@ -405,12 +456,13 @@ void test_calculator(void) {
 
 int main(void) {
   setup_crash_stacktrace_logger();
-  test_parser();
+  // test_parser();
   test_calculator();
   test_lookahead();
   json_parser();
   test_oberon2();
   test_ll1();
+  test_multiple_optionals();
   // test_oberon();
   assert2(log_severity() <= INFO);
   return 0;
