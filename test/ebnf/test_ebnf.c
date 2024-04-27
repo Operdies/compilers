@@ -104,16 +104,16 @@ void test_multiple_optionals(void) {
     parser_t p = mk_parser_raw(grammar, &s);
 
     struct testcase testcases[] = {
-        {"abb", false},
-        {"",    true },
-        {"a",   true },
-        {"b",   true },
-        {"ab",  true },
-        {"aa",  false},
-        {"c",   false},
-        {"bc",  true },
-        {"bcd", true },
-        {"bcd", true },
+        {"abb",  false},
+        {"",     true },
+        {"a",    true },
+        {"b",    true },
+        {"ab",   true },
+        {"aa",   false},
+        {"c",    false},
+        {"bc",   true },
+        {"bcd",  true },
+        {"abcd", true },
     };
 
     test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);

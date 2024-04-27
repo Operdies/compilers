@@ -443,60 +443,83 @@ void append_all_nexts(symbol_t *head, symbol_t *tail, vec *seen) {
   }
 }
 
-static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
+static symbol_t *make_repeatable(parser_t *g, symbol_t *subexpression) {
+  symbol_t *loop = MKSYM();
+  *loop = (symbol_t){.type = empty_symbol};
+
+  // ensure that all nexts of the subexpression can repeat the loop
+  vec seen = v_make(symbol_t);
+  append_all_nexts(subexpression, loop, &seen);
+  vec_destroy(&seen);
+
+  loop->next = subexpression;
+  subexpression = loop;
+  symbol_t *empty = MKSYM();
+  *empty = (symbol_t){.type = empty_symbol};
+  loop->alt = empty;
+  return subexpression;
+}
+
+static symbol_t *make_optional(parser_t *g, symbol_t *subexpression) {
+  symbol_t *empty = MKSYM();
+  *empty = (symbol_t){.type = empty_symbol};
+
+  // ensure that all nexts of the subexpression lead to the thing that follows this optional
+  vec seen = v_make(symbol_t);
+  append_all_nexts(subexpression, empty, &seen);
+  vec_destroy(&seen);
+
+  if (!append_alt(subexpression, empty)) {
+    die("Circular alt chain prevents loop exit.");
+  }
+  return subexpression;
+}
+
+struct factor_symbols {
+  symbol_t *head;
+  symbol_t *tail;
+};
+
+static struct factor_symbols factor_symbol(parser_t *g, factor_t *factor) {
   switch (factor->type) {
   case F_OPTIONAL:
   case F_REPEAT:
   case F_PARENS: {
     symbol_t *subexpression = expression_symbol(g, &factor->expression);
     if (factor->type == F_REPEAT) {
-      symbol_t *loop = MKSYM();
-      *loop = (symbol_t){.type = empty_symbol};
-      {
-        // ensure that all nexts of the subexpression can repeat the loop
-        vec seen = v_make(symbol_t);
-        append_all_nexts(subexpression, loop, &seen);
-        vec_destroy(&seen);
-      }
-      loop->next = subexpression;
-      subexpression = loop;
-      symbol_t *empty = MKSYM();
-      *empty = (symbol_t){.type = empty_symbol};
-      loop->alt = empty;
+      subexpression = make_repeatable(g, subexpression);
     } else if (factor->type == F_OPTIONAL) {
-      symbol_t *empty = MKSYM();
-      *empty = (symbol_t){.type = empty_symbol};
-      {
-        // ensure that all nexts of the subexpression lead to the thing that follows this optional
-        vec seen = v_make(symbol_t);
-        append_all_nexts(subexpression, empty, &seen);
-        vec_destroy(&seen);
-      }
-      if (!append_alt(subexpression, empty)) {
-        die("Circular alt chain prevents loop exit.");
-      }
+      subexpression = make_optional(g, subexpression);
     }
-    return subexpression;
+
+    // Expressions can have many terminating states.
+    // Here we consolidate the terminating states in a single empty symbol.
+    symbol_t *tail = MKSYM();
+    *tail = (symbol_t){.type = empty_symbol};
+    vec seen = v_make(symbol_t);
+    append_all_nexts(subexpression, tail, &seen);
+    vec_destroy(&seen);
+
+    return (struct factor_symbols){.head = subexpression, .tail = tail};
   }
   case F_IDENTIFIER: {
     production_t *p = factor->identifier.production;
     if (!p) {
       die("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
-      return NULL;
     }
     symbol_t *prod = MKSYM();
     *prod = (symbol_t){.type = nonterminal_symbol, .nonterminal = p};
-    return prod;
+    return (struct factor_symbols){prod, prod};
   }
   case F_STRING: {
     symbol_t *s = MKSYM();
     *s = (symbol_t){.type = string_symbol, .string = factor->string};
-    return s;
+    return (struct factor_symbols){s, s};
   }
   case F_TOKEN: {
     symbol_t *s = MKSYM();
     *s = (symbol_t){.type = token_symbol, .token = factor->token};
-    return s;
+    return (struct factor_symbols){s, s};
   }
   default:
     die("What??\n");
@@ -504,20 +527,18 @@ static symbol_t *factor_symbol(parser_t *g, factor_t *factor) {
 }
 
 static symbol_t *term_symbol(parser_t *g, term_t *term) {
-  symbol_t *ts, *last;
-  ts = last = NULL;
+  symbol_t *head, *tail;
+  head = tail = NULL;
   v_foreach(factor_t *, f, term->factors_vec) {
-    symbol_t *s = factor_symbol(g, f);
-    if (ts == NULL)
-      ts = last = s;
-    else {
-      vec seen = v_make(symbol_t);
-      append_all_nexts(last, s, &seen);
-      vec_destroy(&seen);
-      last = s;
+    struct factor_symbols factors = factor_symbol(g, f);
+    if (head == NULL) {
+      head = factors.head;
+    } else {
+      tail->next = factors.head;
     }
+    tail = factors.tail;
   }
-  return ts;
+  return head;
 }
 
 static symbol_t *expression_symbol(parser_t *g, expression_t *expr) {
