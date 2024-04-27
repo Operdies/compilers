@@ -511,14 +511,9 @@ static symbol_t *term_symbol(parser_t *g, term_t *term) {
     if (ts == NULL)
       ts = last = s;
     else {
-      for (symbol_t *alt = last; alt; alt = alt->alt) {
-        // TODO: do we also need to loop through the alts of each next here?
-        // From cursory testing I could not produce a grammar where this was an issue
-        // Tried: Alternators in doubly nested parentheses
-        symbol_t *next = tail_next(alt);
-        if (next && next != s)
-          next->next = s;
-      }
+      vec seen = v_make(symbol_t);
+      append_all_nexts(last, s, &seen);
+      vec_destroy(&seen);
       last = s;
     }
   }

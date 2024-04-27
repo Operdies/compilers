@@ -456,7 +456,7 @@ void test_calculator(void) {
 
 int main(void) {
   setup_crash_stacktrace_logger();
-  // test_parser();
+  test_parser();
   test_calculator();
   test_lookahead();
   json_parser();
