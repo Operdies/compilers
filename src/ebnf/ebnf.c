@@ -675,18 +675,19 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
   vec alt_stack;
   symbol_t *x;
   bool match;
+  parse_context *ctx = g->s->ctx;
+  start = ctx->c;
 
   alt_stack = v_make(struct parse_frame);
   name = hd->prod->identifier;
   *node = mk_ast();
   (*node)->node_id = hd->prod->id;
   insert_child = &(*node)->first_child;
-  start = g->s->ctx->c;
 
   x = hd->sym;
   while (x) {
     AST *next_child = NULL;
-    struct parse_frame frame = {.source_cursor = g->s->ctx->c};
+    struct parse_frame frame = {.source_cursor = ctx->c};
 
     switch (x->type) {
     case error_symbol:
@@ -696,10 +697,6 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
       break;
     case nonterminal_symbol:
       match = _parse(x->nonterminal->header, g, &next_child);
-      if (g->backtrack && !match) {
-        // rewind
-        g->s->ctx->c = frame.source_cursor;
-      }
       break;
     case token_symbol: {
       string_slice content = {0};
@@ -718,7 +715,7 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
         next_child = mk_ast();
         next_child->node_id = -1;
         next_child->name = x->string;
-        next_child->range = (string_slice){.n = x->string.n, .str = g->s->ctx->src + g->s->ctx->c};
+        next_child->range = (string_slice){.n = x->string.n, .str = ctx->src + g->s->ctx->c};
       }
     } break;
     }
@@ -741,24 +738,14 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
 
     // If an end symbol was reached without a match, check if a suitable frame can be restored
     if (x == NULL && match == false) {
-      struct parse_frame *f = NULL;
-      if ((f = vec_pop(&alt_stack))) {
-        if (g->backtrack) {
-          // If backtracking is enabled, rewind the cursors to the stored frame
-          x = f->symbol;
-          g->s->ctx->c = f->source_cursor;
-        } else if (f->source_cursor == g->s->ctx->c) {
-          // Otherwise restore the symbol from the frame unless progress was made
-          x = f->symbol;
-          // We could have potentially pushed optional tokens
-        }
-      }
+      struct parse_frame *f = vec_pop(&alt_stack);
+      if (f && f->source_cursor == ctx->c)
+        x = f->symbol;
     }
   }
 
-  int len = g->s->ctx->c - start;
-  string_slice range = {.str = g->s->ctx->src + start, .n = len};
-  // NOTE: len > 0 is requires for allowing backtracking optional productions.
+  int len = ctx->c - start;
+  string_slice range = {.str = ctx->src + start, .n = len};
   if (match) {
     (*node)->range = range;
     (*node)->name = name;

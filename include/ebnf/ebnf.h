@@ -66,7 +66,6 @@ struct production_t {
 struct parser_t {
   parse_context ctx;
   arena *a;
-  bool backtrack;
   union {
     vec productions_vec;
     struct {

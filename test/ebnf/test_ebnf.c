@@ -42,7 +42,6 @@ void test_lookahead(void) {
     struct testcase *test = &testcases[i];
     scanner s = {0};
     parser_t p = mk_parser_raw(test->grammar, &s);
-    p.backtrack = true;
     AST *a;
     if (!parse(&p, &mk_ctx("bc"), &a, 0)) {
       printf("Error parsing program %s:\n", "bc");
