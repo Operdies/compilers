@@ -9,5 +9,5 @@ int main(void) {
   warn("Warning");
   error("Error");
   debug("thing\n  on multiple\nlines");
-  return 1;
+  return log_severity() == LL_DEBUG;
 }
