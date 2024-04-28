@@ -240,29 +240,8 @@ bool symbol_at_end(symbol_t *start, int k) {
   return false;
 }
 
-const char *describe_symbol(symbol_t *s) {
-  static char description[100];
-  switch (s->type) {
-    case error_symbol:
-      die("Error symbol ??");
-    case empty_symbol:
-      sprintf(description, "empty");
-      break;
-    case nonterminal_symbol:
-      sprintf(description, "prod %.*s", s->nonterminal->identifier.n, s->nonterminal->identifier.str);
-      break;
-    case token_symbol:
-      sprintf(description, "token %.*s", s->token->name.n, s->token->name.str);
-      break;
-    case string_symbol:
-      sprintf(description, "literal %.*s", s->string.n, s->string.str);
-      break;
-  }
-  return description;
-}
-
 void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, production_t *owner) {
-  const int k = 1;
+  const int lookahead = 1;
   // NOTE: we assume that alt loops are not possible.
   // They should be impossible by construction.
   // If an alt loop occurs, it is a bug.
@@ -272,9 +251,6 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
     slow = fast = alt;
     while (true) {
       if (!slow) break;
-      const char *slow_str = describe_symbol(slow);
-      (void)slow_str;
-
       if (!vec_contains(seen, slow)) {
         vec_push(seen, slow);
         mega_follow_walker(g, slow, seen, owner);
@@ -284,12 +260,8 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
           production_t *prod = slow->nonterminal->header->prod;
           {  // apply rule 1 and 2
             if (!prod->header->follow_vec.n) prod->header->follow_vec = v_make(struct follow_t);
-            // Rule 1 is applied by walking the graph k symbols forward from where
-            // this production was referenced. This also applies rule 2
-            // since a { repeat } expression links back with an empty transition.
-            // BUG: this doesn't work for a rule like "X: [ A { A } ] 'x'" where 'x' is not picked up
             for (symbol_t *this = slow->next; this; this = this->alt) {
-              add_symbols(this, k, &prod->header->follow_vec);
+              add_symbols(this, lookahead, &prod->header->follow_vec);
             }
 
             // The production instance itself should also be walked.
@@ -299,7 +271,7 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
             // Now, we need to determine if this rule is at the end of the current production
             // If this is the case, the follow set of the production that contains this nonterminal
             // must be added to the follow set as well.
-            if (symbol_at_end(slow, k)) {
+            if (symbol_at_end(slow, lookahead)) {
               struct follow_t f = {.type = FOLLOW_FOLLOW, .prod = owner};
               vec_push(&prod->header->follow_vec, &f);
             }

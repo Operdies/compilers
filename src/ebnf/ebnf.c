@@ -640,7 +640,7 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
   string_slice name;
   vec alt_stack;
   symbol_t *x;
-  bool match;
+  bool match = false;
   parse_context *ctx = g->s->ctx;
   start = ctx->c;
 
