@@ -1,6 +1,6 @@
 name: Test
 
-on: [push, pull_request]
+on: push
 env:
   # The gcc version from ubuntu-latest segfaults when trying to compile my beautiful code
   CC: gcc-13 
