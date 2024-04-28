@@ -49,10 +49,12 @@ void test_regex_scanner(void) {
   scanner s = mk_scanner(mk_tokens(token_definition));
   s.ctx = &mk_ctx(program);
   bool valid[LENGTH(token_definition)] = {0};
-  if (next_token(&s, valid, NULL) != ERROR_TOKEN) die("Expected no valid tokens");
+  if (next_token(&s, valid, NULL) != ERROR_TOKEN)
+    die("Expected no valid tokens");
 
   string_slice tmp;
-  if (next_token(&s, NULL, &tmp) != 3 /* int token */) die("Expected int token.");
+  if (next_token(&s, NULL, &tmp) != 3 /* int token */)
+    die("Expected int token.");
   rewind_scanner(&s, tmp);
 
   for (int i = 0; i < LENGTH(token_definition); i++) {
@@ -88,12 +90,13 @@ void test_regex_scanner(void) {
       error("Token %d value mismatch. Expected %s, got %.*s", i, content, matched.n, matched.str);
     }
   }
-  if (next_token(&s, valid, NULL) != EOF_TOKEN) die("Expected EOF");
+  if (next_token(&s, valid, NULL) != EOF_TOKEN)
+    die("Expected EOF");
   destroy_scanner(&s);
 }
 
 int main(void) {
   test_regex_scanner();
-  assert2(log_severity() <= INFO);
+  assert2(log_severity() <= LL_INFO);
   return 0;
 }

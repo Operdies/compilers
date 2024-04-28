@@ -91,7 +91,7 @@ void test_multiple_optionals(void) {
         {"abb", false},
     };
 
-    test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
+    test_parser2(&p, LENGTH(testcases), testcases, LL_WARN, 0);
 
     destroy_parser(&p);
   }
@@ -113,7 +113,7 @@ void test_multiple_optionals(void) {
         {"abcd", true },
     };
 
-    test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
+    test_parser2(&p, LENGTH(testcases), testcases, LL_WARN, 0);
 
     destroy_parser(&p);
   }
@@ -144,7 +144,7 @@ void test_parser(void) {
   };
   scanner s = {0};
   parser_t p = mk_parser_raw(grammar, &s);
-  test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
+  test_parser2(&p, LENGTH(testcases), testcases, LL_WARN, 0);
   destroy_parser(&p);
 }
 
@@ -204,7 +204,7 @@ void json_parser(void) {
        "}",           true },
   };
 
-  test_parser2(&p, LENGTH(testcases), testcases, DEBUG, object);
+  test_parser2(&p, LENGTH(testcases), testcases, LL_DEBUG, object);
 
   {
     AST *a;
@@ -250,12 +250,14 @@ void json_parser(void) {
 void test_ll12(bool expected, grammar_rules rules, scanner_tokens tokens) {
   parser_t p = mk_parser(rules, tokens);
   int ll = 0;
-  if (!expected) ll = set_loglevel(WARN);
+  if (!expected)
+    ll = set_loglevel(LL_WARN);
   if (is_ll1(&p) != expected) {
     error("Expected %sll1", expected ? " " : "not ");
   }
   destroy_parser(&p);
-  if (ll) set_loglevel(ll);
+  if (ll)
+    set_loglevel(ll);
 }
 
 void test_ll1(void) {
@@ -454,7 +456,7 @@ void test_oberon2(void) {
 
   scanner s = {0};
   parser_t p = mk_parser_raw(grammar, &s);
-  test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
+  test_parser2(&p, LENGTH(testcases), testcases, LL_WARN, 0);
   destroy_parser(&p);
 }
 
@@ -488,7 +490,7 @@ void test_calculator(void) {
     die("Grammar is not ll1.");
   }
 
-  test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
+  test_parser2(&p, LENGTH(testcases), testcases, LL_WARN, 0);
   destroy_parser(&p);
 }
 
@@ -502,7 +504,7 @@ int main(void) {
   test_ll1();
   test_multiple_optionals();
   // test_oberon();
-  assert2(log_severity() <= INFO);
+  assert2(log_severity() <= LL_INFO);
   return 0;
 }
 

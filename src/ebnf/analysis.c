@@ -39,7 +39,8 @@ position_t get_position(const char *source, string_slice place) {
   int line, column;
   line = column = 1;
   for (; source && *source; source++) {
-    if (source == place.str) return (position_t){.line = line, .column = column};
+    if (source == place.str)
+      return (position_t){.line = line, .column = column};
     if (*source == '\n') {
       line++;
       column = 1;
@@ -100,7 +101,8 @@ bool expression_optional(expression_t *expr) {
   // help
   v_foreach(term_t *, t, expr->terms_vec) {
     v_foreach(factor_t *, f, t->factors_vec) {
-      if (!factor_optional(f)) return false;
+      if (!factor_optional(f))
+        return false;
     }
   }
   return true;
@@ -115,13 +117,15 @@ bool populate_first_term(struct header_t *h, term_t *t) {
         populate_first_expr(h, &fac->expression);
         continue;
       case F_PARENS:
-        if (populate_first_expr(h, &fac->expression) || expression_optional(&fac->expression)) continue;
+        if (populate_first_expr(h, &fac->expression) || expression_optional(&fac->expression))
+          continue;
         return false;
       case F_IDENTIFIER: {
         struct header_t *id = fac->identifier.production->header;
         struct follow_t fst = {.type = FOLLOW_FIRST, .prod = id->prod};
         vec_push(&h->first_vec, &fst);
-        if (expression_optional(&id->prod->expr)) continue;
+        if (expression_optional(&id->prod->expr))
+          continue;
         return false;
       }
       case F_STRING: {
@@ -135,7 +139,8 @@ bool populate_first_term(struct header_t *h, term_t *t) {
         struct follow_t fst = {.type = FOLLOW_SYMBOL, .regex = r};
         vec_push(&h->first_vec, &fst);
         regex_match m = regex_matches(r, &(match_context){.n = 0, .src = ""});
-        if (m.match) continue;
+        if (m.match)
+          continue;
         return false;
       }
     }
@@ -146,7 +151,8 @@ bool populate_first_term(struct header_t *h, term_t *t) {
 bool populate_first_expr(struct header_t *h, expression_t *e) {
   bool all_optional = true;
   v_foreach(term_t *, t, e->terms_vec) {
-    if (!populate_first_term(h, t)) all_optional = false;
+    if (!populate_first_term(h, t))
+      all_optional = false;
   }
   return all_optional;
 }
@@ -171,7 +177,8 @@ void graph_walk(symbol_t *start, vec *all) {
     slow = alt;
     fast = alt;
     while (true) {
-      if (!slow) break;
+      if (!slow)
+        break;
 
       if (!vec_contains(all, slow)) {
         vec_push(all, slow);
@@ -183,9 +190,12 @@ void graph_walk(symbol_t *start, vec *all) {
       }
 
       slow = slow->next;
-      if (fast) fast = fast->next;
-      if (fast) fast = fast->next;
-      if (slow == fast) break;
+      if (fast)
+        fast = fast->next;
+      if (fast)
+        fast = fast->next;
+      if (slow == fast)
+        break;
     }
   }
 }
@@ -226,8 +236,10 @@ void add_symbols(symbol_t *start, int k, vec *follows) {
 // Walk the graph to determine if the end of the production that a given symbol occurs in
 // is reachable within k steps
 bool symbol_at_end(symbol_t *start, int k) {
-  if (k < 0) return false;
-  if (start == NULL) return true;
+  if (k < 0)
+    return false;
+  if (start == NULL)
+    return true;
   for (symbol_t *alt = start; alt; alt = alt->alt) {
     // TODO: this doesn't generalize to k > 1
     if (alt->type == nonterminal_symbol && expression_optional(&alt->nonterminal->expr)) {
@@ -235,7 +247,8 @@ bool symbol_at_end(symbol_t *start, int k) {
     }
     // if (alt->next == NULL)
     //   return true;
-    if (symbol_at_end(alt->next, alt->type == empty_symbol ? k : k - 1)) return true;
+    if (symbol_at_end(alt->next, alt->type == empty_symbol ? k : k - 1))
+      return true;
   }
   return false;
 }
@@ -250,7 +263,8 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
     symbol_t *slow, *fast;
     slow = fast = alt;
     while (true) {
-      if (!slow) break;
+      if (!slow)
+        break;
       if (!vec_contains(seen, slow)) {
         vec_push(seen, slow);
         mega_follow_walker(g, slow, seen, owner);
@@ -259,7 +273,8 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
         if (slow->type == nonterminal_symbol) {
           production_t *prod = slow->nonterminal->header->prod;
           {  // apply rule 1 and 2
-            if (!prod->header->follow_vec.n) prod->header->follow_vec = v_make(struct follow_t);
+            if (!prod->header->follow_vec.n)
+              prod->header->follow_vec = v_make(struct follow_t);
             for (symbol_t *this = slow->next; this; this = this->alt) {
               add_symbols(this, lookahead, &prod->header->follow_vec);
             }
@@ -280,8 +295,10 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
       }
 
       slow = slow->next;
-      if (fast) fast = fast->next;
-      if (fast) fast = fast->next;
+      if (fast)
+        fast = fast->next;
+      if (fast)
+        fast = fast->next;
       if (slow == fast)  // loop detected
         break;
     }
@@ -304,7 +321,8 @@ void populate_follow(const parser_t *g) {
 
 // populate a map of all the symbols that can be reached
 void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec *seen) {
-  if (vec_contains(seen, follow)) return;
+  if (vec_contains(seen, follow))
+    return;
   vec_push(seen, follow);
 
   switch (follow->type) {
@@ -420,7 +438,8 @@ bool get_conflicts(const header_t *h, conflict *c) {
             vec_push_slice(&map1, &follow_map.slice);
             conflict = check_intersection(map1.n, map1.array, c);
             vec_destroy(&map1);
-            if (conflict) goto done;
+            if (conflict)
+              goto done;
           }
         } else if (fac->type == F_STRING) {  // F_STRING
           optional = false;
@@ -432,7 +451,8 @@ bool get_conflicts(const header_t *h, conflict *c) {
             vec_push_slice(&map1, &follow_map.slice);
             conflict = check_intersection(map1.n, map1.array, c);
             vec_destroy(&map1);
-            if (conflict) goto done;
+            if (conflict)
+              goto done;
           }
         }
         if (!optional)  // done

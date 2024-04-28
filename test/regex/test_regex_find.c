@@ -48,6 +48,6 @@ int main(void) {
              m.matched.str, (int)t->length, t->string + t->start);
     }
   }
-  assert2(log_severity() <= INFO);
+  assert2(log_severity() <= LL_INFO);
   return 0;
 }

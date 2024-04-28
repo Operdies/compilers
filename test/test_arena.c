@@ -44,7 +44,7 @@ int main(void) {
   for (int i = 0; i < initial_alloc; i++) {
     assert2(fst[i] == i % 128);
   }
-  assert2(log_severity() <= INFO);
+  assert2(log_severity() <= LL_INFO);
   destroy_arena(a);
   return 0;
 }

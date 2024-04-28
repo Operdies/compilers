@@ -3,11 +3,11 @@
 
 #include "text.h"
 enum loglevel {
-  DEBUG,
-  INFO,
-  WARN,
-  ERROR,
-  FATAL,
+  LL_DEBUG,
+  LL_INFO,
+  LL_WARN,
+  LL_ERROR,
+  LL_FATAL,
 };
 
 void debug(const char *fmt, ...);

@@ -138,10 +138,11 @@ int main(void) {
       status++;
     }
   }
-  set_loglevel(INFO);
+  set_loglevel(LL_INFO);
   pair invalid = {"h+*", "hhh", false};
   regex *r = mk_regex(invalid.pattern);
-  if (r != NULL) die("Parsing %s succeeded. Should fail.");
-  assert2(log_severity() <= INFO);
+  if (r != NULL)
+    die("Parsing %s succeeded. Should fail.");
+  assert2(log_severity() <= LL_INFO);
   return status;
 }

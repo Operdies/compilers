@@ -39,6 +39,6 @@ int main(void) {
       fail = true;
     }
   }
-  assert2(log_severity() <= INFO);
+  assert2(log_severity() <= LL_INFO);
   return fail ? 1 : 0;
 }

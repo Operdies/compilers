@@ -79,7 +79,8 @@ void visit(AST *a, int indent) {
       case keyvalue:
         break;
     }
-    if (a->first_child) visit(a->first_child, indent);
+    if (a->first_child)
+      visit(a->first_child, indent);
   }
 #undef print
 }

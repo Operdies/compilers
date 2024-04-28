@@ -95,12 +95,14 @@ void print_ast(AST *root, vec *parents) {
   const char dash[] = "──";
   const char pipe[] = "│";
 
-  if (!root) return;
+  if (!root)
+    return;
 
   vbuf.n = 0;
   vec _marker = v_make(AST);
 
-  if (!parents) parents = &_marker;
+  if (!parents)
+    parents = &_marker;
 
   for (; root; root = root->next) {
     vbuf.n = 0;
@@ -113,7 +115,8 @@ void print_ast(AST *root, vec *parents) {
       char *newline = strchr(root->range.str, '\n');
       if (newline) {
         lim = (newline - root->range.str);
-        if (lim > root->range.n) lim = root->range.n;
+        if (lim > root->range.n)
+          lim = root->range.n;
       }
 
       vec_write(&vbuf, "%.*s", root->name.n, root->name.str);
@@ -121,7 +124,8 @@ void print_ast(AST *root, vec *parents) {
       int max = 70;
 
       // count utf-8 code points
-      for (int i = 0; i < vbuf.n; i++) wstrlen += (arr[i] & 0xC0) != 0x80;
+      for (int i = 0; i < vbuf.n; i++)
+        wstrlen += (arr[i] & 0xC0) != 0x80;
       vec_write(&vbuf, "%*s '%.*s'%s", max - wstrlen, "<->   ", lim, root->range.str, lim < root->range.n ? "..." : "");
 
       for (int i = 0; i < vbuf.n; i++)
@@ -155,7 +159,8 @@ void destroy_ast(AST *root) {
 #define mk_ast() ecalloc(1, sizeof(AST))
 
 static bool match_literal(parser_t *g, char literal) {
-  if (finished(&g->ctx)) return false;
+  if (finished(&g->ctx))
+    return false;
   if (g->ctx.src[g->ctx.c] == literal) {
     g->ctx.c++;
     return true;
@@ -186,12 +191,14 @@ bool factor(parser_t *g, factor_t *f) {
       }
       string.n = POINT - string.str - 1;
       f->string = string;
-      if (string.n == 0) die("String of length 0 in grammar.");
+      if (string.n == 0)
+        die("String of length 0 in grammar.");
       break;
     case '(':
       f->type = F_PARENS;
       advance(&g->ctx);
-      if (!expression(g, &f->expression)) return false;
+      if (!expression(g, &f->expression))
+        return false;
       if (!match_literal(g, ')')) {
         fprintf(stderr, "Unmatched ')' in factor\n");
         return false;
@@ -200,7 +207,8 @@ bool factor(parser_t *g, factor_t *f) {
     case '[':
       f->type = F_OPTIONAL;
       advance(&g->ctx);
-      if (!expression(g, &f->expression)) return false;
+      if (!expression(g, &f->expression))
+        return false;
       if (!match_literal(g, ']')) {
         fprintf(stderr, "Unmatched ']' in factor\n");
         return false;
@@ -209,7 +217,8 @@ bool factor(parser_t *g, factor_t *f) {
     case '{':
       f->type = F_REPEAT;
       advance(&g->ctx);
-      if (!expression(g, &f->expression)) return false;
+      if (!expression(g, &f->expression))
+        return false;
       if (!match_literal(g, '}')) {
         fprintf(stderr, "Unmatched '}' in factor\n");
         return false;
@@ -233,7 +242,8 @@ bool factor(parser_t *g, factor_t *f) {
 bool term(parser_t *g, term_t *t) {
   factor_t f = {0};
   t->range.str = POINT;
-  if (!factor(g, &f)) return false;
+  if (!factor(g, &f))
+    return false;
   t->factors_vec = v_make(factor_t);
   vec_push(&t->factors_vec, &f);
   while (factor(g, &f)) {
@@ -276,9 +286,11 @@ bool identifier(parser_t *g, string_slice *s) {
 bool production(parser_t *g, production_t *p) {
   MATCH_TERMINAL(WHITESPACE);
   string_slice s;
-  if (!identifier(g, &s)) return false;
+  if (!identifier(g, &s))
+    return false;
   MATCH_TERMINAL(ASSIGNMENT);
-  if (!expression(g, &p->expr)) return false;
+  if (!expression(g, &p->expr))
+    return false;
   {
     if (!match(g, PERIOD)) {
       error("Expected PERIOD in production %.*s\n", s.n, s.str);
@@ -305,7 +317,8 @@ bool syntax(parser_t *g) {
 production_t *find_production(parser_t *g, string_slice name) {
   v_foreach(production_t *, p, g->productions_vec) {
     if (p->identifier.n == name.n)
-      if (slicecmp(p->identifier, name) == 0) return p;
+      if (slicecmp(p->identifier, name) == 0)
+        return p;
   }
   return NULL;
 }
@@ -313,7 +326,8 @@ production_t *find_production(parser_t *g, string_slice name) {
 token *find_token(parser_t *g, string_slice name) {
   v_foreach(token *, t, g->s->tokens) {
     if (t->name.n == name.n)
-      if (slicecmp(t->name, name) == 0) return t;
+      if (slicecmp(t->name, name) == 0)
+        return t;
   }
   return NULL;
 }
@@ -325,7 +339,8 @@ static bool init_expressions(parser_t *g, expression_t *expr) {
         case F_OPTIONAL:
         case F_REPEAT:
         case F_PARENS: {
-          if (!init_expressions(g, &f->expression)) return false;
+          if (!init_expressions(g, &f->expression))
+            return false;
           break;
         }
         case F_IDENTIFIER: {
@@ -361,7 +376,8 @@ static bool init_productions(parser_t *g) {
   // and link back to the production with the matching name
   v_foreach(production_t *, p, g->productions_vec) {
     p->id = idx_p;
-    if (!init_expressions(g, &p->expr)) return false;
+    if (!init_expressions(g, &p->expr))
+      return false;
   }
   return true;
 }
@@ -374,12 +390,15 @@ symbol_t *tail_alt(symbol_t *s) {
   symbol_t *slow, *fast;
   slow = fast = s;
   for (;;) {
-    if (fast->alt == NULL) return fast;
+    if (fast->alt == NULL)
+      return fast;
     fast = fast->alt;
-    if (fast->alt == NULL) return fast;
+    if (fast->alt == NULL)
+      return fast;
     fast = fast->alt;
     slow = slow->alt;
-    if (slow == fast) return NULL;
+    if (slow == fast)
+      return NULL;
   }
 }
 
@@ -387,29 +406,35 @@ symbol_t *tail_next(symbol_t *s) {
   symbol_t *slow, *fast;
   slow = fast = s;
   for (;;) {
-    if (fast->next == NULL) return fast;
+    if (fast->next == NULL)
+      return fast;
     fast = fast->next;
-    if (fast->next == NULL) return fast;
+    if (fast->next == NULL)
+      return fast;
     fast = fast->next;
     slow = slow->next;
-    if (slow == fast) return NULL;
+    if (slow == fast)
+      return NULL;
   }
 }
 
 bool append_alt(symbol_t *chain, symbol_t *new_tail) {
   chain = tail_alt(chain);
-  if (chain) chain->alt = new_tail;
+  if (chain)
+    chain->alt = new_tail;
   return chain ? true : false;
 }
 
 bool append_next(symbol_t *chain, symbol_t *new_tail) {
   chain = tail_next(chain);
-  if (chain) chain->next = new_tail;
+  if (chain)
+    chain->next = new_tail;
   return chain ? true : false;
 }
 
 void append_all_nexts(symbol_t *head, symbol_t *tail, vec *seen) {
-  if (vec_contains(seen, head)) return;
+  if (vec_contains(seen, head))
+    return;
   vec_push(seen, head);
   for (; head && head != tail; head = head->alt) {
     if (head->next == NULL)
@@ -525,7 +550,8 @@ static symbol_t *expression_symbol(parser_t *g, expression_t *expr) {
     if (!new_expression) {
       new_expression = new_term;
     } else {
-      if (!append_alt(new_expression, new_term)) die("Circular alt chain.");
+      if (!append_alt(new_expression, new_term))
+        die("Circular alt chain.");
     }
   }
   return new_expression;
@@ -558,7 +584,8 @@ static void init_parser(parser_t *g, scanner s) {
 }
 
 static bool finalize_parser(parser_t *g) {
-  if (!init_productions(g)) return false;
+  if (!init_productions(g))
+    return false;
 
   return build_parse_table(g);
 }
@@ -578,24 +605,29 @@ parser_t mk_parser(grammar_rules rules, scanner_tokens tokens) {
     if (r.id) {
       p.identifier = mk_slice(r.id);
       g.ctx = mk_ctx(r.rule);
-      if (!expression(&g, &p.expr)) die("Failed to parse grammar.");
+      if (!expression(&g, &p.expr))
+        die("Failed to parse grammar.");
     }
     vec_push(&g.productions_vec, &p);
   }
 
-  if (!finalize_parser(&g)) die("Failed to construct parser.");
+  if (!finalize_parser(&g))
+    die("Failed to construct parser.");
   return g;
 }
 
 parser_t mk_parser_raw(const char *text, scanner *s) {
   parser_t g = {0};
-  if (!text) return g;
+  if (!text)
+    return g;
   init_parser(&g, *s);
 
   g.ctx = mk_ctx(text);
   bool success = syntax(&g);
-  if (!success) die("Failed to parse grammar.");
-  if (!finalize_parser(&g)) die("Failed to construct parser.");
+  if (!success)
+    die("Failed to parse grammar.");
+  if (!finalize_parser(&g))
+    die("Failed to construct parser.");
   return g;
 }
 
@@ -603,7 +635,8 @@ void destroy_expression(expression_t *e);
 
 static void destroy_term(term_t *t) {
   v_foreach(factor_t *, f, t->factors_vec) {
-    if (f->type == F_OPTIONAL || f->type == F_REPEAT || f->type == F_PARENS) destroy_expression(&f->expression);
+    if (f->type == F_OPTIONAL || f->type == F_REPEAT || f->type == F_PARENS)
+      destroy_expression(&f->expression);
   }
   vec_destroy(&t->factors_vec);
 }
@@ -705,7 +738,8 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
     // If an end symbol was reached without a match, check if a suitable frame can be restored
     if (x == NULL && match == false) {
       struct parse_frame *f = vec_pop(&alt_stack);
-      if (f && f->source_cursor == ctx->c) x = f->symbol;
+      if (f && f->source_cursor == ctx->c)
+        x = f->symbol;
     }
   }
 
@@ -723,7 +757,8 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
 }
 
 bool parse(parser_t *g, parse_context *ctx, AST **root, int start_rule) {
-  if (root == NULL || g == NULL) return false;
+  if (root == NULL || g == NULL)
+    return false;
   g->s->ctx = ctx;
   production_t *start = &g->productions[start_rule];
   bool success = _parse(start->header, g, root);
