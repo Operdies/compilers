@@ -6,10 +6,11 @@ rwildcard = $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subs
 uniq      = $(if $1,$(firstword $1) $(call uniq,$(filter-out $(firstword $1),$1)))
 
 # Flags that are conditional on whether or not this is a release
-OFLAGS = $(if $(RELEASE),-O3,-O0 -g)
+OFLAGS = $(if $(RELEASE),-O3,-Og -g -rdynamic)
 DEFINES = -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE 
 DEFINES += $(if $(RELEASE),-DNDEBUG,-DDEBUG)
 BIN_DIR = $(if $(RELEASE),out/release,out/debug)
+LDFLAGS = $(if $(RELEASE),-s,)
 
 COMPILE_COMMANDS = compile_commands.json
 INCLUDE_DIR      = include
@@ -37,7 +38,7 @@ VALGRIND_FLAGS = --error-exitcode=1 -s --leak-check=full --track-origins=yes --s
 MMD_FILES = $(call rwildcard,$(BIN_DIR),*.d)
 DIRECTORIES = $(call uniq,$(dir $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)))
 
-CFLAGS += -std=c1x -pedantic -Wall -Wextra -Werror $(DEFINES) -I$(INCLUDE_DIR) -rdynamic $(OFLAGS) -MMD -MF $@.d
+CFLAGS += -std=c1x -pedantic -Wall -Wextra -Werror $(DEFINES) -I$(INCLUDE_DIR) $(OFLAGS) -MMD -MF $@.d
 
 .PHONY: all
 all: $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
