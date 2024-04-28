@@ -23,9 +23,12 @@ jobs:
           retention-days: 3
   build:
     runs-on: ubuntu-latest
+    env:
+      RELEASE: 1
     steps:
     - uses: actions/checkout@v4
-    - run: RELEASE=1 make -j all
+    - run: make -j all
+    - run: make intermediate-clean
     - uses: actions/upload-artifact@v4
       with:
         name: release

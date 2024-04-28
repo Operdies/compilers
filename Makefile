@@ -54,13 +54,31 @@ $(TEST_OUT_DIR)%: $(TEST_DIR)%.c | $(DIRECTORIES)
 $(CMD_OUT_DIR)%: $(CMD_DIR)%.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
-.PHONY: clean
-clean:
-	rm -f $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT) \
-		$(MMD_FILES) $(COMPILE_COMMANDS) \
+
+# Delete intermediate files so only the desired build artifacts remain
+.PHONY: intermediate-clean
+intermediate-clean:
+	rm -f $(OBJ_OUT) \
+		$(MMD_FILES) \
 		$(TEST_RESULT) $(TEST_RESULT:=.error) \
 		$(VALGRIND_RESULT) $(VALGRIND_RESULT:=.error) 
-	find out -type d -empty -delete
+
+.PHONY: clean
+clean: intermediate-clean
+	rm -f $(TEST_OUT) $(CMD_OUT)
+
+
+# distclean and mostlyclean don't really make sense yet, but are included for completeness
+.PHONY: distclean
+distclean: clean
+
+.PHONY: mostlyclean
+mostlyclean: clean
+
+.PHONY: maintainer-clean
+maintainer-clean: clean
+	rm -f $(COMPILE_COMMANDS) 
+	rm -rf out
 
 $(COMPILE_COMMANDS): Makefile $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
 	bear -- make all -j -B
