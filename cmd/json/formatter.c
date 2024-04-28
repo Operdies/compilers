@@ -1,6 +1,7 @@
 // link ebnf/ebnf.o ebnf/analysis.o scanner/scanner.o
 // link regex.o arena.o collections.o logging.o
 #include <stdio.h>
+#include <string.h>
 
 #include "ebnf/ebnf.h"
 #include "logging.h"
@@ -44,8 +45,13 @@ const rule_def rules[] = {
     tok(keyvalue, "string colon object"),
 };
 
+static bool pretty = true;
 void visit(AST *a, int indent) {
-#define print(a) printf("%.*s", a->range.n, a->range.str);
+#define print(a) printf("%.*s", a->range.n, a->range.str)
+#define pprint(...)      \
+  if (pretty) {          \
+    printf(__VA_ARGS__); \
+  }
 
   for (; a; a = a->next) {
     enum json_tokens node = a->node_id;
@@ -56,21 +62,22 @@ void visit(AST *a, int indent) {
       case comma:
       case colon:
         print(a);
-        if (node == colon)
-          printf(" ");
-        else if (node == comma)
-          printf("\n%*s", indent, " ");
+        if (node == colon) {
+          pprint(" ");
+        } else if (node == comma) {
+          pprint("\n%*s", indent, " ");
+        }
         break;
       case lsqbrk:
       case lcbrk:
         indent += 2;
         print(a);
-        printf("\n%*s", indent, " ");
+        pprint("\n%*s", indent, " ");
         break;
       case rsqbrk:
       case rcbrk:
         indent -= 2;
-        printf("\n%*s", indent, "");
+        pprint("\n%*s", indent, "");
         print(a);
         break;
       case object:
@@ -106,15 +113,29 @@ void format(FILE *f) {
 }
 
 int main(int argc, char **argv) {
-  if (argc < 2) {
-    format(stdin);
-  } else {
-    for (int i = 1; i < argc; i++) {
-      char *filename = argv[i];
-      FILE *f = fopen(filename, "r");
-      format(f);
-      fclose(f);
+  set_loglevel(LL_INFO);
+  FILE *f = stdin;
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "-c") == 0)
+      pretty = false;
+    else {
+      f = fopen(argv[i], "r");
+      if (!f)
+        die("Error opening file %s:", argv[i]);
+      break;
     }
   }
+  format(f);
+  fclose(f);
+  // if (argc < 2) {
+  //   format(stdin);
+  // } else {
+  //   for (int i = 1; i < argc; i++) {
+  //     char *filename = argv[i];
+  //     FILE *f = fopen(filename, "r");
+  //     format(f);
+  //     fclose(f);
+  //   }
+  // }
   return 0;
 }

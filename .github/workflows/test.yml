@@ -1,18 +1,35 @@
 name: Test
 
-on: [push, pull_request]
+on: push
+env:
+  # The gcc version from ubuntu-latest segfaults when trying to compile my beautiful code
+  CC: gcc-13 
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tools
+        run: sudo apt update && sudo apt install -y valgrind
+      - run: make -j incremental-test
+      - run: make -j incremental-valgrind
+      - run: RELEASE=1 make -j incremental-test
+      - run: RELEASE=1 make -j incremental-valgrind
+      - uses: actions/upload-artifact@v4
+        with:
+          name: test
+          path: out
+          retention-days: 3
   build:
     runs-on: ubuntu-latest
     env:
-      # The gcc version from ubuntu-latest segfaults when trying to compile my beautiful code
-      CC: gcc-13 
+      RELEASE: 1
     steps:
     - uses: actions/checkout@v4
-    - name: Install Tools
-      run: sudo apt update && sudo apt install -y valgrind $CC
-    - name: make test
-      run: make test
-    - name: make valgrind
-      run: make valgrind
+    - run: make -j release
+    - uses: actions/upload-artifact@v4
+      with:
+        name: release
+        path: out/release
+        retention-days: 3
