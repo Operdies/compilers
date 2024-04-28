@@ -5,29 +5,28 @@
 #include <stdint.h>
 #include <stdio.h>
 
-#include "arena.h"
 #include "collections.h"
 #include "text.h"
 
-typedef struct dfa dfa;
+typedef struct nfa nfa;
 typedef unsigned char u8;
 
 typedef struct {
   size_t n;
   size_t cap;
-  dfa **arr;
-} dfalist;
+  nfa **arr;
+} nfalist;
 
-struct dfa {
+struct nfa {
   // Possible transitions from this state
-  dfalist lst;
+  nfalist lst;
   // Character accepted by this state
   u8 accept;
   // If set and greater than accept, all characters in the range [accept-accept_end] (inclusive) are accepted
   u8 accept_end;
-  // The end state of this dfa
+  // The end state of this nfa
   // If NULL, the state itself is considered the end state
-  dfa *end;
+  nfa *end;
   // The progress the last time this state was visited.
   // This is used to detect loops when traversing the automaton
   ssize_t progress;
@@ -44,7 +43,7 @@ typedef parse_context match_context;
 
 typedef struct {
   parse_context ctx;
-  dfa *start;
+  nfa *start;
 } regex;
 
 bool matches(const char *pattern, const char *string);

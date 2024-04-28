@@ -19,7 +19,7 @@
 #define OPTIONAL '?'
 #define RANGE '-'
 
-#define add_transition(from, to) (push_dfa(ctx, &(from)->lst, (to)))
+#define add_transition(from, to) (push_nfa(ctx, &(from)->lst, (to)))
 #define end_state(state) ((state)->end ? (state)->end : (state))
 #define is_dot(state) ((state)->accept == 0)
 
@@ -38,9 +38,9 @@
  * escaped  = "\" [ []().* ]
  */
 
-static dfa *build_automaton(parse_context *ctx);
-static bool mk_dfalist(parse_context *ctx, dfalist *lst, size_t cap) {
-  dfa **arr = arena_alloc(ctx->a, cap, sizeof(dfa *));
+static nfa *build_automaton(parse_context *ctx);
+static bool mk_nfalist(parse_context *ctx, nfalist *lst, size_t cap) {
+  nfa **arr = arena_alloc(ctx->a, cap, sizeof(nfa *));
   if (arr) {
     lst->n = 0;
     lst->cap = cap;
@@ -50,14 +50,14 @@ static bool mk_dfalist(parse_context *ctx, dfalist *lst, size_t cap) {
   return false;
 }
 
-static void push_dfa(parse_context *ctx, dfalist *lst, dfa *d) {
+static void push_nfa(parse_context *ctx, nfalist *lst, nfa *d) {
   if (lst->n >= lst->cap) {
     if (lst->arr == NULL)
-      mk_dfalist(ctx, lst, 2);
+      mk_nfalist(ctx, lst, 2);
     else {
       size_t newcap = lst->cap * 2;
-      dfa **arr = arena_alloc(ctx->a, newcap, sizeof(dfa *));
-      memcpy(arr, lst->arr, lst->n * sizeof(dfa *));
+      nfa **arr = arena_alloc(ctx->a, newcap, sizeof(nfa *));
+      memcpy(arr, lst->arr, lst->n * sizeof(nfa *));
       lst->arr = arr;
       lst->cap = newcap;
     }
@@ -65,8 +65,8 @@ static void push_dfa(parse_context *ctx, dfalist *lst, dfa *d) {
   lst->arr[lst->n++] = d;
 }
 
-static dfa *mk_state(parse_context *ctx, u8 accept) {
-  dfa *d = arena_alloc(ctx->a, sizeof(dfa), 1);
+static nfa *mk_state(parse_context *ctx, u8 accept) {
+  nfa *d = arena_alloc(ctx->a, sizeof(nfa), 1);
   if (accept == DIGIT) {
     d->accept = '0';
     d->accept_end = '9';
@@ -95,7 +95,7 @@ static u8 take_char(parse_context *ctx) {
   return ch;
 }
 
-static dfa *match_symbol(parse_context *ctx, bool class_match) {
+static nfa *match_symbol(parse_context *ctx, bool class_match) {
   if (finished(ctx)) return NULL;
   bool escaped = peek(ctx) == '\\';
   u8 ch = take_char(ctx);
@@ -135,8 +135,8 @@ static dfa *match_symbol(parse_context *ctx, bool class_match) {
   }
 }
 
-static dfa *match_class(parse_context *ctx) {
-  dfa *class, *final;
+static nfa *match_class(parse_context *ctx) {
+  nfa *class, *final;
   bool bitmap[UINT8_MAX] = {0};
   bool negate = false;
 
@@ -199,7 +199,7 @@ static dfa *match_class(parse_context *ctx) {
       int end;
       for (end = start + 1; end < UINT8_MAX && bitmap[end]; end++) {
       }
-      dfa *new = mk_state(ctx, start);
+      nfa *new = mk_state(ctx, start);
       // accept_end is inclusive
       new->accept_end = end - 1;
       add_transition(new, final);
@@ -211,10 +211,10 @@ static dfa *match_class(parse_context *ctx) {
   return class;
 }
 
-typedef dfa *(*matcher)(parse_context *);
+typedef nfa *(*matcher)(parse_context *);
 
-static dfa *next_match(parse_context *ctx) {
-  dfa *result = NULL;
+static nfa *next_match(parse_context *ctx) {
+  nfa *result = NULL;
   u8 ch = peek(ctx);
   switch (ch) {
     case '[':
@@ -245,14 +245,14 @@ static dfa *next_match(parse_context *ctx) {
   return result;
 }
 
-static dfa *build_automaton(parse_context *ctx) {
-  dfa *left, *right;
-  dfa *next, *start;
+static nfa *build_automaton(parse_context *ctx) {
+  nfa *left, *right;
+  nfa *next, *start;
   start = next = mk_state(ctx, EPSILON);
   left = right = NULL;
 
   while (!finished(ctx)) {
-    dfa *new = next_match(ctx);
+    nfa *new = next_match(ctx);
     if (new == NULL) {
       break;
     }
@@ -270,9 +270,9 @@ static dfa *build_automaton(parse_context *ctx) {
         advance(ctx);
       }
 
-      dfa *loop_start = mk_state(ctx, EPSILON);
-      dfa *loop_end = mk_state(ctx, EPSILON);
-      dfa *new_end = end_state(new);
+      nfa *loop_start = mk_state(ctx, EPSILON);
+      nfa *loop_end = mk_state(ctx, EPSILON);
+      nfa *new_end = end_state(new);
 
       add_transition(next, loop_start);
       next = loop_end;
@@ -310,13 +310,13 @@ static dfa *build_automaton(parse_context *ctx) {
       if (right == NULL) {
         return NULL;
       }
-      dfa *parent = mk_state(ctx, EPSILON);
+      nfa *parent = mk_state(ctx, EPSILON);
       add_transition(parent, left);
       add_transition(parent, right);
       start = parent;
       next = mk_state(ctx, EPSILON);
-      dfa *left_end = end_state(left);
-      dfa *right_end = end_state(right);
+      nfa *left_end = end_state(left);
+      nfa *right_end = end_state(right);
       add_transition(left_end, next);
       add_transition(right_end, next);
     }
@@ -326,7 +326,7 @@ static dfa *build_automaton(parse_context *ctx) {
   return start;
 }
 
-static bool match_dfa(dfa *d, match_context *ctx) {
+static bool match_nfa(nfa *d, match_context *ctx) {
   if (d == NULL) return finished(ctx);
   u8 ch;
   if (d->accept != EPSILON) {
@@ -336,19 +336,19 @@ static bool match_dfa(dfa *d, match_context *ctx) {
   }
 
   for (size_t i = 0; i < d->lst.n; i++) {
-    dfa *next = d->lst.arr[i];
+    nfa *next = d->lst.arr[i];
     ssize_t pos = ctx->c;
     // avoid infinite recursion if there is no progress
     if (next->progress == pos) continue;
     next->progress = pos;
-    if (match_dfa(next, ctx)) return true;
+    if (match_nfa(next, ctx)) return true;
     ctx->c = pos;
   }
 
   return finished(ctx) && d->lst.n == 0;
 }
 
-static bool partial_match(dfa *d, match_context *ctx) {
+static bool partial_match(nfa *d, match_context *ctx) {
   if (d == NULL) return finished(ctx);
   u8 ch;
   if (d->accept != EPSILON) {
@@ -358,7 +358,7 @@ static bool partial_match(dfa *d, match_context *ctx) {
   }
 
   for (size_t i = 0; i < d->lst.n; i++) {
-    dfa *next = d->lst.arr[i];
+    nfa *next = d->lst.arr[i];
     ssize_t pos = ctx->c;
     // avoid infinite recursion if there is no progress
     if (next->progress == pos) continue;
@@ -370,12 +370,12 @@ static bool partial_match(dfa *d, match_context *ctx) {
   return d->lst.n == 0;
 }
 
-// Reset the progress of all nodes in the dfa
-static void reset(dfa *d) {
+// Reset the progress of all nodes in the nfa
+static void reset(nfa *d) {
   if (d) {
     d->progress = -1;
     for (size_t i = 0; i < d->lst.n; i++) {
-      dfa *next = d->lst.arr[i];
+      nfa *next = d->lst.arr[i];
       if (next->progress == -1) continue;
       reset(next);
     }
@@ -452,7 +452,7 @@ regex_match regex_matches(regex *r, match_context *ctx) {
 bool regex_matches_strict(regex *r, const char *string) {
   match_context m = {.n = strlen(string), .c = 0, .src = string};
   reset(r->start);
-  return match_dfa(r->start, &m);
+  return match_nfa(r->start, &m);
 }
 
 regex_match regex_find(regex *r, const char *string) {
@@ -480,11 +480,11 @@ bool matches(const char *pattern, const char *string) {
   return result;
 }
 
-static void _regex_first(dfa *d, char map[static UINT8_MAX]) {
+static void _regex_first(nfa *d, char map[static UINT8_MAX]) {
   if (d == NULL) return;
   if (d->accept == EPSILON) {
     for (size_t i = 0; i < d->lst.n; i++) {
-      dfa *next = d->lst.arr[i];
+      nfa *next = d->lst.arr[i];
       _regex_first(next, map);
     }
   } else {
