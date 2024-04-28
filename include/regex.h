@@ -1,12 +1,13 @@
 #ifndef REGEX_H
 #define REGEX_H
 
-#include "arena.h"
-#include "collections.h"
-#include "text.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+
+#include "arena.h"
+#include "collections.h"
+#include "text.h"
 
 typedef struct dfa dfa;
 typedef unsigned char u8;
@@ -38,7 +39,8 @@ typedef struct {
 } regex_match;
 
 typedef parse_context match_context;
-#define mk_ctx(string) (parse_context){.src = string, .n = strlen(string)}
+#define mk_ctx(string) \
+  (parse_context) { .src = string, .n = strlen(string) }
 
 typedef struct {
   parse_context ctx;
@@ -55,4 +57,4 @@ regex *mk_regex(const char *pattern);
 regex *mk_regex_from_slice(string_slice slice);
 // Get the set of characters that can occur in the beginning of a matching regex
 void regex_first(regex *r, char map[static UINT8_MAX]);
-#endif // REGEX_H
+#endif  // REGEX_H

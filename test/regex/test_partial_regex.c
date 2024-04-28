@@ -34,7 +34,8 @@ int main(void) {
     testcase *t = &testcases[i];
     int idx = match(t);
     if (idx != t->match_index) {
-      printf("test_greed failed:\nmatch %s on %s yielded index %d, expected %d\n", t->pattern, t->string, idx, t->match_index);
+      printf("test_greed failed:\nmatch %s on %s yielded index %d, expected %d\n", t->pattern, t->string, idx,
+             t->match_index);
       fail = true;
     }
   }

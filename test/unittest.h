@@ -1,8 +1,9 @@
 #ifndef _UNITTEST_H
 #define _UNITTEST_H
 
-#include "logging.h"
 #include <stdlib.h>
+
+#include "logging.h"
 
 void _assert_failure(const char *func, const char *file, int lineno, const char *expr);
 void _assert_failure(const char *func, const char *file, int lineno, const char *expr) {

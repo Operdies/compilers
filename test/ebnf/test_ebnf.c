@@ -1,14 +1,15 @@
 // link ebnf/ebnf.o ebnf/analysis.o scanner/scanner.o
 // link regex.o arena.o collections.o logging.o
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
 #include "../unittest.h"
 #include "ebnf/ebnf.h"
 #include "logging.h"
 #include "macros.h"
 #include "scanner/scanner.h"
 #include "text.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #define tok(key, pattern) [key] = {#key, (char *)pattern}
 
@@ -25,17 +26,15 @@ void test_lookahead(void) {
 
   struct testcase testcases[] = {
       {
-          .lookahead = 1,
-          .grammar = "A = { B | C } .\n"
+       .lookahead = 1,
+       .grammar = "A = { B | C } .\n"
                      "B = 'b' .\n"
-                     "C = 'c' .\n",
-      },
+                     "C = 'c' .\n", },
       {
-          .lookahead = 2,
-          .grammar = "A = B | C .\n"
+       .lookahead = 2,
+       .grammar = "A = B | C .\n"
                      "B = 'bb' .\n"
-                     "C = 'bc' .\n",
-      },
+                     "C = 'bc' .\n", },
   };
 
   for (int i = 0; i < LENGTH(testcases); i++) {
@@ -53,8 +52,7 @@ void test_lookahead(void) {
   }
 }
 
-void test_parser2(parser_t *g, int n, struct testcase testcases[static n],
-                  enum loglevel l, int start_rule) {
+void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum loglevel l, int start_rule) {
   int ll = set_loglevel(l);
   // this is a bit spammy for failing grammars
   for (int i = 0; i < n; i++) {
@@ -65,8 +63,7 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n],
     bool success = parse(g, &mk_ctx(test->src), &a, start_rule);
     if (success != test->expected) {
       print_ast(a, NULL);
-      error("Error parsing program %s: was %s, expected %s\n", test->src,
-            truth[success], truth[test->expected]);
+      error("Error parsing program %s: was %s, expected %s\n", test->src, truth[success], truth[test->expected]);
       error_ctx(g->s->ctx);
       exit(1);
     }
@@ -76,30 +73,44 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n],
 }
 
 void test_multiple_optionals(void) {
-  { // Successive Optionals
+  {  // Successive Optionals
     const char grammar[] = {"A = [ 'a' ] [ 'b' ] .\n"};
     scanner s = {0};
     parser_t p = mk_parser_raw(grammar, &s);
 
     struct testcase testcases[] = {
-        {"", true},     {"a", true},    {"b", true},   {"ab", true},
-        {"aa", false},  {"c", false},   {"bc", false}, {"bcd", false},
-        {"bcd", false}, {"abb", false},
+        {"",    true },
+        {"a",   true },
+        {"b",   true },
+        {"ab",  true },
+        {"aa",  false},
+        {"c",   false},
+        {"bc",  false},
+        {"bcd", false},
+        {"bcd", false},
+        {"abb", false},
     };
 
     test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
 
     destroy_parser(&p);
   }
-  { // Nested optionals
+  {  // Nested optionals
     const char grammar[] = {"A = [ 'a' ] [ 'b' [ 'c' ] [ 'd' ] ] .\n"};
     scanner s = {0};
     parser_t p = mk_parser_raw(grammar, &s);
 
     struct testcase testcases[] = {
-        {"abb", false}, {"", true},     {"a", true},  {"b", true},
-        {"ab", true},   {"aa", false},  {"c", false}, {"bc", true},
-        {"bcd", true},  {"abcd", true},
+        {"abb",  false},
+        {"",     true },
+        {"a",    true },
+        {"b",    true },
+        {"ab",   true },
+        {"aa",   false},
+        {"c",    false},
+        {"bc",   true },
+        {"bcd",  true },
+        {"abcd", true },
     };
 
     test_parser2(&p, LENGTH(testcases), testcases, WARN, 0);
@@ -108,20 +119,28 @@ void test_multiple_optionals(void) {
   }
 }
 void test_parser(void) {
-  const char grammar[] = {"expression = term {('+' | '-' ) term } .\n"
-                          "term       = factor {('*' | '/') factor } .\n"
-                          "factor     = ( digits | '(' expression ')' ) .\n"
-                          "digits     = digit { opt [ '!' ] hash digit } .\n"
-                          "opt        = [ '?' ] .\n"
-                          "hash       = [ '#' ] .\n"
-                          "digit      = '0' | '1' | '2' | '3' | '4' | '5' | "
-                          "'6' | '7' | '8' | '9' .\n"
-                          ""};
+  const char grammar[] = {
+      "expression = term {('+' | '-' ) term } .\n"
+      "term       = factor {('*' | '/') factor } .\n"
+      "factor     = ( digits | '(' expression ')' ) .\n"
+      "digits     = digit { opt [ '!' ] hash digit } .\n"
+      "opt        = [ '?' ] .\n"
+      "hash       = [ '#' ] .\n"
+      "digit      = '0' | '1' | '2' | '3' | '4' | '5' | "
+      "'6' | '7' | '8' | '9' .\n"
+      ""};
 
   struct testcase testcases[] = {
-      {"12?!#1", true}, {"1?", false},   {"", false},     {"()", false},
-      {"1?2", true},    {"23", true},    {"45*67", true}, {"1?1", true},
-      {"1+1", true},    {"(1+1)", true},
+      {"12?!#1", true },
+      {"1?",     false},
+      {"",       false},
+      {"()",     false},
+      {"1?2",    true },
+      {"23",     true },
+      {"45*67",  true },
+      {"1?1",    true },
+      {"1+1",    true },
+      {"(1+1)",  true },
   };
   scanner s = {0};
   parser_t p = mk_parser_raw(grammar, &s);
@@ -158,8 +177,9 @@ void json_parser(void) {
       tok(rcbrk, "}"),
   };
   const rule_def rules[] = {
-      tok(object, "( lcbrk keyvalues rcbrk | lsqbrk list rsqbrk | number | "
-                  "string | boolean )"),
+      tok(object,
+          "( lcbrk keyvalues rcbrk | lsqbrk list rsqbrk | number | "
+          "string | boolean )"),
       tok(list, "[ object { comma object } ] "),
       tok(keyvalues, "[ keyvalue { comma keyvalue } ]"),
       tok(keyvalue, "string colon object"),
@@ -172,17 +192,16 @@ void json_parser(void) {
   }
 
   struct testcase testcases[] = {
-      {"", false},
-      {"[1", false},
-      {"[1,2,45,-3]", true},
-      {"[1 , 2 , 45 , -3 ]", true},
-      {"{\"a\":1}", true},
+      {"",                   false},
+      {"[1",                 false},
+      {"[1,2,45,-3]",        true },
+      {"[1 , 2 , 45 , -3 ]", true },
+      {"{\"a\":1}",          true },
       {"{"
        "\"key one\": [1,2,45,-3],"
        "\"number\":1,"
        "\"obj\":{ \"v\": \"str\"}"
-       "}",
-       true},
+       "}",           true },
   };
 
   test_parser2(&p, LENGTH(testcases), testcases, DEBUG, object);
@@ -231,14 +250,12 @@ void json_parser(void) {
 void test_ll12(bool expected, grammar_rules rules, scanner_tokens tokens) {
   parser_t p = mk_parser(rules, tokens);
   int ll = 0;
-  if (!expected)
-    ll = set_loglevel(WARN);
+  if (!expected) ll = set_loglevel(WARN);
   if (is_ll1(&p) != expected) {
     error("Expected %sll1", expected ? " " : "not ");
   }
   destroy_parser(&p);
-  if (ll)
-    set_loglevel(ll);
+  if (ll) set_loglevel(ll);
 }
 
 void test_ll1(void) {
@@ -311,7 +328,7 @@ void test_ll1(void) {
       // 3 [exp] or {exp}    -> the sets of start symbols of exp and of symbols
       // that may follow K must be disjoint
 
-      { // scenario 1: term ends with an optional
+      {  // scenario 1: term ends with an optional
         {
           rule_def rules[] = {
               tok(A, "B 'x'"),
@@ -356,7 +373,7 @@ void test_ll1(void) {
         }
       }
 
-      { // scenario 2: term ends with a production which contains the empty set
+      {  // scenario 2: term ends with a production which contains the empty set
         {
           rule_def rules[] = {
               tok(A, "B 'x'"),
@@ -375,8 +392,10 @@ void test_ll1(void) {
         }
       }
 
-      { // scenario 3: term ends with a regex which can match the empty set
-        token_def tokens[] = {{"X", "x*"}};
+      {  // scenario 3: term ends with a regex which can match the empty set
+        token_def tokens[] = {
+            {"X", "x*"}
+        };
         {
           rule_def rules[] = {
               tok(A, "B 'x'"),
@@ -420,12 +439,17 @@ void test_ll1(void) {
 }
 
 void test_oberon2(void) {
-  static char grammar[] = {"B = [ A { A 'x' } ] 'z' .\n"
-                           "A = '1' .\n"
-                           ""};
+  static char grammar[] = {
+      "B = [ A { A 'x' } ] 'z' .\n"
+      "A = '1' .\n"
+      ""};
   struct testcase testcases[] = {
-      {"z", true},    {"1", false},   {"1xz", false},
-      {"11xz", true}, {"11x", false}, {"x", false},
+      {"z",    true },
+      {"1",    false},
+      {"1xz",  false},
+      {"11xz", true },
+      {"11x",  false},
+      {"x",    false},
   };
 
   scanner s = {0};
@@ -456,7 +480,7 @@ void test_calculator(void) {
 
   parser_t p = mk_parser(mk_rules(rules), mk_tokens(tokens));
   struct testcase testcases[] = {
-      {"1+2*3", true},
+      {"1+2*3",   true},
       {"(1+2)*3", true},
   };
 

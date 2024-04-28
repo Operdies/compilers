@@ -30,7 +30,8 @@ typedef struct {
   int n;
   const token_def *tokens;
 } scanner_tokens;
-#define mk_tokens(t) (scanner_tokens) { .n = LENGTH(t), .tokens = t }
+#define mk_tokens(t) \
+  (scanner_tokens) { .n = LENGTH(t), .tokens = t }
 
 int peek_token(scanner *s, const bool *valid, string_slice *content);
 int next_token(scanner *s, const bool *valid, string_slice *content);
@@ -42,4 +43,4 @@ scanner mk_scanner(const scanner_tokens tokens);
 void rewind_scanner(scanner *s, string_slice point);
 void destroy_scanner(scanner *s);
 
-#endif // SCANNER_H
+#endif  // SCANNER_H

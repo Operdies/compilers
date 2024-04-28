@@ -1,17 +1,18 @@
 #ifndef EBNF_H
 #define EBNF_H
 
+#include <stdint.h>
+
 #include "collections.h"
 #include "regex.h"
 #include "scanner/scanner.h"
 #include "text.h"
-#include <stdint.h>
 
 // * factor     = identifier | string | "(" expression ")" | "[" expression "]" | "{" expression "}".
 enum factor_switch {
-  F_OPTIONAL, // [ expression ]
-  F_REPEAT,   // { expression }
-  F_PARENS,   // ( expression )
+  F_OPTIONAL,  // [ expression ]
+  F_REPEAT,    // { expression }
+  F_PARENS,    // ( expression )
   F_IDENTIFIER,
   F_STRING,
   F_TOKEN,
@@ -128,7 +129,8 @@ typedef struct {
   const rule_def *rules;
 } grammar_rules;
 
-#define mk_rules(r) (grammar_rules) { .n = LENGTH(r), .rules = r }
+#define mk_rules(r) \
+  (grammar_rules) { .n = LENGTH(r), .rules = r }
 
 parser_t mk_parser(grammar_rules rules, scanner_tokens tokens);
 parser_t mk_parser_raw(const char *grammar, scanner *s);
@@ -177,4 +179,4 @@ vec populate_maps(production_t *owner, vec follows);
 void add_symbols(symbol_t *start, int k, vec *follows);
 const char *describe_symbol(symbol_t *s);
 
-#endif // !EBNF_H
+#endif  // !EBNF_H

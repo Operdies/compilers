@@ -1,9 +1,10 @@
 // link: regex.o arena.o collections.o logging.o
+#include <stdio.h>
+#include <unistd.h>
+
 #include "../unittest.h"
 #include "logging.h"
 #include "regex.h"
-#include <stdio.h>
-#include <unistd.h>
 
 typedef struct {
   char *pattern;
@@ -130,17 +131,17 @@ int main(void) {
     bool is_match = matches(p->pattern, p->test);
     if (is_match != p->match) {
       char *strings[] = {"false", "true"};
-      error("Match %4s\n      %4s\n"
-            "Expect %s\n    is %s\n",
-            p->pattern, p->test, strings[p->match], strings[is_match]);
+      error(
+          "Match %4s\n      %4s\n"
+          "Expect %s\n    is %s\n",
+          p->pattern, p->test, strings[p->match], strings[is_match]);
       status++;
     }
   }
   set_loglevel(INFO);
   pair invalid = {"h+*", "hhh", false};
   regex *r = mk_regex(invalid.pattern);
-  if (r != NULL)
-    die("Parsing %s succeeded. Should fail.");
+  if (r != NULL) die("Parsing %s succeeded. Should fail.");
   assert2(log_severity() <= INFO);
   return status;
 }

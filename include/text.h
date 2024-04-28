@@ -21,8 +21,8 @@ typedef struct {
 } parse_context;
 
 // TODO: move this to a sensible location
-#define SINGLETICK_STR  "'([^'\\\\]|\\\\.)*'"
+#define SINGLETICK_STR "'([^'\\\\]|\\\\.)*'"
 #define DOUBLETICK_STR "\"([^\"\\\\]|\\\\.)*\""
 static const char string_regex[] = SINGLETICK_STR "|" DOUBLETICK_STR;
 
-#endif // TEXT_H
+#endif  // TEXT_H

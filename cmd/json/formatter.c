@@ -1,10 +1,11 @@
 // link ebnf/ebnf.o ebnf/analysis.o scanner/scanner.o
 // link regex.o arena.o collections.o logging.o
+#include <stdio.h>
+
 #include "ebnf/ebnf.h"
 #include "logging.h"
 #include "macros.h"
 #include "text.h"
-#include <stdio.h>
 
 #define tok(key, pattern) [key] = {#key, (char *)pattern}
 enum json_tokens {
@@ -35,8 +36,9 @@ static token_def json_tokens[] = {
     tok(rcbrk, "}"),
 };
 const rule_def rules[] = {
-    tok(object, "( lcbrk keyvalues rcbrk | lsqbrk list rsqbrk | number | "
-                "string | boolean )"),
+    tok(object,
+        "( lcbrk keyvalues rcbrk | lsqbrk list rsqbrk | number | "
+        "string | boolean )"),
     tok(list, "[ object { comma object } ] "),
     tok(keyvalues, "[ keyvalue { comma keyvalue } ]"),
     tok(keyvalue, "string colon object"),
@@ -48,37 +50,36 @@ void visit(AST *a, int indent) {
   for (; a; a = a->next) {
     enum json_tokens node = a->node_id;
     switch (node) {
-    case string:
-    case number:
-    case boolean:
-    case comma:
-    case colon:
-      print(a);
-      if (node == colon)
-        printf(" ");
-      else if (node == comma)
+      case string:
+      case number:
+      case boolean:
+      case comma:
+      case colon:
+        print(a);
+        if (node == colon)
+          printf(" ");
+        else if (node == comma)
+          printf("\n%*s", indent, " ");
+        break;
+      case lsqbrk:
+      case lcbrk:
+        indent += 2;
+        print(a);
         printf("\n%*s", indent, " ");
-      break;
-    case lsqbrk:
-    case lcbrk:
-      indent += 2;
-      print(a);
-      printf("\n%*s", indent, " ");
-      break;
-    case rsqbrk:
-    case rcbrk:
-      indent -= 2;
-      printf("\n%*s", indent, "");
-      print(a);
-      break;
-    case object:
-    case list:
-    case keyvalues:
-    case keyvalue:
-      break;
+        break;
+      case rsqbrk:
+      case rcbrk:
+        indent -= 2;
+        printf("\n%*s", indent, "");
+        print(a);
+        break;
+      case object:
+      case list:
+      case keyvalues:
+      case keyvalue:
+        break;
     }
-    if (a->first_child)
-      visit(a->first_child, indent);
+    if (a->first_child) visit(a->first_child, indent);
   }
 #undef print
 }

@@ -1,14 +1,16 @@
 #include "arena.h"
-#include "collections.h"
+
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "collections.h"
+
 // Arenas should be aligned to page boundaries
-#define PAGESIZE 4096 // (PAGESIZE ? PAGESIZE : (PAGESIZE = sysconf(_SC_PAGESIZE)))
+#define PAGESIZE 4096  // (PAGESIZE ? PAGESIZE : (PAGESIZE = sysconf(_SC_PAGESIZE)))
 
 static arena *mk_arena_sized(size_t size) {
-  // PERFORMANCE: I don't think calloc guarantees a page aligned memory region just because the region would align with a page boundary.
-  // Use something like memalign instead.
+  // PERFORMANCE: I don't think calloc guarantees a page aligned memory region just because the region would align with
+  // a page boundary. Use something like memalign instead.
   size += offsetof(arena, buffer);
   size = size - (size % PAGESIZE) + PAGESIZE;
   arena *a;

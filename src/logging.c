@@ -1,3 +1,5 @@
+#include "logging.h"
+
 #include <errno.h>
 #include <execinfo.h>
 #include <signal.h>
@@ -8,7 +10,6 @@
 #include <string.h>
 
 #include "collections.h"
-#include "logging.h"
 #include "macros.h"
 
 #define RESET_COLOR "\033[0m"
@@ -17,27 +18,17 @@ enum loglevel loglevel = DEBUG;
 enum loglevel most_severe_log = DEBUG;
 
 static const char *log_headers[] = {
-    [WARN] = "\033[1;30;43m",
-    [DEBUG] = "\033[1;30;46m",
-    [INFO] = "\033[1;30;44m",
-    [ERROR] = "\033[1;30;41m",
-    [FATAL] = "\033[1;30;41m",
+    [WARN] = "\033[1;30;43m",  [DEBUG] = "\033[1;30;46m", [INFO] = "\033[1;30;44m",
+    [ERROR] = "\033[1;30;41m", [FATAL] = "\033[1;30;41m",
 };
 
 static const char *log_colors[] = {
-    [DEBUG] = "\033[1;36m",
-    [INFO] = "\033[1;34m",
-    [WARN] = "\033[1;33m",
-    [ERROR] = "\033[1;31m",
-    [FATAL] = "\033[1;31m",
+    [DEBUG] = "\033[1;36m", [INFO] = "\033[1;34m",  [WARN] = "\033[1;33m",
+    [ERROR] = "\033[1;31m", [FATAL] = "\033[1;31m",
 };
 
 static const char *headers[] = {
-    [DEBUG] = "DEBUG",
-    [INFO] = "INFO",
-    [WARN] = "WARN",
-    [ERROR] = "ERROR",
-    [FATAL] = "FATAL",
+    [DEBUG] = "DEBUG", [INFO] = "INFO", [WARN] = "WARN", [ERROR] = "ERROR", [FATAL] = "FATAL",
 };
 
 static FILE *log = NULL;
@@ -50,8 +41,7 @@ enum loglevel get_loglevel(void) { return loglevel; }
 enum loglevel log_severity(void) { return most_severe_log; }
 
 bool set_log_location(const char *filename) {
-  if (log)
-    fclose(log);
+  if (log) fclose(log);
   log = fopen(filename, "w");
   return log != NULL;
 }
@@ -62,22 +52,17 @@ static bool add_colors(FILE *fp) {
   return fp->_fileno == stdout->_fileno || fp->_fileno == stderr->_fileno;
 }
 static bool should_log(FILE *fp, enum loglevel level) {
-  if (fp->_fileno == stdout->_fileno || fp->_fileno == stderr->_fileno)
-    return loglevel <= level;
+  if (fp->_fileno == stdout->_fileno || fp->_fileno == stderr->_fileno) return loglevel <= level;
   return true;
 }
 
 static vec strbuf = {.sz = sizeof(char)};
-static void destroy_strbuf(void) {
-  vec_destroy(&strbuf);
-}
+static void destroy_strbuf(void) { vec_destroy(&strbuf); }
 void colored_log(FILE *fp, enum loglevel level, const char *fmt, va_list ap) {
   strbuf.n = 0;
   setup_crash_stacktrace_logger();
-  if (!fp)
-    return;
-  if (log && fp != log)
-    colored_log(log, level, fmt, ap);
+  if (!fp) return;
+  if (log && fp != log) colored_log(log, level, fmt, ap);
 
   if (should_log(fp, level)) {
     const char *color = log_colors[level];
@@ -101,12 +86,10 @@ void colored_log(FILE *fp, enum loglevel level, const char *fmt, va_list ap) {
       fprintf(fp, "%s\n", line);
     }
 
-    if (add_colors(fp))
-      fprintf(fp, RESET_COLOR);
+    if (add_colors(fp)) fprintf(fp, RESET_COLOR);
 
     fflush(fp);
-    if (level > most_severe_log)
-      most_severe_log = level;
+    if (level > most_severe_log) most_severe_log = level;
   }
 }
 
@@ -190,8 +173,7 @@ void die(const char *fmt, ...) {
   int size = backtrace(array, LENGTH(array));
   print_stacktrace_friendly(array, size, 0);
 
-  if (log)
-    fclose(log);
+  if (log) fclose(log);
   exit(1);
 }
 
@@ -203,43 +185,30 @@ static void handler(int sig) {
   int size = backtrace(array, LENGTH(array));
   print_stacktrace_friendly(array, size, 2);
 
-  if (log)
-    fclose(log);
+  if (log) fclose(log);
   exit(sig);
 }
 
 static void print_ctx(logger_sig_fn f, parse_context *ctx) {
   int start, end;
   start = ctx->c;
-  while (start > 0 && ctx->src[start] != '\n')
-    start--;
-  if (ctx->src[start] == '\n')
-    start++;
+  while (start > 0 && ctx->src[start] != '\n') start--;
+  if (ctx->src[start] == '\n') start++;
 
   end = ctx->c;
-  while (end < ctx->n && ctx->src[end] != '\n')
-    end++;
+  while (end < ctx->n && ctx->src[end] != '\n') end++;
   f("%.*s\n"
     "%*s",
-    end - start, ctx->src + start,
-    ctx->c - start + 1, "^");
+    end - start, ctx->src + start, ctx->c - start + 1, "^");
 }
 
-void error_ctx(parse_context *ctx) {
-  print_ctx(error, ctx);
-}
+void error_ctx(parse_context *ctx) { print_ctx(error, ctx); }
 
-void warn_ctx(parse_context *ctx) {
-  print_ctx(warn, ctx);
-}
+void warn_ctx(parse_context *ctx) { print_ctx(warn, ctx); }
 
-void debug_ctx(parse_context *ctx) {
-  print_ctx(debug, ctx);
-}
+void debug_ctx(parse_context *ctx) { print_ctx(debug, ctx); }
 
-void info_ctx(parse_context *ctx) {
-  print_ctx(info, ctx);
-}
+void info_ctx(parse_context *ctx) { print_ctx(info, ctx); }
 
 static bool init = false;
 void setup_crash_stacktrace_logger(void) {
@@ -247,7 +216,6 @@ void setup_crash_stacktrace_logger(void) {
     atexit(destroy_strbuf);
     init = true;
     int signals[] = {SIGINT, SIGSEGV, SIGTERM, SIGHUP, SIGQUIT};
-    for (int i = 0; i < LENGTH(signals); i++)
-      sigaction(signals[i], &(struct sigaction){.sa_handler = handler}, NULL);
+    for (int i = 0; i < LENGTH(signals); i++) sigaction(signals[i], &(struct sigaction){.sa_handler = handler}, NULL);
   }
 }

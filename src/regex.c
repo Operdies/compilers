@@ -1,15 +1,17 @@
 #include "regex.h"
-#include "collections.h"
-#include "logging.h"
-#include "macros.h"
-#include "text.h"
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "collections.h"
+#include "logging.h"
+#include "macros.h"
+#include "text.h"
+
 // chars 0-10 are not printable and can be freely used as special tokens
-#define DIGIT 3 // \d
+#define DIGIT 3  // \d
 #define EPSILON 2
 #define DOT 1
 #define KLEENE '*'
@@ -78,8 +80,7 @@ static dfa *mk_state(parse_context *ctx, u8 accept) {
 }
 
 static u8 take_char(parse_context *ctx) {
-  if (finished(ctx))
-    return 0;
+  if (finished(ctx)) return 0;
   u8 ch = take(ctx);
   if (ch == '\\') {
     if (finished(ctx)) {
@@ -87,22 +88,18 @@ static u8 take_char(parse_context *ctx) {
       return 0;
     }
     ch = take(ctx);
-    if (ch == 'n')
-      return '\n';
-    if (ch == 't')
-      return '\t';
+    if (ch == 'n') return '\n';
+    if (ch == 't') return '\t';
     return ch;
   }
   return ch;
 }
 
 static dfa *match_symbol(parse_context *ctx, bool class_match) {
-  if (finished(ctx))
-    return NULL;
+  if (finished(ctx)) return NULL;
   bool escaped = peek(ctx) == '\\';
   u8 ch = take_char(ctx);
-  if (ch == 0)
-    return NULL;
+  if (ch == 0) return NULL;
   if (escaped) {
     if (ch == 'd')
       return mk_state(ctx, DIGIT);
@@ -111,30 +108,30 @@ static dfa *match_symbol(parse_context *ctx, bool class_match) {
   }
 
   switch (ch) {
-  case '(':
-  case ')':
-  case '|':
-  case '+':
-  case '*':
-  case '?':
-    if (class_match) {
+    case '(':
+    case ')':
+    case '|':
+    case '+':
+    case '*':
+    case '?':
+      if (class_match) {
+        return mk_state(ctx, ch);
+        break;
+      }
+      // else fall through
+    case '[':
+    case ']':
+      // put it back
+      ctx->c--;
+      sprintf(ctx->err, "Unescaped literal %c", ch);
+      return NULL;
+      break;
+    case '.':
+      return mk_state(ctx, class_match ? ch : DOT);
+      break;
+    default:
       return mk_state(ctx, ch);
       break;
-    }
-    // else fall through
-  case '[':
-  case ']':
-    // put it back
-    ctx->c--;
-    sprintf(ctx->err, "Unescaped literal %c", ch);
-    return NULL;
-    break;
-  case '.':
-    return mk_state(ctx, class_match ? ch : DOT);
-    break;
-  default:
-    return mk_state(ctx, ch);
-    break;
   }
 }
 
@@ -173,15 +170,13 @@ static dfa *match_class(parse_context *ctx) {
 
   while (peek(ctx) != ']' && finished(ctx) == false) {
     u8 from = take_char(ctx);
-    if (from == 0)
-      return NULL;
+    if (from == 0) return NULL;
     u8 to = from;
 
     if (peek(ctx) == RANGE) {
       advance(ctx);
       to = take_char(ctx);
-      if (to == 0)
-        return NULL;
+      if (to == 0) return NULL;
       if (to < from) {
         sprintf(ctx->err, "Range contains no values.");
         return NULL;
@@ -222,32 +217,30 @@ static dfa *next_match(parse_context *ctx) {
   dfa *result = NULL;
   u8 ch = peek(ctx);
   switch (ch) {
-  case '[':
-    advance(ctx);
-    result = match_class(ctx);
-    if (take(ctx) != ']') {
+    case '[':
+      advance(ctx);
+      result = match_class(ctx);
+      if (take(ctx) != ']') {
+        return NULL;
+      }
+      return result;
+      break;
+    case ']': {
+      sprintf(ctx->err, "Unmatched class terminator.");
       return NULL;
-    }
-    return result;
-    break;
-  case ']':
-    sprintf(ctx->err, "Unmatched class terminator.");
-    return NULL;
-    break;
-  case ')':
-    sprintf(ctx->err, "Unmatched group terminator.");
-    return NULL;
-    break;
-  case '(':
-    advance(ctx);
-    result = build_automaton(ctx);
-    if (take(ctx) != ')') {
+    } break;
+    case ')':
+      sprintf(ctx->err, "Unmatched group terminator.");
       return NULL;
-    }
-    break;
-  default:
-    result = match_symbol(ctx, false);
-    break;
+      break;
+    case '(':
+      advance(ctx);
+      result = build_automaton(ctx);
+      if (take(ctx) != ')') return NULL;
+      break;
+    default:
+      result = match_symbol(ctx, false);
+      break;
   }
   return result;
 }
@@ -289,21 +282,17 @@ static dfa *build_automaton(parse_context *ctx) {
       // achieved by preferring to enter the loop again, and a non-greedy match
       // is achieved by preferring to exit the loop as early as possible.
       if (greedy) {
-        if (repeatable)
-          add_transition(new_end, loop_start);
+        if (repeatable) add_transition(new_end, loop_start);
 
         add_transition(new_end, loop_end);
         add_transition(loop_start, new);
-        if (optional)
-          add_transition(loop_start, loop_end);
+        if (optional) add_transition(loop_start, loop_end);
 
       } else {
         add_transition(new_end, loop_end);
-        if (repeatable)
-          add_transition(new_end, loop_start);
+        if (repeatable) add_transition(new_end, loop_start);
 
-        if (optional)
-          add_transition(loop_start, loop_end);
+        if (optional) add_transition(loop_start, loop_end);
 
         add_transition(loop_start, new);
       }
@@ -338,26 +327,21 @@ static dfa *build_automaton(parse_context *ctx) {
 }
 
 static bool match_dfa(dfa *d, match_context *ctx) {
-  if (d == NULL)
-    return finished(ctx);
+  if (d == NULL) return finished(ctx);
   u8 ch;
   if (d->accept != EPSILON) {
-    if (finished(ctx))
-      return false;
+    if (finished(ctx)) return false;
     ch = take(ctx);
-    if (ch < d->accept || ch > d->accept_end)
-      return false;
+    if (ch < d->accept || ch > d->accept_end) return false;
   }
 
   for (size_t i = 0; i < d->lst.n; i++) {
     dfa *next = d->lst.arr[i];
     ssize_t pos = ctx->c;
     // avoid infinite recursion if there is no progress
-    if (next->progress == pos)
-      continue;
+    if (next->progress == pos) continue;
     next->progress = pos;
-    if (match_dfa(next, ctx))
-      return true;
+    if (match_dfa(next, ctx)) return true;
     ctx->c = pos;
   }
 
@@ -365,26 +349,21 @@ static bool match_dfa(dfa *d, match_context *ctx) {
 }
 
 static bool partial_match(dfa *d, match_context *ctx) {
-  if (d == NULL)
-    return finished(ctx);
+  if (d == NULL) return finished(ctx);
   u8 ch;
   if (d->accept != EPSILON) {
-    if (finished(ctx))
-      return false;
+    if (finished(ctx)) return false;
     ch = take(ctx);
-    if (ch < d->accept || ch > d->accept_end)
-      return false;
+    if (ch < d->accept || ch > d->accept_end) return false;
   }
 
   for (size_t i = 0; i < d->lst.n; i++) {
     dfa *next = d->lst.arr[i];
     ssize_t pos = ctx->c;
     // avoid infinite recursion if there is no progress
-    if (next->progress == pos)
-      continue;
+    if (next->progress == pos) continue;
     next->progress = pos;
-    if (partial_match(next, ctx))
-      return true;
+    if (partial_match(next, ctx)) return true;
     ctx->c = pos;
   }
 
@@ -397,21 +376,16 @@ static void reset(dfa *d) {
     d->progress = -1;
     for (size_t i = 0; i < d->lst.n; i++) {
       dfa *next = d->lst.arr[i];
-      if (next->progress == -1)
-        continue;
+      if (next->progress == -1) continue;
       reset(next);
     }
   }
 }
 
-void destroy_regex(regex *r) {
-  (void)r;
-}
+void destroy_regex(regex *r) { (void)r; }
 
 static arena *regex_arena = NULL;
-static void destroy_regex_arena(void) {
-  destroy_arena(regex_arena);
-}
+static void destroy_regex_arena(void) { destroy_arena(regex_arena); }
 
 regex *mk_regex_from_slice(string_slice slice) {
   if (!regex_arena) {
@@ -420,8 +394,7 @@ regex *mk_regex_from_slice(string_slice slice) {
   }
 
   regex *r = NULL;
-  if (slice.str == NULL)
-    die("NULL string");
+  if (slice.str == NULL) die("NULL string");
   if (slice.str) {
     arena *a = regex_arena;
     char *pattern = arena_alloc(a, slice.n + 1, 1);
@@ -447,10 +420,8 @@ regex *mk_regex(const char *pattern) {
 
 regex_match regex_pos(regex *r, const char *string, int len) {
   regex_match result = {0};
-  if (!string)
-    return result;
-  if (len <= 0)
-    len = strlen(string);
+  if (!string) return result;
+  if (len <= 0) len = strlen(string);
   match_context m = {.n = len, .c = 0, .src = string};
   reset(r->start);
   bool match = partial_match(r->start, &m);
@@ -462,8 +433,7 @@ regex_match regex_pos(regex *r, const char *string, int len) {
 }
 
 regex_match regex_matches(regex *r, match_context *ctx) {
-  if (r == NULL)
-    die("NULL regex");
+  if (r == NULL) die("NULL regex");
   size_t pos = ctx->c;
   reset(r->start);
   bool match = partial_match(r->start, ctx);
@@ -511,16 +481,14 @@ bool matches(const char *pattern, const char *string) {
 }
 
 static void _regex_first(dfa *d, char map[static UINT8_MAX]) {
-  if (d == NULL)
-    return;
+  if (d == NULL) return;
   if (d->accept == EPSILON) {
     for (size_t i = 0; i < d->lst.n; i++) {
       dfa *next = d->lst.arr[i];
       _regex_first(next, map);
     }
   } else {
-    for (int ch = d->accept; ch <= d->accept_end; ch++)
-      map[ch] = 1;
+    for (int ch = d->accept; ch <= d->accept_end; ch++) map[ch] = 1;
   }
 }
 

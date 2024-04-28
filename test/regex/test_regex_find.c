@@ -44,8 +44,8 @@ int main(void) {
         printf("matched: %.*s\n", m.matched.n, m.matched.str);
       }
     } else if (t->match && ((t->string + t->start) != m.matched.str || t->length != m.matched.n)) {
-      printf("test failed: match '%s' on '%s'\nyielded  %.*s\nexpected %.*s\n", t->pattern, t->string,
-             m.matched.n, m.matched.str, (int)t->length, t->string + t->start);
+      printf("test failed: match '%s' on '%s'\nyielded  %.*s\nexpected %.*s\n", t->pattern, t->string, m.matched.n,
+             m.matched.str, (int)t->length, t->string + t->start);
     }
   }
   assert2(log_severity() <= INFO);

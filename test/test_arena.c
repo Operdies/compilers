@@ -1,8 +1,9 @@
 // link arena.o logging.o collections.o
+#include <unistd.h>
+
 #include "arena.h"
 #include "logging.h"
 #include "unittest.h"
-#include <unistd.h>
 
 int main(void) {
   arena *a = mk_arena();
