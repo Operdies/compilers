@@ -423,11 +423,10 @@ regex *mk_regex_from_slice(string_slice slice) {
   if (slice.str == NULL)
     error("NULL string");
   if (slice.str) {
-    arena *a = regex_arena;
-    char *pattern = arena_alloc(a, slice.n + 1, 1);
-    strncpy(pattern, slice.str, slice.n);
-    r = arena_alloc(a, 1, sizeof(regex));
-    r->ctx = (parse_context){.n = slice.n, .c = 0, .src = pattern};
+    char *copy = arena_alloc(regex_arena, slice.n + 1, 1);
+    memcpy(copy, slice.str, slice.n);
+    r = arena_alloc(regex_arena, 1, sizeof(regex));
+    r->ctx = (parse_context){.n = slice.n, .c = 0, .src = copy};
     r->start = build_automaton(&r->ctx, 0);
     reset(r->start);
     if (!finished(&r->ctx)) {
