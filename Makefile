@@ -75,11 +75,12 @@ test: $(TEST_OUT)
 
 # Run tests if input changed
 $(TEST_OUT_DIR)%.log: $(TEST_OUT_DIR)%
-	@(set -eo pipefail;           \
-		echo "====== $< ======";   \
-		./$< |& tee $@.error;      \
-		mv $@.error $@;            \
-		echo "====== PASS ======"; \
+	@(                                  \
+		./$< > $@.error 2>&1 || exit $$?; \
+		echo "====== $< ======";          \
+		cat $@.error;                     \
+		echo "====== PASS ======";        \
+		mv $@.error $@;                   \
 		)
 
 # Run tests where input changed
@@ -96,11 +97,12 @@ valgrind: $(TEST_OUT)
 
 # Generate valgrind report if input changed
 $(TEST_OUT_DIR)%.valgrind: $(TEST_OUT_DIR)%
-	@(set -eo pipefail;                    \
-		echo "====== VALGRIND $< ======";    \
-		valgrind $(VALGRIND_FLAGS) ./$< |& tee $@.error;                \
-		mv $@.error $@;                      \
-		echo "====== VALGRIND done ======";  \
+	@(                                                             \
+		valgrind $(VALGRIND_FLAGS) ./$< > $@.error 2>&1 || exit $$?; \
+		echo "====== VALGRIND $< ======";                            \
+		cat $@.error;                                                \
+		echo "====== VALGRIND done ======";                          \
+		mv $@.error $@;                                              \
 		)
 
 # Generate all missing valgrind reports
