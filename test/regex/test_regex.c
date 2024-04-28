@@ -138,7 +138,7 @@ int main(void) {
       status++;
     }
   }
-  set_loglevel(LL_INFO);
+  set_loglevel(LL_FATAL);
   pair invalid = {"h+*", "hhh", false};
   regex *r = mk_regex(invalid.pattern);
   if (r != NULL)

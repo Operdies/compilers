@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "arena.h"
 #include "collections.h"
 #include "logging.h"
 #include "macros.h"
@@ -19,7 +20,7 @@
 #define OPTIONAL '?'
 #define RANGE '-'
 
-#define add_transition(from, to) (push_nfa(ctx, &(from)->lst, (to)))
+#define add_transition(from, to) (push_nfa(&(from)->lst, (to)))
 #define end_state(state) ((state)->end ? (state)->end : (state))
 #define is_dot(state) ((state)->accept == 0)
 
@@ -38,9 +39,12 @@
  * escaped  = "\" [ []().* ]
  */
 
-static nfa *build_automaton(parse_context *ctx);
-static bool mk_nfalist(parse_context *ctx, nfalist *lst, size_t cap) {
-  nfa **arr = arena_alloc(ctx->a, cap, sizeof(nfa *));
+static arena *regex_arena = NULL;
+static void destroy_regex_arena(void) { destroy_arena(regex_arena); }
+
+static nfa *build_automaton(parse_context *ctx, char terminator);
+static bool mk_nfalist(arena *a, nfalist *lst, size_t cap) {
+  nfa **arr = arena_alloc(a, cap, sizeof(nfa *));
   if (arr) {
     lst->n = 0;
     lst->cap = cap;
@@ -50,13 +54,13 @@ static bool mk_nfalist(parse_context *ctx, nfalist *lst, size_t cap) {
   return false;
 }
 
-static void push_nfa(parse_context *ctx, nfalist *lst, nfa *d) {
+static void push_nfa(nfalist *lst, nfa *d) {
   if (lst->n >= lst->cap) {
     if (lst->arr == NULL)
-      mk_nfalist(ctx, lst, 2);
+      mk_nfalist(regex_arena, lst, 2);
     else {
       size_t newcap = lst->cap * 2;
-      nfa **arr = arena_alloc(ctx->a, newcap, sizeof(nfa *));
+      nfa **arr = arena_alloc(regex_arena, newcap, sizeof(nfa *));
       memcpy(arr, lst->arr, lst->n * sizeof(nfa *));
       lst->arr = arr;
       lst->cap = newcap;
@@ -65,8 +69,8 @@ static void push_nfa(parse_context *ctx, nfalist *lst, nfa *d) {
   lst->arr[lst->n++] = d;
 }
 
-static nfa *mk_state(parse_context *ctx, u8 accept) {
-  nfa *d = arena_alloc(ctx->a, sizeof(nfa), 1);
+static nfa *mk_state(u8 accept) {
+  nfa *d = arena_alloc(regex_arena, sizeof(nfa), 1);
   if (accept == DIGIT) {
     d->accept = '0';
     d->accept_end = '9';
@@ -85,7 +89,7 @@ static u8 take_char(parse_context *ctx) {
   u8 ch = take(ctx);
   if (ch == '\\') {
     if (finished(ctx)) {
-      sprintf(ctx->err, "Escape character at end of expression.");
+      error("Escape character at end of expression.");
       return 0;
     }
     ch = take(ctx);
@@ -107,9 +111,9 @@ static nfa *match_symbol(parse_context *ctx, bool class_match) {
     return NULL;
   if (escaped) {
     if (ch == 'd')
-      return mk_state(ctx, DIGIT);
+      return mk_state(DIGIT);
     else
-      return mk_state(ctx, ch);
+      return mk_state(ch);
   }
 
   switch (ch) {
@@ -120,7 +124,7 @@ static nfa *match_symbol(parse_context *ctx, bool class_match) {
     case '*':
     case '?':
       if (class_match) {
-        return mk_state(ctx, ch);
+        return mk_state(ch);
         break;
       }
       // else fall through
@@ -128,14 +132,14 @@ static nfa *match_symbol(parse_context *ctx, bool class_match) {
     case ']':
       // put it back
       ctx->c--;
-      sprintf(ctx->err, "Unescaped literal %c", ch);
+      error("Unescaped literal %c", ch);
       return NULL;
       break;
     case '.':
-      return mk_state(ctx, class_match ? ch : DOT);
+      return mk_state(class_match ? ch : DOT);
       break;
     default:
-      return mk_state(ctx, ch);
+      return mk_state(ch);
       break;
   }
 }
@@ -156,7 +160,7 @@ static nfa *match_class(parse_context *ctx) {
         advance(ctx);
       }
     }
-    return mk_state(ctx, DOT);
+    return mk_state(DOT);
   }
 
   if (peek(ctx) == '^') {
@@ -165,12 +169,12 @@ static nfa *match_class(parse_context *ctx) {
   }
 
   if (peek(ctx) == ']') {
-    sprintf(ctx->err, "Empty character class.");
+    error("Empty character class.");
     return NULL;
   }
 
-  class = mk_state(ctx, EPSILON);
-  final = mk_state(ctx, EPSILON);
+  class = mk_state(EPSILON);
+  final = mk_state(EPSILON);
   class->end = final;
 
   while (peek(ctx) != ']' && finished(ctx) == false) {
@@ -185,7 +189,7 @@ static nfa *match_class(parse_context *ctx) {
       if (to == 0)
         return NULL;
       if (to < from) {
-        sprintf(ctx->err, "Range contains no values.");
+        error("Range contains no values.");
         return NULL;
       }
     }
@@ -206,7 +210,7 @@ static nfa *match_class(parse_context *ctx) {
       int end;
       for (end = start + 1; end < UINT8_MAX && bitmap[end]; end++) {
       }
-      nfa *new = mk_state(ctx, start);
+      nfa *new = mk_state(start);
       // accept_end is inclusive
       new->accept_end = end - 1;
       add_transition(new, final);
@@ -220,7 +224,7 @@ static nfa *match_class(parse_context *ctx) {
 
 typedef nfa *(*matcher)(parse_context *);
 
-static nfa *next_match(parse_context *ctx) {
+static nfa *next_match(parse_context *ctx, char terminator) {
   nfa *result = NULL;
   u8 ch = peek(ctx);
   switch (ch) {
@@ -233,16 +237,18 @@ static nfa *next_match(parse_context *ctx) {
       return result;
       break;
     case ']': {
-      sprintf(ctx->err, "Unmatched class terminator.");
+      if (']' != terminator)
+        error("Unmatched class terminator.");
       return NULL;
     } break;
     case ')':
-      sprintf(ctx->err, "Unmatched group terminator.");
+      if (')' != terminator)
+        error("Unmatched group terminator.");
       return NULL;
       break;
     case '(':
       advance(ctx);
-      result = build_automaton(ctx);
+      result = build_automaton(ctx, ')');
       if (take(ctx) != ')')
         return NULL;
       break;
@@ -253,14 +259,14 @@ static nfa *next_match(parse_context *ctx) {
   return result;
 }
 
-static nfa *build_automaton(parse_context *ctx) {
+static nfa *build_automaton(parse_context *ctx, char terminator) {
   nfa *left, *right;
   nfa *next, *start;
-  start = next = mk_state(ctx, EPSILON);
+  start = next = mk_state(EPSILON);
   left = right = NULL;
 
   while (!finished(ctx)) {
-    nfa *new = next_match(ctx);
+    nfa *new = next_match(ctx, terminator);
     if (new == NULL) {
       break;
     }
@@ -278,8 +284,8 @@ static nfa *build_automaton(parse_context *ctx) {
         advance(ctx);
       }
 
-      nfa *loop_start = mk_state(ctx, EPSILON);
-      nfa *loop_end = mk_state(ctx, EPSILON);
+      nfa *loop_start = mk_state(EPSILON);
+      nfa *loop_end = mk_state(EPSILON);
       nfa *new_end = end_state(new);
 
       add_transition(next, loop_start);
@@ -318,15 +324,15 @@ static nfa *build_automaton(parse_context *ctx) {
     if (peek(ctx) == '|') {
       advance(ctx);
       left = start;
-      right = build_automaton(ctx);
+      right = build_automaton(ctx, terminator);
       if (right == NULL) {
         return NULL;
       }
-      nfa *parent = mk_state(ctx, EPSILON);
+      nfa *parent = mk_state(EPSILON);
       add_transition(parent, left);
       add_transition(parent, right);
       start = parent;
-      next = mk_state(ctx, EPSILON);
+      next = mk_state(EPSILON);
       nfa *left_end = end_state(left);
       nfa *right_end = end_state(right);
       add_transition(left_end, next);
@@ -407,9 +413,6 @@ static void reset(nfa *d) {
 
 void destroy_regex(regex *r) { (void)r; }
 
-static arena *regex_arena = NULL;
-static void destroy_regex_arena(void) { destroy_arena(regex_arena); }
-
 regex *mk_regex_from_slice(string_slice slice) {
   if (!regex_arena) {
     regex_arena = mk_arena();
@@ -418,14 +421,14 @@ regex *mk_regex_from_slice(string_slice slice) {
 
   regex *r = NULL;
   if (slice.str == NULL)
-    die("NULL string");
+    error("NULL string");
   if (slice.str) {
     arena *a = regex_arena;
     char *pattern = arena_alloc(a, slice.n + 1, 1);
     strncpy(pattern, slice.str, slice.n);
     r = arena_alloc(a, 1, sizeof(regex));
-    r->ctx = (parse_context){.n = slice.n, .c = 0, .src = pattern, .a = a, .err = arena_alloc(a, 100, 1)};
-    r->start = build_automaton(&r->ctx);
+    r->ctx = (parse_context){.n = slice.n, .c = 0, .src = pattern};
+    r->start = build_automaton(&r->ctx, 0);
     reset(r->start);
     if (!finished(&r->ctx)) {
       debug("Invalid regex '%.*s'", slice.n, slice.str);
@@ -460,7 +463,7 @@ regex_match regex_pos(regex *r, const char *string, int len) {
 
 regex_match regex_matches(regex *r, match_context *ctx) {
   if (r == NULL)
-    die("NULL regex");
+    error("NULL regex");
   size_t pos = ctx->c;
   reset(r->start);
   bool match = partial_match(r->start, ctx);

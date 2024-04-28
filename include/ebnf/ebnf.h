@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+#include "arena.h"
 #include "collections.h"
 #include "regex.h"
 #include "scanner/scanner.h"
