@@ -80,7 +80,7 @@ void test_regex_scanner(void) {
       error("Unexpected token %d:", next);
       error_ctx(s.ctx);
     }
-    token *actual = vec_nth(&s.tokens.slice, next);
+    token *actual = vec_nth(s.tokens, next);
 
     if (strncmp(type, actual->name.str, actual->name.n) != 0) {
       error("Token %d type mismatch. Expected %s, got %s", i, type, actual->name);

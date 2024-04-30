@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "logging.h"
 
@@ -15,7 +16,7 @@ void destroy_string(string_t *s) { vec_destroy(&s->v); }
 
 void push_str(string_t *s, int n, const char data[static n]) {
   if (s) {
-    vslice vec = {.n = n, .sz = 1, .arr = (char *)data};
+    vslice vec = {.n = n, .sz = 1, .array = (char *)data};
     vec_push_slice(&s->v, &vec);
   }
 }
@@ -94,7 +95,7 @@ bool vec_push_slice(vec *destination, const vslice *source) {
   ensure_capacity(destination, destination->n + source->n);
 
   char *dest = (char *)destination->array + destination->n * destination->sz;
-  char *src = (char *)source->arr;
+  char *src = (char *)source->array;
   memmove(dest, src, source->n * source->sz);
 
   // Optimization: Copy non-overlapping memory regions with memcpy
@@ -105,7 +106,7 @@ bool vec_push_slice(vec *destination, const vslice *source) {
 }
 
 bool vec_push_array(vec *v, int n, const void *data) {
-  return vec_push_slice(v, &(vslice){.n = n, .sz = v->sz, .arr = (void *)data});
+  return vec_push_slice(v, &(vslice){.n = n, .sz = v->sz, .array = (void *)data});
 }
 
 static int roll(int x, int n) {
@@ -124,25 +125,14 @@ vslice vec_slice(vec *v, int start, int end) {
     end = roll(end, v->n);
     if (start < 0 || end < 0 || start > end)
       return no_slice;
-    return (vslice){.sz = v->sz, .n = end - start, .arr = (char *)v->array + start * v->sz};
+    return (vslice){.sz = v->sz, .n = end - start, .array = (char *)v->array + start * v->sz};
   }
   return no_slice;
 }
 
-void *vec_nth(const vslice *v, int n) {
-  if (!v)
-    return NULL;
-  n = roll(n, v->n);
-  if (n >= v->n)
-    return NULL;
-  char *addr = (char *)v->arr;
-  return addr + n * v->sz;
-}
-
 void vec_clear(vec *v) { v->n = 0; }
 void vec_zero(vec *v) {
-  if (v->sz == 0)
-    die("vec_zero on zero sized vector");
+  assert(v->sz == 0);
   memset(v->array, 0, v->c * v->sz);
 }
 
@@ -154,7 +144,7 @@ void vec_destroy(vec *v) {
 void vec_foreach(vslice *v, vec_fn f) {
   if (v) {
     for (int i = 0; i < v->n; i++) {
-      void *elem = (char *)v->arr + i * v->sz;
+      void *elem = vec_nth(*v, i);
       f(elem);
     }
   }
@@ -164,7 +154,7 @@ vec vec_select(const vslice *v, int elem_size, vec_selector s) {
   vec result = {.sz = elem_size};
   if (v) {
     for (int i = 0; i < v->n; i++) {
-      void *elem = (char *)v->arr + i * v->sz;
+      void *elem = vec_nth(*v, i);
       void *new_elem = s(elem);
       vec_push(&result, new_elem);
     }
@@ -207,7 +197,7 @@ bool vec_contains(const vec *v, const void *elem) { return vslice_contains(&v->s
 
 bool vslice_contains(const vslice *v, const void *elem) {
   for (int i = 0; i < v->n; i++) {
-    const void *item = vec_nth(v, i);
+    const void *item = vec_nth(*v, i);
     if (memcmp(item, elem, v->sz) == 0)
       return true;
   }

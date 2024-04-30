@@ -51,8 +51,8 @@ position_t get_position(const char *source, string_slice place) {
 }
 
 void populate_terminals(terminal_list *terminals, expression_t *e) {
-  v_foreach(term_t *, t, e->terms_vec) {
-    v_foreach(factor_t *, f, t->factors_vec) {
+  v_foreach(term_t, t, e->terms_vec) {
+    v_foreach(factor_t, f, t->factors_vec) {
       if (f->type == F_PARENS || f->type == F_OPTIONAL || f->type == F_REPEAT) {
         populate_terminals(terminals, &f->expression);
       } else if (f->type == F_STRING) {
@@ -65,13 +65,13 @@ void populate_terminals(terminal_list *terminals, expression_t *e) {
 
 terminal_list get_terminals(const parser_t *g) {
   terminal_list t = {0};
-  v_foreach(production_t *, p, g->productions_vec) { populate_terminals(&t, &p->expr); }
+  v_foreach(production_t, p, g->productions_vec) { populate_terminals(&t, &p->expr); }
   return t;
 }
 
 nonterminal_list get_nonterminals(const parser_t *g) {
   nonterminal_list t = {.nonterminals_vec = v_make(production_t)};
-  v_foreach(production_t *, p, g->productions_vec) vec_push(&t.nonterminals_vec, p);
+  v_foreach(production_t, p, g->productions_vec) vec_push(&t.nonterminals_vec, p);
   return t;
 }
 
@@ -98,9 +98,8 @@ bool factor_optional(factor_t *fac) {
 }
 
 bool expression_optional(expression_t *expr) {
-  // help
-  v_foreach(term_t *, t, expr->terms_vec) {
-    v_foreach(factor_t *, f, t->factors_vec) {
+  v_foreach(term_t, t, expr->terms_vec) {
+    v_foreach(factor_t, f, t->factors_vec) {
       if (!factor_optional(f))
         return false;
     }
@@ -109,7 +108,7 @@ bool expression_optional(expression_t *expr) {
 }
 
 bool populate_first_term(production_t *h, term_t *t) {
-  v_foreach(factor_t *, fac, t->factors_vec) {
+  v_foreach(factor_t, fac, t->factors_vec) {
     switch (fac->type) {
       case F_OPTIONAL:
       case F_REPEAT:
@@ -150,7 +149,7 @@ bool populate_first_term(production_t *h, term_t *t) {
 
 bool populate_first_expr(production_t *h, expression_t *e) {
   bool all_optional = true;
-  v_foreach(term_t *, t, e->terms_vec) {
+  v_foreach(term_t, t, e->terms_vec) {
     if (!populate_first_term(h, t))
       all_optional = false;
   }
@@ -312,7 +311,7 @@ void populate_follow(const parser_t *g) {
   // 2. If the production occurs at the end of a { repeat }, the symol at the start of the repeat is included
   // 3. If the production occurs at the end of another production, the follow set of the owning production is included
   vec seen = v_make(symbol_t);
-  v_foreach(production_t *, p, g->productions_vec) {
+  v_foreach(production_t, p, g->productions_vec) {
     symbol_t *start = p->sym;
     mega_follow_walker(g, start, &seen, p);
   }
@@ -330,7 +329,7 @@ void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec
       regex_first(follow->regex, reachable);
       break;
     case FOLLOW_FIRST: {
-      v_foreach(struct follow_t *, fst, follow->prod->first_vec) expand_first(fst, reachable, seen);
+      v_foreach(struct follow_t, fst, follow->prod->first_vec) expand_first(fst, reachable, seen);
     } break;
     case FOLLOW_FOLLOW: {
     } break;
@@ -342,7 +341,7 @@ void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec
 
 vec populate_maps(const production_t *owner, vec follows) {
   vec map = v_make(record);
-  v_foreach(struct follow_t *, follow, follows) {
+  v_foreach(struct follow_t, follow, follows) {
     // in the first set of everything that can follow this production,
     // are there any intersections?
     record r = {.prod = owner};
@@ -415,8 +414,8 @@ bool get_conflicts(const production_t *h, conflict *c) {
 
   {
     // 3 [exp] or {exp}    -> the sets of start symbols of exp and of symbols that may follow K must be disjoint
-    v_foreach(term_t *, term, h->expr.terms_vec) {
-      v_rforeach(factor_t *, fac, term->factors_vec) {
+    v_foreach(term_t, term, h->expr.terms_vec) {
+      v_rforeach(factor_t, fac, term->factors_vec) {
         bool optional = false;
         if (fac->type == F_OPTIONAL || fac->type == F_REPEAT ||
             (fac->type == F_PARENS && expression_optional(&fac->expression))) {
@@ -477,13 +476,13 @@ done:
 bool is_ll1(const parser_t *g) {
   bool isll1 = true;
 
-  v_foreach(production_t *, p, g->productions_vec) populate_first(p);
+  v_foreach(production_t, p, g->productions_vec) populate_first(p);
   populate_follow(g);
   nonterminal_list nt = get_nonterminals(g);
 
   // TEST FIRST CONFLICTS
   conflict c = {0};
-  v_foreach(production_t *, h, nt.nonterminals_vec) {
+  v_foreach(production_t, h, nt.nonterminals_vec) {
     if (get_conflicts(h, &c)) {
       string_slice id1 = c.A->identifier;
       string_slice id2 = c.B->identifier;

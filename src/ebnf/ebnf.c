@@ -107,7 +107,7 @@ void print_ast(AST *root, vec *parents) {
   for (; root; root = root->next) {
     vbuf.n = 0;
     if (root->range.str) {
-      v_foreach(AST *, p, (*parents)) vec_write(&vbuf, "%s   ", p->next ? pipe : " ");
+      v_foreach(AST, p, (*parents)) vec_write(&vbuf, "%s   ", p->next ? pipe : " ");
       vec_write(&vbuf, "%s", root->next ? fork : angle);
       vec_write(&vbuf, "%s ", dash);
 
@@ -315,7 +315,7 @@ bool syntax(parser_t *g) {
 }
 
 production_t *find_production(parser_t *g, string_slice name) {
-  v_foreach(production_t *, p, g->productions_vec) {
+  v_foreach(production_t, p, g->productions_vec) {
     if (p->identifier.n == name.n)
       if (slicecmp(p->identifier, name) == 0)
         return p;
@@ -324,7 +324,7 @@ production_t *find_production(parser_t *g, string_slice name) {
 }
 
 token *find_token(parser_t *g, string_slice name) {
-  v_foreach(token *, t, g->s->tokens) {
+  v_foreach(token, t, g->s->tokens) {
     if (t->name.n == name.n)
       if (slicecmp(t->name, name) == 0)
         return t;
@@ -333,8 +333,8 @@ token *find_token(parser_t *g, string_slice name) {
 }
 
 static bool init_expressions(parser_t *g, expression_t *expr) {
-  v_foreach(term_t *, t, expr->terms_vec) {
-    v_foreach(factor_t *, f, t->factors_vec) {
+  v_foreach(term_t, t, expr->terms_vec) {
+    v_foreach(factor_t, f, t->factors_vec) {
       switch (f->type) {
         case F_OPTIONAL:
         case F_REPEAT:
@@ -374,7 +374,7 @@ static bool init_expressions(parser_t *g, expression_t *expr) {
 static bool init_productions(parser_t *g) {
   // Iterate through all factors that are identifiers
   // and link back to the production with the matching name
-  v_foreach(production_t *, p, g->productions_vec) {
+  v_foreach(production_t, p, g->productions_vec) {
     p->id = idx_p;
     if (!init_expressions(g, &p->expr))
       return false;
@@ -530,7 +530,7 @@ static struct factor_symbols factor_symbol(parser_t *g, factor_t *factor) {
 static symbol_t *term_symbol(parser_t *g, term_t *term) {
   symbol_t *head, *tail;
   head = tail = NULL;
-  v_foreach(factor_t *, f, term->factors_vec) {
+  v_foreach(factor_t, f, term->factors_vec) {
     struct factor_symbols factors = factor_symbol(g, f);
     if (head == NULL) {
       head = factors.head;
@@ -545,7 +545,7 @@ static symbol_t *term_symbol(parser_t *g, term_t *term) {
 static symbol_t *expression_symbol(parser_t *g, expression_t *expr) {
   symbol_t *new_expression;
   new_expression = NULL;
-  v_foreach(term_t *, t, expr->terms_vec) {
+  v_foreach(term_t, t, expr->terms_vec) {
     symbol_t *new_term = term_symbol(g, t);
     if (!new_expression) {
       new_expression = new_term;
@@ -558,7 +558,7 @@ static symbol_t *expression_symbol(parser_t *g, expression_t *expr) {
 }
 
 static bool build_parse_table(parser_t *g) {
-  v_foreach(production_t *, prod, g->productions_vec) { prod->sym = expression_symbol(g, &prod->expr); }
+  v_foreach(production_t, prod, g->productions_vec) { prod->sym = expression_symbol(g, &prod->expr); }
   return true;
 }
 
@@ -629,7 +629,7 @@ parser_t mk_parser_raw(const char *text, scanner *s) {
 void destroy_expression(expression_t *e);
 
 static void destroy_term(term_t *t) {
-  v_foreach(factor_t *, f, t->factors_vec) {
+  v_foreach(factor_t, f, t->factors_vec) {
     if (f->type == F_OPTIONAL || f->type == F_REPEAT || f->type == F_PARENS)
       destroy_expression(&f->expression);
   }
@@ -637,7 +637,7 @@ static void destroy_term(term_t *t) {
 }
 
 void destroy_expression(expression_t *e) {
-  v_foreach(term_t *, t, e->terms_vec) { destroy_term(t); }
+  v_foreach(term_t, t, e->terms_vec) { destroy_term(t); }
   vec_destroy(&e->terms_vec);
 }
 
@@ -650,7 +650,7 @@ static void destroy_production(production_t *p) {
 void destroy_parser(parser_t *g) {
   if (g) {
     destroy_scanner(g->s);
-    v_foreach(production_t *, p, g->productions_vec) { destroy_production(p); }
+    v_foreach(production_t, p, g->productions_vec) { destroy_production(p); }
     vec_destroy(&g->productions_vec);
     destroy_arena(g->a);
   }
