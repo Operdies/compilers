@@ -20,7 +20,6 @@ enum factor_switch {
 };
 
 typedef struct symbol_t symbol_t;
-typedef struct header_t header_t;
 typedef struct factor_t factor_t;
 typedef struct production_t production_t;
 typedef struct term_t term_t;
@@ -56,13 +55,12 @@ struct factor_t {
 };
 
 struct production_t {
-  // the identifier name
-  string_slice identifier;
-  // the parsed expression
-  struct expression_t expr;
-  // Header used in the parsing table
-  header_t *header;
-  int id;
+  string_slice identifier;   // the identifier name
+  struct expression_t expr;  // the parsed expression
+  int id;                    // the index of this production in the input to the parser
+  symbol_t *sym;             // the start symbol of this production
+  vec first_vec;             // the set of follow_t that can occur in the beginning of this production
+  vec follow_vec;            // the set of symbols that can follow this production
 };
 
 struct parser_t {
@@ -160,23 +158,17 @@ struct follow_t {
   enum follow_type type;
   char ch;
   regex *regex;
-  production_t *prod;
+  const production_t *prod;
 };
 
-struct header_t {
-  production_t *prod;
-  symbol_t *sym;
-  vec first_vec;
-  vec follow_vec;
-};
 
 terminal_list get_terminals(const parser_t *g);
 nonterminal_list get_nonterminals(const parser_t *g);
-void populate_first(struct header_t *h);
+void populate_first(production_t *h);
 void populate_follow(const parser_t *g);
 bool is_ll1(const parser_t *g);
 void graph_walk(symbol_t *start, vec *all);
-vec populate_maps(production_t *owner, vec follows);
+vec populate_maps(const production_t *owner, vec follows);
 void add_symbols(symbol_t *start, int k, vec *follows);
 const char *describe_symbol(symbol_t *s);
 
