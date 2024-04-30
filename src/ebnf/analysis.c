@@ -11,29 +11,29 @@
 typedef char MAP[UINT8_MAX];
 typedef struct {
   MAP set;
-  production_t *prod;
+  const production_t *prod;
 } record;
 
 typedef struct {
-  production_t *A;
-  production_t *B;
+  const production_t *A;
+  const production_t *B;
   char ch;
   bool first;
-  production_t *owner;
+  const production_t *owner;
 } conflict;
 
-static bool populate_first_expr(struct header_t *h, expression_t *e);
+static bool populate_first_expr(production_t *h, expression_t *e);
 static bool expression_optional(expression_t *expr);
 static bool factor_optional(factor_t *fac);
 static bool expression_optional(expression_t *expr);
-static bool populate_first_term(struct header_t *h, term_t *t);
-static bool populate_first_expr(struct header_t *h, expression_t *e);
+static bool populate_first_term(production_t *h, term_t *t);
+static bool populate_first_expr(production_t *h, expression_t *e);
 static bool symbol_at_end(symbol_t *start, int k);
 static void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, production_t *owner);
 static void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec *seen);
 static bool check_intersection(int n, record records[static n], conflict *c);
 static vec first_expr_helper(expression_t *expr);
-static bool get_conflicts(const header_t *h, conflict *c);
+static bool get_conflicts(const production_t *h, conflict *c);
 
 position_t get_position(const char *source, string_slice place) {
   int line, column;
@@ -70,8 +70,8 @@ terminal_list get_terminals(const parser_t *g) {
 }
 
 nonterminal_list get_nonterminals(const parser_t *g) {
-  nonterminal_list t = {.nonterminals_vec = v_make(header_t)};
-  v_foreach(production_t *, p, g->productions_vec) vec_push(&t.nonterminals_vec, p->header);
+  nonterminal_list t = {.nonterminals_vec = v_make(production_t)};
+  v_foreach(production_t *, p, g->productions_vec) vec_push(&t.nonterminals_vec, p);
   return t;
 }
 
@@ -108,7 +108,7 @@ bool expression_optional(expression_t *expr) {
   return true;
 }
 
-bool populate_first_term(struct header_t *h, term_t *t) {
+bool populate_first_term(production_t *h, term_t *t) {
   v_foreach(factor_t *, fac, t->factors_vec) {
     switch (fac->type) {
       case F_OPTIONAL:
@@ -121,10 +121,10 @@ bool populate_first_term(struct header_t *h, term_t *t) {
           continue;
         return false;
       case F_IDENTIFIER: {
-        struct header_t *id = fac->identifier.production->header;
-        struct follow_t fst = {.type = FOLLOW_FIRST, .prod = id->prod};
+        production_t *id = fac->identifier.production;
+        struct follow_t fst = {.type = FOLLOW_FIRST, .prod = id};
         vec_push(&h->first_vec, &fst);
-        if (expression_optional(&id->prod->expr))
+        if (expression_optional(&id->expr))
           continue;
         return false;
       }
@@ -148,7 +148,7 @@ bool populate_first_term(struct header_t *h, term_t *t) {
   return true;
 }
 
-bool populate_first_expr(struct header_t *h, expression_t *e) {
+bool populate_first_expr(production_t *h, expression_t *e) {
   bool all_optional = true;
   v_foreach(term_t *, t, e->terms_vec) {
     if (!populate_first_term(h, t))
@@ -157,12 +157,12 @@ bool populate_first_expr(struct header_t *h, expression_t *e) {
   return all_optional;
 }
 
-void populate_first(struct header_t *h) {
+void populate_first(production_t *h) {
   if (h->first_vec.n) {
     return;
   }
   h->first_vec = v_make(struct follow_t);
-  if (populate_first_expr(h, &h->prod->expr)) {
+  if (populate_first_expr(h, &h->expr)) {
     // debug("%.*s is completely optional", h->prod->identifier.n, h->prod->identifier.str);
   }
 }
@@ -184,8 +184,8 @@ void graph_walk(symbol_t *start, vec *all) {
         vec_push(all, slow);
         graph_walk(slow, all);
         if (slow->type == nonterminal_symbol) {
-          production_t *prod = slow->nonterminal->header->prod;
-          graph_walk(prod->header->sym, all);
+          production_t *prod = slow->nonterminal;
+          graph_walk(prod->sym, all);
         }
       }
 
@@ -271,16 +271,16 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
         // It this is a nontermninal, we should add all the symbols that
         // could follow it to its follow set.
         if (slow->type == nonterminal_symbol) {
-          production_t *prod = slow->nonterminal->header->prod;
+          production_t *prod = slow->nonterminal;
           {  // apply rule 1 and 2
-            if (!prod->header->follow_vec.n)
-              prod->header->follow_vec = v_make(struct follow_t);
+            if (!prod->follow_vec.n)
+              prod->follow_vec = v_make(struct follow_t);
             for (symbol_t *this = slow->next; this; this = this->alt) {
-              add_symbols(this, lookahead, &prod->header->follow_vec);
+              add_symbols(this, lookahead, &prod->follow_vec);
             }
 
             // The production instance itself should also be walked.
-            mega_follow_walker(g, prod->header->sym, seen, prod);
+            mega_follow_walker(g, prod->sym, seen, prod);
           }
           {  // apply rule 3
             // Now, we need to determine if this rule is at the end of the current production
@@ -288,7 +288,7 @@ void mega_follow_walker(const parser_t *g, symbol_t *start, vec *seen, productio
             // must be added to the follow set as well.
             if (symbol_at_end(slow, lookahead)) {
               struct follow_t f = {.type = FOLLOW_FOLLOW, .prod = owner};
-              vec_push(&prod->header->follow_vec, &f);
+              vec_push(&prod->follow_vec, &f);
             }
           }
         }
@@ -313,7 +313,7 @@ void populate_follow(const parser_t *g) {
   // 3. If the production occurs at the end of another production, the follow set of the owning production is included
   vec seen = v_make(symbol_t);
   v_foreach(production_t *, p, g->productions_vec) {
-    symbol_t *start = p->header->sym;
+    symbol_t *start = p->sym;
     mega_follow_walker(g, start, &seen, p);
   }
   vec_destroy(&seen);
@@ -330,7 +330,7 @@ void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec
       regex_first(follow->regex, reachable);
       break;
     case FOLLOW_FIRST: {
-      v_foreach(struct follow_t *, fst, follow->prod->header->first_vec) expand_first(fst, reachable, seen);
+      v_foreach(struct follow_t *, fst, follow->prod->first_vec) expand_first(fst, reachable, seen);
     } break;
     case FOLLOW_FOLLOW: {
     } break;
@@ -340,7 +340,7 @@ void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec
   }
 }
 
-vec populate_maps(production_t *owner, vec follows) {
+vec populate_maps(const production_t *owner, vec follows) {
   vec map = v_make(record);
   v_foreach(struct follow_t *, follow, follows) {
     // in the first set of everything that can follow this production,
@@ -371,7 +371,7 @@ vec populate_maps(production_t *owner, vec follows) {
 
 bool check_intersection(int n, record records[static n], conflict *c) {
   for (int i = 0; i < UINT8_MAX; i++) {
-    production_t *seen = NULL;
+    const production_t *seen = NULL;
     for (int j = 0; j < n; j++) {
       record *r = &records[j];
       if (r->set[i]) {
@@ -389,19 +389,19 @@ bool check_intersection(int n, record records[static n], conflict *c) {
 }
 
 vec first_expr_helper(expression_t *expr) {
-  struct header_t temp_header = {.first_vec = v_make(struct follow_t)};
+  production_t temp_header = {.first_vec = v_make(struct follow_t)};
   populate_first_expr(&temp_header, expr);
   return temp_header.first_vec;
 }
 
-bool get_conflicts(const header_t *h, conflict *c) {
+bool get_conflicts(const production_t *h, conflict *c) {
   *c = (conflict){0};
-  c->owner = h->prod;
+  c->owner = h;
   {
     // 1. term0 | term1    -> the terms must not have any common start symbols
     // 2. fac0 fac1        -> if fac0 contains the empty sequence, then the factors must not have any common start
     // symbols
-    vec first_map = populate_maps(h->prod, h->first_vec);
+    vec first_map = populate_maps(h, h->first_vec);
     bool intersect = check_intersection(first_map.n, first_map.array, c);
     vec_destroy(&first_map);
     if (intersect) {
@@ -410,19 +410,19 @@ bool get_conflicts(const header_t *h, conflict *c) {
     }
   }
 
-  vec follow_map = populate_maps(h->prod, h->follow_vec);
+  vec follow_map = populate_maps(h, h->follow_vec);
   bool conflict = false;
 
   {
     // 3 [exp] or {exp}    -> the sets of start symbols of exp and of symbols that may follow K must be disjoint
-    v_foreach(term_t *, term, h->prod->expr.terms_vec) {
+    v_foreach(term_t *, term, h->expr.terms_vec) {
       v_rforeach(factor_t *, fac, term->factors_vec) {
         bool optional = false;
         if (fac->type == F_OPTIONAL || fac->type == F_REPEAT ||
             (fac->type == F_PARENS && expression_optional(&fac->expression))) {
           optional = true;
           vec expr_first = first_expr_helper(&fac->expression);
-          vec map1 = populate_maps(h->prod, expr_first);
+          vec map1 = populate_maps(h, expr_first);
           vec_destroy(&expr_first);
           vec_push_slice(&map1, &follow_map.slice);
           conflict = check_intersection(map1.n, map1.array, c);
@@ -434,7 +434,7 @@ bool get_conflicts(const header_t *h, conflict *c) {
           if (expression_optional(&fac->identifier.production->expr)) {
             optional = true;
             production_t *p = fac->identifier.production;
-            vec map1 = populate_maps(p, p->header->first_vec);
+            vec map1 = populate_maps(p, p->first_vec);
             vec_push_slice(&map1, &follow_map.slice);
             conflict = check_intersection(map1.n, map1.array, c);
             vec_destroy(&map1);
@@ -446,8 +446,8 @@ bool get_conflicts(const header_t *h, conflict *c) {
         } else if (fac->type == F_TOKEN) {  // F_STRING
           if (regex_matches(fac->token->pattern, &(match_context){.src = ""}).match) {
             optional = true;
-            struct follow_t tmpf = {.prod = h->prod, .regex = fac->token->pattern, .type = FOLLOW_SYMBOL};
-            vec map1 = populate_maps(h->prod, (vec){.sz = sizeof(tmpf), .n = 1, .array = &tmpf});
+            struct follow_t tmpf = {.prod = h, .regex = fac->token->pattern, .type = FOLLOW_SYMBOL};
+            vec map1 = populate_maps(h, (vec){.sz = sizeof(tmpf), .n = 1, .array = &tmpf});
             vec_push_slice(&map1, &follow_map.slice);
             conflict = check_intersection(map1.n, map1.array, c);
             vec_destroy(&map1);
@@ -477,13 +477,13 @@ done:
 bool is_ll1(const parser_t *g) {
   bool isll1 = true;
 
-  v_foreach(production_t *, p, g->productions_vec) populate_first(p->header);
+  v_foreach(production_t *, p, g->productions_vec) populate_first(p);
   populate_follow(g);
   nonterminal_list nt = get_nonterminals(g);
 
   // TEST FIRST CONFLICTS
   conflict c = {0};
-  v_foreach(header_t *, h, nt.nonterminals_vec) {
+  v_foreach(production_t *, h, nt.nonterminals_vec) {
     if (get_conflicts(h, &c)) {
       string_slice id1 = c.A->identifier;
       string_slice id2 = c.B->identifier;
@@ -538,7 +538,7 @@ void print_tokens(tokens tok) {
 }
 void print_nonterminals(nonterminal_list ntl) {
   vec buf = v_make(char);
-  v_foreach(header_t *, h, ntl.nonterminals_vec) {
+  v_foreach(production_t *, h, ntl.nonterminals_vec) {
     production_t *p = h->prod;
     vec_write(&buf, "%.*s, ", p->identifier.n, p->identifier.str);
   }
@@ -562,12 +562,12 @@ void print_terminals(terminal_list tl) {
 void print_first_sets(parser_t *g) {
   {
     v_foreach(production_t *, p, g->productions_vec) {
-      header_t *h = p->header;
+      production_t *h = p;
       populate_first(h);
     }
   }
   v_foreach(production_t *, p, g->productions_vec) {
-    header_t *h = p->header;
+    production_t *h = p;
     char *ident = string_slice_clone(p->identifier);
     printf(" First(%22s) %2c  ", ident, '=');
     vec seen = v_make(vec);
@@ -582,7 +582,7 @@ void print_first_sets(parser_t *g) {
 void print_follow_sets(parser_t *g) {
   populate_follow(g);
   v_foreach(production_t *, p, g->productions_vec) {
-    header_t *h = p->header;
+    production_t *h = p;
     // vec follow = populate_maps(p, h->n_follow, h->follow);
     char *ident = string_slice_clone(p->identifier);
     printf("Follow(%22s) %2c  ", ident, '=');
@@ -616,11 +616,11 @@ void print_follow_set(vec *v, vec *seen, char map[UINT8_MAX]) {
     }
     case FOLLOW_FIRST:
       // printf("First(%.*s) ", sym->prod->identifier.n, sym->prod->identifier.str);
-      print_follow_set(&sym->prod->header->first_vec, seen, map);
+      print_follow_set(&sym->prod->first_vec, seen, map);
       break;
     case FOLLOW_FOLLOW:
       // printf("Follow(%.*s) ", sym->prod->identifier.n, sym->prod->identifier.str);
-      print_follow_set(&sym->prod->header->follow_vec, seen, map);
+      print_follow_set(&sym->prod->follow_vec, seen, map);
       break;
     case FOLLOW_CHAR:
       map[(int)sym->ch] = 1;

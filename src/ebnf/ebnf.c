@@ -558,12 +558,7 @@ static symbol_t *expression_symbol(parser_t *g, expression_t *expr) {
 }
 
 static bool build_parse_table(parser_t *g) {
-  v_foreach(production_t *, prod, g->productions_vec) {
-    prod->header = arena_alloc(g->a, 1, sizeof(header_t));
-    prod->header->prod = prod;
-  }
-
-  v_foreach((void), prod, g->productions_vec) { prod->header->sym = expression_symbol(g, &prod->expr); }
+  v_foreach(production_t *, prod, g->productions_vec) { prod->sym = expression_symbol(g, &prod->expr); }
   return true;
 }
 
@@ -648,8 +643,8 @@ void destroy_expression(expression_t *e) {
 
 static void destroy_production(production_t *p) {
   destroy_expression(&p->expr);
-  vec_destroy(&p->header->first_vec);
-  vec_destroy(&p->header->follow_vec);
+  vec_destroy(&p->first_vec);
+  vec_destroy(&p->follow_vec);
 }
 
 void destroy_parser(parser_t *g) {
@@ -661,7 +656,7 @@ void destroy_parser(parser_t *g) {
   }
 }
 
-static bool _parse(header_t *hd, parser_t *g, AST **node) {
+static bool _parse(production_t *hd, parser_t *g, AST **node) {
   struct parse_frame {
     int source_cursor;
     int token_cursor;
@@ -678,9 +673,9 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
   start = ctx->c;
 
   alt_stack = v_make(struct parse_frame);
-  name = hd->prod->identifier;
+  name = hd->identifier;
   *node = mk_ast();
-  (*node)->node_id = hd->prod->id;
+  (*node)->node_id = hd->id;
   insert_child = &(*node)->first_child;
 
   x = hd->sym;
@@ -695,7 +690,7 @@ static bool _parse(header_t *hd, parser_t *g, AST **node) {
         match = true;
         break;
       case nonterminal_symbol:
-        match = _parse(x->nonterminal->header, g, &next_child);
+        match = _parse(x->nonterminal, g, &next_child);
         break;
       case token_symbol: {
         string_slice content = {0};
@@ -761,7 +756,7 @@ bool parse(parser_t *g, parse_context *ctx, AST **root, int start_rule) {
     return false;
   g->s->ctx = ctx;
   production_t *start = &g->productions[start_rule];
-  bool success = _parse(start->header, g, root);
+  bool success = _parse(start, g, root);
   success &= next_token(g->s, NULL, NULL) == EOF_TOKEN;
   return success;
 }
