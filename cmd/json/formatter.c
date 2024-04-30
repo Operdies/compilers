@@ -127,15 +127,5 @@ int main(int argc, char **argv) {
   }
   format(f);
   fclose(f);
-  // if (argc < 2) {
-  //   format(stdin);
-  // } else {
-  //   for (int i = 1; i < argc; i++) {
-  //     char *filename = argv[i];
-  //     FILE *f = fopen(filename, "r");
-  //     format(f);
-  //     fclose(f);
-  //   }
-  // }
   return 0;
 }
