@@ -9,7 +9,7 @@ uniq      = $(if $1,$(firstword $1) $(call uniq,$(filter-out $(firstword $1),$1)
 OFLAGS = $(if $(RELEASE),-O3,-Og -g -rdynamic)
 DEFINES = -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE 
 DEFINES += $(if $(RELEASE),-DNDEBUG,-DDEBUG)
-BIN_DIR = $(if $(RELEASE),out/release,out/debug)
+BIN_DIR = $(if $(RELEASE),out/release/,out/debug/)
 LDFLAGS = $(if $(RELEASE),-s,)
 
 COMPILE_COMMANDS = compile_commands.json
@@ -18,9 +18,9 @@ OBJ_DIR          = src
 TEST_DIR         = test
 CMD_DIR          = cmd
 
-OBJ_OUT_DIR  = $(BIN_DIR)/$(OBJ_DIR)
-TEST_OUT_DIR = $(BIN_DIR)/$(TEST_DIR)
-CMD_OUT_DIR  = $(BIN_DIR)/$(CMD_DIR)
+OBJ_OUT_DIR  = $(BIN_DIR)$(OBJ_DIR)
+TEST_OUT_DIR = $(BIN_DIR)$(TEST_DIR)
+CMD_OUT_DIR  = $(BIN_DIR)$(CMD_DIR)
 
 OBJ_SRC  = $(call rwildcard,$(OBJ_DIR),*.c)
 TEST_SRC = $(call rwildcard,$(TEST_DIR),*.c)
@@ -48,23 +48,12 @@ $(DIRECTORIES):
 	@mkdir -p $(DIRECTORIES)
 
 # The .o file of binary outputs are implicit dependencies and will be removed unless precious
-.PRECIOUS: $(OBJ_OUT_DIR)%.o
-.PRECIOUS: $(TEST_OUT_DIR)%.o
-.PRECIOUS: $(CMD_OUT_DIR)%.o
-# FIXME: these 3 rules are nearly identical.
-$(OBJ_OUT_DIR)%.o: $(OBJ_DIR)%.c | $(DIRECTORIES)
+.PRECIOUS: $(BIN_DIR)%.o
+$(BIN_DIR)%.o: %.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
 
-$(TEST_OUT_DIR)%.o: $(TEST_DIR)%.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
-
-$(CMD_OUT_DIR)%.o: $(CMD_DIR)%.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
-
-# Now build the binaries
 $(BIN_DIR)%: $(BIN_DIR)%.o | $(DIRECTORIES)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o,$^) $(LDFLAGS)
-
 
 # Delete the output logs from tests
 .PHONY: clean-valgrind
@@ -162,12 +151,8 @@ DEPS := $(shell awk '$$0 ~ /^\/\/ *link/ { for (i = 3; i <= NF; i++) print "$$(O
 $(2): $$(DEPS)
 endef
 
-$(foreach test,$(TEST_SRC), $(eval $(call \
+$(foreach target,$(TEST_SRC) $(CMD_SRC), $(eval $(call \
 	LINK_OBJECTS,\
-	$(test),\
-	$(patsubst $(TEST_DIR)/%, $(TEST_OUT_DIR)/%, $(test:.c=)))))
+	$(target),\
+	$(patsubst %, $(BIN_DIR)%, $(target:.c=)))))
 
-$(foreach cmd,$(CMD_SRC), $(eval $(call \
-	LINK_OBJECTS,\
-	$(cmd),\
-	$(patsubst $(CMD_DIR)/%, $(CMD_OUT_DIR)/%, $(cmd:.c=)))))
