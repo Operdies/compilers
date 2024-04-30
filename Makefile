@@ -50,10 +50,10 @@ $(OBJ_OUT_DIR)%.o: $(OBJ_DIR)%.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(TEST_OUT_DIR)%: $(TEST_DIR)%.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $(filter-out %.h,$^) $(LDFLAGS)
 
 $(CMD_OUT_DIR)%: $(CMD_DIR)%.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+	$(CC) $(CFLAGS) -o $@ $(filter-out %.h,$^) $(LDFLAGS)
 
 
 # Delete the output logs from tests
