@@ -52,6 +52,7 @@ $(DIRECTORIES):
 $(BIN_DIR)%.o: %.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
 
+# TODO: Figure out link dependencies based on $<.d
 $(BIN_DIR)%: $(BIN_DIR)%.o | $(DIRECTORIES)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o,$^) $(LDFLAGS)
 
