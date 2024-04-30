@@ -10,17 +10,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Tools
-        run: sudo apt update && sudo apt install -y valgrind
-      - run: make -j incremental-test
-      - run: make -j incremental-valgrind
-      - run: RELEASE=1 make -j incremental-test
-      - run: RELEASE=1 make -j incremental-valgrind
+      - run: make -j test
+      - run: RELEASE=1 make -j test
       - uses: actions/upload-artifact@v4
         with:
-          name: test
+          name: test-output
           path: out
           retention-days: 3
+
+  valgrind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Valgrind
+        run: sudo apt update && sudo apt install -y valgrind
+      - run: make -j valgrind
+      - run: RELEASE=1 make -j valgrind
+      - uses: actions/upload-artifact@v4
+        with:
+          name: valgrind-output
+          path: out
+          retention-days: 3
+
   build:
     runs-on: ubuntu-latest
     env:
