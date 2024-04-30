@@ -26,23 +26,26 @@ OBJ_SRC  = $(call rwildcard,$(OBJ_DIR),*.c)
 TEST_SRC = $(call rwildcard,$(TEST_DIR),*.c)
 CMD_SRC  = $(call rwildcard,$(CMD_DIR),*.c)
 
-OBJ_OUT  = $(patsubst $(OBJ_DIR)/%,  $(OBJ_OUT_DIR)/%, $(OBJ_SRC:.c=.o))
+SRC = $(OBJ_SRC) $(TEST_SRC) $(CMD_SRC)
+OBJECTS = $(patsubst %, $(BIN_DIR)%, $(SRC:.c=.o))
+
 TEST_OUT = $(patsubst $(TEST_DIR)/%, $(TEST_OUT_DIR)/%, $(TEST_SRC:.c=))
 CMD_OUT  = $(patsubst $(CMD_DIR)/%, $(CMD_OUT_DIR)/%, $(CMD_SRC:.c=))
+BINARIES = $(TEST_OUT) $(CMD_OUT)
 
 # This target exists mostly as a hack to make incremental builds that only run tests where the inputs changed
 TEST_RESULT = $(TEST_OUT:=.log)
 VALGRIND_RESULT = $(TEST_OUT:=.valgrind)
 VALGRIND_FLAGS = --error-exitcode=1 -s --leak-check=full --track-origins=yes --show-leak-kinds=all
 
-MMD_FILES = $(call rwildcard,$(BIN_DIR),*.d)
-DIRECTORIES = $(call uniq,$(dir $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)))
+MMD_FILES = $(OBJECTS:.o=.o.d)
+DIRECTORIES = $(call uniq,$(dir $(OBJECTS)))
 
 CFLAGS += -std=c1x -pedantic -Wall -Wextra -Werror $(DEFINES) -I$(INCLUDE_DIR) $(OFLAGS)
 MMD_FLAGS = -MMD -MF $@.d
 
 .PHONY: all
-all: $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
+all: $(OBJECTS) $(BINARIES)
 
 $(DIRECTORIES):
 	@mkdir -p $(DIRECTORIES)
@@ -68,11 +71,11 @@ clean-test:
 # Delete intermediate files so only the desired build artifacts remain
 .PHONY: intermediate-clean
 intermediate-clean: clean-test clean-valgrind
-	rm -f $(OBJ_OUT) $(MMD_FILES)
+	rm -f $(OBJECTS) $(MMD_FILES)
 
 .PHONY: clean
 clean: intermediate-clean
-	rm -f $(TEST_OUT) $(CMD_OUT)
+	rm -f $(BINARIES)
 
 # distclean and mostlyclean don't really make sense yet, but are included for completeness
 .PHONY: distclean
@@ -86,7 +89,7 @@ maintainer-clean: clean
 	rm -f $(COMPILE_COMMANDS) 
 	rm -rf out
 
-$(COMPILE_COMMANDS): Makefile $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
+$(COMPILE_COMMANDS): Makefile $(OBJECTS) $(BINARIES)
 	bear -- make all -j -B
 
 # Run all tests
