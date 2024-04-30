@@ -48,20 +48,10 @@ $(DIRECTORIES):
 	@mkdir -p $(DIRECTORIES)
 
 # The .o file of binary outputs are implicit dependencies and will be removed unless precious
-.PRECIOUS: $(OBJ_OUT_DIR)%.o
-.PRECIOUS: $(TEST_OUT_DIR)%.o
-.PRECIOUS: $(CMD_OUT_DIR)%.o
-# FIXME: these 3 rules are nearly identical.
-$(OBJ_OUT_DIR)%.o: $(OBJ_DIR)%.c | $(DIRECTORIES)
+.PRECIOUS: $(BIN_DIR)/%.o
+$(BIN_DIR)/%.o: %.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
 
-$(TEST_OUT_DIR)%.o: $(TEST_DIR)%.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
-
-$(CMD_OUT_DIR)%.o: $(CMD_DIR)%.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
-
-# Now build the binaries
 $(BIN_DIR)%: $(BIN_DIR)%.o | $(DIRECTORIES)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o,$^) $(LDFLAGS)
 
