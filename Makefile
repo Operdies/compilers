@@ -56,13 +56,20 @@ $(CMD_OUT_DIR)%: $(CMD_DIR)%.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
 
 
+# Delete the output logs from tests
+.PHONY: clean-valgrind
+clean-valgrind:
+	rm -f	$(VALGRIND_RESULT) $(VALGRIND_RESULT:=.error)
+
+
+.PHONY: clean-test
+clean-test:
+	rm -f $(TEST_RESULT) $(TEST_RESULT:=.error)
+
 # Delete intermediate files so only the desired build artifacts remain
 .PHONY: intermediate-clean
-intermediate-clean:
-	rm -f $(OBJ_OUT) \
-		$(MMD_FILES) \
-		$(TEST_RESULT) $(TEST_RESULT:=.error) \
-		$(VALGRIND_RESULT) $(VALGRIND_RESULT:=.error) 
+intermediate-clean: clean-test clean-valgrind
+	rm -f $(OBJ_OUT) $(MMD_FILES)
 
 .PHONY: clean
 clean: intermediate-clean
@@ -85,11 +92,11 @@ $(COMPILE_COMMANDS): Makefile $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
 
 # Run all tests
 .PHONY: test
-test: $(TEST_OUT)
-	@for test in $(TEST_OUT); do \
-		echo "====== $$test ======"; \
-		$$test || exit 1; \
-	done
+test: clean-test incremental-test
+
+# Run all valgrinds
+.PHONY: valgrind
+valgrind: clean-valgrind incremental-valgrind
 
 # Run tests if input changed
 $(TEST_OUT_DIR)%.log: $(TEST_OUT_DIR)%
@@ -110,14 +117,6 @@ $(TEST_OUT_DIR)%.log: $(TEST_OUT_DIR)%
 # Run tests where input changed
 .PHONY: incremental-test
 incremental-test: $(TEST_RESULT)
-
-# valgrind everything
-.PHONY: grind
-valgrind: $(TEST_OUT)
-	@for test in $(TEST_OUT); do \
-		echo "====== VALGRIND $$test ======"; \
-		valgrind $(VALGRIND_FLAGS) $$test || exit 1; \
-	done
 
 # Generate valgrind report if input changed
 $(TEST_OUT_DIR)%.valgrind: $(TEST_OUT_DIR)%
