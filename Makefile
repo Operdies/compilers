@@ -46,14 +46,19 @@ all: $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
 $(DIRECTORIES):
 	@mkdir -p $(DIRECTORIES)
 
+# FIXME: these 3 rules are nearly identical.
 $(OBJ_OUT_DIR)%.o: $(OBJ_DIR)%.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) -c -o $@ $<
+$(TEST_OUT_DIR)%.o: $(TEST_DIR)%.c | $(DIRECTORIES)
+	$(CC) $(CFLAGS) -c -o $@ $<
+$(CMD_OUT_DIR)%.o: $(CMD_DIR)%.c | $(DIRECTORIES)
+	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(TEST_OUT_DIR)%: $(TEST_DIR)%.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) -o $@ $< $(filter %.o,$^) $(LDFLAGS)
-
-$(CMD_OUT_DIR)%: $(CMD_DIR)%.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) -o $@ $< $(filter %.o,$^) $(LDFLAGS)
+# FIXME: these 2 rules are nearly identical
+$(TEST_OUT_DIR)%: $(TEST_OUT_DIR)%.o | $(DIRECTORIES)
+	$(CC) $(CFLAGS) -o $@ $(filter %.o,$^) $(LDFLAGS)
+$(CMD_OUT_DIR)%: $(CMD_OUT_DIR)%.o | $(DIRECTORIES)
+	$(CC) $(CFLAGS) -o $@ $(filter %.o,$^) $(LDFLAGS)
 
 
 # Delete the output logs from tests
