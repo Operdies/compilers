@@ -9,7 +9,7 @@ uniq      = $(if $1,$(firstword $1) $(call uniq,$(filter-out $(firstword $1),$1)
 OFLAGS = $(if $(RELEASE),-O3,-Og -g -rdynamic)
 DEFINES = -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE 
 DEFINES += $(if $(RELEASE),-DNDEBUG,-DDEBUG)
-BIN_DIR = $(if $(RELEASE),out/release,out/debug)
+BIN_DIR = $(if $(RELEASE),out/release/,out/debug/)
 LDFLAGS = $(if $(RELEASE),-s,)
 
 COMPILE_COMMANDS = compile_commands.json
@@ -18,9 +18,9 @@ OBJ_DIR          = src
 TEST_DIR         = test
 CMD_DIR          = cmd
 
-OBJ_OUT_DIR  = $(BIN_DIR)/$(OBJ_DIR)
-TEST_OUT_DIR = $(BIN_DIR)/$(TEST_DIR)
-CMD_OUT_DIR  = $(BIN_DIR)/$(CMD_DIR)
+OBJ_OUT_DIR  = $(BIN_DIR)$(OBJ_DIR)
+TEST_OUT_DIR = $(BIN_DIR)$(TEST_DIR)
+CMD_OUT_DIR  = $(BIN_DIR)$(CMD_DIR)
 
 OBJ_SRC  = $(call rwildcard,$(OBJ_DIR),*.c)
 TEST_SRC = $(call rwildcard,$(TEST_DIR),*.c)
@@ -48,8 +48,8 @@ $(DIRECTORIES):
 	@mkdir -p $(DIRECTORIES)
 
 # The .o file of binary outputs are implicit dependencies and will be removed unless precious
-.PRECIOUS: $(BIN_DIR)/%.o
-$(BIN_DIR)/%.o: %.c | $(DIRECTORIES)
+.PRECIOUS: $(BIN_DIR)%.o
+$(BIN_DIR)%.o: %.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
 
 $(BIN_DIR)%: $(BIN_DIR)%.o | $(DIRECTORIES)
