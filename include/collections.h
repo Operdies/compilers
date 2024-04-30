@@ -17,18 +17,20 @@ typedef struct {
   // number of elements
   int n;
   // array
-  void *arr;
+  void *array;
   // size of each element
   int sz;
 } vslice;
 
+#define vec_nth(vec, n) (void *)((char *)(vec).array + (n * (vec).sz))
+
 #define v_foreach(type, var, vec) \
-  type var;                       \
-  for (int idx_##var = 0; idx_##var < vec.n && (var = vec_nth(&vec.slice, idx_##var)); idx_##var++)
+  type *var;                      \
+  for (int idx_##var = 0; idx_##var < vec.n && (var = vec_nth(vec, idx_##var)); idx_##var++)
 
 #define v_rforeach(type, var, vec) \
-  type var;                        \
-  for (int idx_##var = vec.n - 1; idx_##var >= 0 && (var = vec_nth(&vec.slice, idx_##var)); idx_##var--)
+  type *var;                       \
+  for (int idx_##var = vec.n - 1; idx_##var >= 0 && (var = vec_nth(vec, idx_##var)); idx_##var--)
 
 #define v_make(type) \
   (vec) { .sz = sizeof(type) }
@@ -76,7 +78,6 @@ void vec_zero(vec *v);
 void vec_sort(vec *v, comparer_t comp_fn);
 void vec_fcopy(vec *v, FILE *f);
 void vec_reverse(vec *v);
-void *vec_nth(const vslice *v, int n);
 void vec_ensure_capacity(vec *v, int c);
 bool vslice_contains(const vslice *v, const void *elem);
 bool vec_contains(const vec *v, const void *elem);

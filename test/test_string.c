@@ -36,15 +36,15 @@ int test_vec(void) {
 
   for (int i = 0; i < s.n; i++) {
     int expected = payload[i % LENGTH(payload)];
-    int *actual = (int *)vec_nth(&s, i);
-    if (!actual || expected != *actual)
+    int actual = *(int *)vec_nth(s, i);
+    if (expected != actual)
       return 4;
   }
 
   vec v2 = vec_select(&v.slice, sizeof(void *), (vec_selector)negate);
   for (int i = 0; i < v2.n; i++) {
-    int from = *(int *)vec_nth(&v.slice, i);
-    int to = *(int *)vec_nth(&v2.slice, i);
+    int from = *(int *)vec_nth(v, i);
+    int to = *(int *)vec_nth(v2, i);
     if (from != -to) {
       return 5;
     }
@@ -53,7 +53,7 @@ int test_vec(void) {
   vec_foreach(&v.slice, (vec_fn)add_one);
   for (int i = 0; i < s.n; i++) {
     int expected = payload[i % LENGTH(payload)] + 1;
-    int actual = *(int *)vec_nth(&s, i);
+    int actual = *(int *)vec_nth(s, i);
     if (expected != actual)
       return 6;
   }
@@ -110,7 +110,7 @@ void test_vec_insert(void) {
 
   if (v.n != 5)
     die("vec insert failed: expected 5 elements");
-  v_foreach(int *, val, v) {
+  v_foreach(int, val, v) {
     if (*val != idx_val)
       die("vec insert failed: expected %d, got %d", idx_val, *val);
   }

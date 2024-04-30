@@ -53,7 +53,7 @@ int next_token(scanner *s, const bool *valid, string_slice *content) {
   if (finished(s->ctx))
     return EOF_TOKEN;
 
-  v_foreach(token *, t, s->tokens) {
+  v_foreach(token, t, s->tokens) {
     if (valid == NULL || valid[idx_t]) {
       regex_match m = regex_matches(t->pattern, s->ctx);
       if (m.match) {
@@ -75,7 +75,7 @@ static bool _tokenize(scanner *s, parse_context *ctx, vec *tokens) {
   while (!finished(ctx)) {
     bool found = false;
     string_slice value = {.str = ctx->src + ctx->c};
-    v_foreach(token *, t, s->tokens) {
+    v_foreach(token, t, s->tokens) {
       regex_match m = regex_matches(t->pattern, ctx);
       if (m.match) {
         found = true;
@@ -99,7 +99,7 @@ void tokenize(scanner *s, const char *body, vec *tokens) {
 
 scanner mk_scanner(const scanner_tokens tokens) {
   scanner s = {0};
-  s.tokens.sz = sizeof(token);
+  s.tokens = v_make(token);
   for (int i = 0; i < tokens.n; i++) {
     const token_def *t = &tokens.tokens[i];
     token n = {0};
@@ -114,6 +114,6 @@ scanner mk_scanner(const scanner_tokens tokens) {
   return s;
 }
 void destroy_scanner(scanner *s) {
-  v_foreach(token *, t, s->tokens) { destroy_regex(t->pattern); }
+  v_foreach(token, t, s->tokens) { destroy_regex(t->pattern); }
   vec_destroy(&s->tokens);
 }
