@@ -18,9 +18,9 @@ OBJ_DIR          = src
 TEST_DIR         = test
 CMD_DIR          = cmd
 
-OBJ_OUT_DIR  = $(BIN_DIR)/obj
-TEST_OUT_DIR = $(BIN_DIR)/test
-CMD_OUT_DIR  = $(BIN_DIR)/cmd
+OBJ_OUT_DIR  = $(BIN_DIR)/$(OBJ_DIR)
+TEST_OUT_DIR = $(BIN_DIR)/$(TEST_DIR)
+CMD_OUT_DIR  = $(BIN_DIR)/$(CMD_DIR)
 
 OBJ_SRC  = $(call rwildcard,$(OBJ_DIR),*.c)
 TEST_SRC = $(call rwildcard,$(TEST_DIR),*.c)
@@ -47,23 +47,22 @@ all: $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
 $(DIRECTORIES):
 	@mkdir -p $(DIRECTORIES)
 
-# FIXME: these 3 rules are nearly identical.
+# The .o file of binary outputs are implicit dependencies and will be removed unless precious
 .PRECIOUS: $(OBJ_OUT_DIR)%.o
+.PRECIOUS: $(TEST_OUT_DIR)%.o
+.PRECIOUS: $(CMD_OUT_DIR)%.o
+# FIXME: these 3 rules are nearly identical.
 $(OBJ_OUT_DIR)%.o: $(OBJ_DIR)%.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
 
-.PRECIOUS: $(TEST_OUT_DIR)%.o
 $(TEST_OUT_DIR)%.o: $(TEST_DIR)%.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
 
-.PRECIOUS: $(CMD_OUT_DIR)%.o
 $(CMD_OUT_DIR)%.o: $(CMD_DIR)%.c | $(DIRECTORIES)
 	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
 
-# FIXME: these 2 rules are nearly identical
-$(TEST_OUT_DIR)%: $(TEST_OUT_DIR)%.o | $(DIRECTORIES)
-	$(CC) $(CFLAGS) -o $@ $(filter %.o,$^) $(LDFLAGS)
-$(CMD_OUT_DIR)%: $(CMD_OUT_DIR)%.o | $(DIRECTORIES)
+# Now build the binaries
+$(BIN_DIR)%: $(BIN_DIR)%.o | $(DIRECTORIES)
 	$(CC) $(CFLAGS) -o $@ $(filter %.o,$^) $(LDFLAGS)
 
 
