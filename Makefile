@@ -38,7 +38,8 @@ VALGRIND_FLAGS = --error-exitcode=1 -s --leak-check=full --track-origins=yes --s
 MMD_FILES = $(call rwildcard,$(BIN_DIR),*.d)
 DIRECTORIES = $(call uniq,$(dir $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)))
 
-CFLAGS += -std=c1x -pedantic -Wall -Wextra -Werror $(DEFINES) -I$(INCLUDE_DIR) $(OFLAGS) -MMD -MF $@.d
+CFLAGS += -std=c1x -pedantic -Wall -Wextra -Werror $(DEFINES) -I$(INCLUDE_DIR) $(OFLAGS)
+MMD_FLAGS = -MMD -MF $@.d
 
 .PHONY: all
 all: $(OBJ_OUT) $(TEST_OUT) $(CMD_OUT)
@@ -47,12 +48,17 @@ $(DIRECTORIES):
 	@mkdir -p $(DIRECTORIES)
 
 # FIXME: these 3 rules are nearly identical.
+.PRECIOUS: $(OBJ_OUT_DIR)%.o
 $(OBJ_OUT_DIR)%.o: $(OBJ_DIR)%.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
+
+.PRECIOUS: $(TEST_OUT_DIR)%.o
 $(TEST_OUT_DIR)%.o: $(TEST_DIR)%.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
+
+.PRECIOUS: $(CMD_OUT_DIR)%.o
 $(CMD_OUT_DIR)%.o: $(CMD_DIR)%.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
 
 # FIXME: these 2 rules are nearly identical
 $(TEST_OUT_DIR)%: $(TEST_OUT_DIR)%.o | $(DIRECTORIES)
