@@ -90,7 +90,7 @@ maintainer-clean: clean
 	rm -rf out
 
 $(COMPILE_COMMANDS): Makefile $(OBJECTS) $(BINARIES)
-	bear -- make all -j -B
+	bear -- $(MAKE) all -j$(nproc) -B
 
 # Run all tests
 .PHONY: test
@@ -159,3 +159,18 @@ $(foreach target,$(TEST_SRC) $(CMD_SRC), $(eval $(call \
 	$(target),\
 	$(patsubst %, $(BIN_DIR)%, $(target:.c=)))))
 
+.PHONY: test-all gcc-test clang-test gcc-valgrind clang-valgrind
+gcc-test:
+	CC=gcc             $(MAKE) incremental-test
+	CC=gcc   RELEASE=1 $(MAKE) incremental-test
+clang-test:
+	CC=clang           $(MAKE) incremental-test
+	CC=clang RELEASE=1 $(MAKE) incremental-test
+gcc-valgrind:
+	CC=gcc             $(MAKE) incremental-valgrind
+	CC=gcc   RELEASE=1 $(MAKE) incremental-valgrind
+clang-valgrind:
+	CC=clang           $(MAKE) incremental-valgrind
+	CC=clang RELEASE=1 $(MAKE) incremental-valgrind
+
+test-all: gcc-test clang-test gcc-valgrind clang-valgrind
