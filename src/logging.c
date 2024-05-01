@@ -1,10 +1,10 @@
 #include "logging.h"
-
+#include <stdlib.h>
+#ifndef WASI
 #include <errno.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "collections.h"
@@ -187,8 +187,27 @@ void setup_crash_stacktrace_logger(void) {
   if (!init) {
     atexit(destroy_strbuf);
     init = true;
+#ifndef WASI
     int signals[] = {SIGINT, SIGSEGV, SIGTERM, SIGHUP, SIGQUIT};
     for (int i = 0; i < LENGTH(signals); i++)
       sigaction(signals[i], &(struct sigaction){.sa_handler = handler}, NULL);
+#endif
   }
 }
+
+#else
+void debug(const char *fmt, ...) { (void)fmt; }
+void info(const char *fmt, ...) { (void)fmt; }
+void warn(const char *fmt, ...) { (void)fmt; }
+void error(const char *fmt, ...) { (void)fmt; }
+void die(const char *fmt, ...) { (void)fmt; exit(1); }
+enum loglevel set_loglevel(enum loglevel level) { return level; }
+enum loglevel get_loglevel(void) { return 0; }
+enum loglevel log_severity(void) { return 0; }
+void setup_crash_stacktrace_logger(void) {}
+
+void error_ctx(parse_context *ctx) { (void)ctx; }
+void warn_ctx(parse_context *ctx) { (void)ctx; }
+void debug_ctx(parse_context *ctx) { (void)ctx; }
+void info_ctx(parse_context *ctx) { (void)ctx; }
+#endif

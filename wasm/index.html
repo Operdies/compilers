@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!-- add.html -->
+<html>
+
+<head></head>
+
+<body>
+  <script>
+    var lib;
+    (async () => {
+      const response = await fetch('add.wasm');
+      const bytes = await response.arrayBuffer();
+      const {instance} = await WebAssembly.instantiate(bytes);
+      lib = instance;
+      console.log(lib)
+    })();
+    function my_click() {
+      console.log(lib)
+      console.log('The answer is: ' + lib.exports.add(3, 2));
+    }
+  </script>
+  <button onclick="my_click()">Hi!</button>
+</body>
+
+</html>

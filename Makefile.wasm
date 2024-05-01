@@ -1,0 +1,32 @@
+# needs wasi-libc:
+# git clone https://github.com/CraneStation/wasi-libc.git
+# cd wasi-libc
+# make install INSTALL_DIR=/tmp/wasi-libc
+
+# also needs wasi-sdk for linkage: https://github.com/WebAssembly/wasi-sdk/releases
+
+WASM_DIR      = wasm
+WASM_SRC      = $(call rwildcard,$(WASM_DIR),*.c)
+WASM_OUT      = $(WASM_SRC:.c=.wasm)
+WASM_LIBC     = $(WASM_DIR)/wasi-libc
+
+WASM_IN = $(OBJ_SRC)
+WASM_MEGA = wasm/mega.wasm
+
+WASI_FLAGS += -DWASI --target=wasm32-unknown-wasi --sysroot $(WASM_LIBC) -nostartfiles -Wl,--import-memory -Wl,--no-entry -Wl,--export-all
+
+$(WASM_DIR)/%.wasm : $(WASM_DIR)/%.c | $(WASM_OUT_DIR)
+	clang --target=wasm32-unknown-wasi --no-standard-libraries -Wl,--export-all -Wl,--no-entry -o $@ $<
+
+wasm: $(WASM_OUT)
+all:: wasm
+
+wasm-clean:
+	rm -f $(WASM_OUT)
+clean:: wasm-clean
+
+printos:
+	@echo $(WASM_IN)
+
+$(WASM_MEGA): $(WASM_IN)
+	clang $(CFLAGS) $(WASI_FLAGS) -o $@ $^
