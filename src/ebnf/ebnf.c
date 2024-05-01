@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "assert.h"
 #include "collections.h"
 #include "logging.h"
 #include "macros.h"
@@ -384,8 +385,6 @@ static bool init_productions(parser_t *g) {
 
 #define MKSYM() (symbol_t *)arena_alloc(g->a, 1, sizeof(symbol_t))
 
-static symbol_t *expression_symbol(parser_t *g, expression_t *expr);
-
 symbol_t *tail_alt(symbol_t *s) {
   symbol_t *slow, *fast;
   slow = fast = s;
@@ -481,12 +480,17 @@ struct factor_symbols {
   symbol_t *tail;
 };
 
-static struct factor_symbols factor_symbol(parser_t *g, factor_t *factor) {
+static bool expression_symbol(parser_t *g, expression_t *expr, symbol_t **out);
+
+static bool factor_symbol(parser_t *g, factor_t *factor, struct factor_symbols *out) {
+  assert(out);
   switch (factor->type) {
     case F_OPTIONAL:
     case F_REPEAT:
     case F_PARENS: {
-      symbol_t *subexpression = expression_symbol(g, &factor->expression);
+      symbol_t *subexpression = NULL;
+      if (!expression_symbol(g, &factor->expression, &subexpression))
+        return false;
       if (factor->type == F_REPEAT) {
         subexpression = make_repeatable(g, subexpression);
       } else if (factor->type == F_OPTIONAL) {
@@ -501,37 +505,47 @@ static struct factor_symbols factor_symbol(parser_t *g, factor_t *factor) {
       append_all_nexts(subexpression, tail, &seen);
       vec_destroy(&seen);
 
-      return (struct factor_symbols){.head = subexpression, .tail = tail};
+      out->head = subexpression;
+      out->tail = tail;
+      break;
     }
     case F_IDENTIFIER: {
       production_t *p = factor->identifier.production;
       if (!p) {
-        die("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
+        error("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
+        return false;
       }
       symbol_t *prod = MKSYM();
       *prod = (symbol_t){.type = nonterminal_symbol, .nonterminal = p};
-      return (struct factor_symbols){prod, prod};
+      out->head = out->tail = prod;
+      break;
     }
     case F_STRING: {
       symbol_t *s = MKSYM();
       *s = (symbol_t){.type = string_symbol, .string = factor->string};
-      return (struct factor_symbols){s, s};
+      out->head = out->tail = s;
+      break;
     }
     case F_TOKEN: {
       symbol_t *s = MKSYM();
       *s = (symbol_t){.type = token_symbol, .token = factor->token};
-      return (struct factor_symbols){s, s};
+      out->head = out->tail = s;
+      break;
     }
     default:
-      die("What??\n");
+      return false;
   }
+  return true;
 }
 
-static symbol_t *term_symbol(parser_t *g, term_t *term) {
+static bool term_symbol(parser_t *g, term_t *term, symbol_t **out) {
+  assert(out);
   symbol_t *head, *tail;
   head = tail = NULL;
   v_foreach(factor_t, f, term->factors_vec) {
-    struct factor_symbols factors = factor_symbol(g, f);
+    struct factor_symbols factors;
+    if (!factor_symbol(g, f, &factors))
+      return false;
     if (head == NULL) {
       head = factors.head;
     } else {
@@ -539,26 +553,35 @@ static symbol_t *term_symbol(parser_t *g, term_t *term) {
     }
     tail = factors.tail;
   }
-  return head;
+  *out = head;
+  return true;
 }
 
-static symbol_t *expression_symbol(parser_t *g, expression_t *expr) {
+static bool expression_symbol(parser_t *g, expression_t *expr, symbol_t **out) {
+  assert(out);
   symbol_t *new_expression;
   new_expression = NULL;
   v_foreach(term_t, t, expr->terms_vec) {
-    symbol_t *new_term = term_symbol(g, t);
-    if (!new_expression) {
-      new_expression = new_term;
+    symbol_t *new_term = NULL;
+    if (!term_symbol(g, t, &new_term))
+      return false;
+    if (new_expression) {
+      assert(append_alt(new_expression, new_term));
     } else {
-      if (!append_alt(new_expression, new_term))
-        die("Circular alt chain.");
+      new_expression = new_term;
     }
   }
-  return new_expression;
+  *out = new_expression;
+  return true;
 }
 
 static bool build_parse_table(parser_t *g) {
-  v_foreach(production_t, prod, g->productions_vec) { prod->sym = expression_symbol(g, &prod->expr); }
+  v_foreach(production_t, prod, g->productions_vec) {
+    symbol_t *sym = NULL;
+    if (!expression_symbol(g, &prod->expr, &sym))
+      return false;
+    prod->sym = sym;
+  }
   return true;
 }
 
