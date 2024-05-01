@@ -9,7 +9,7 @@ uniq      = $(if $1,$(firstword $1) $(call uniq,$(filter-out $(firstword $1),$1)
 OFLAGS = $(if $(RELEASE),-O3,-Og -gdwarf-4)
 DEFINES = -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE 
 DEFINES += $(if $(RELEASE),-DNDEBUG,-DDEBUG)
-BIN_DIR = $(if $(RELEASE),out/release/,out/debug/)
+BIN_DIR = $(if $(RELEASE),out/$(CC)/release/,out/$(CC)/debug/)
 LDFLAGS = $(if $(RELEASE),-s,)
 
 COMPILE_COMMANDS = compile_commands.json
