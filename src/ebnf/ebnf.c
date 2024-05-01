@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "assert.h"
 #include "collections.h"
 #include "logging.h"
 #include "macros.h"
@@ -384,8 +385,6 @@ static bool init_productions(parser_t *g) {
 
 #define MKSYM() (symbol_t *)arena_alloc(g->a, 1, sizeof(symbol_t))
 
-static symbol_t *expression_symbol(parser_t *g, expression_t *expr);
-
 symbol_t *tail_alt(symbol_t *s) {
   symbol_t *slow, *fast;
   slow = fast = s;
@@ -470,9 +469,8 @@ static symbol_t *make_optional(parser_t *g, symbol_t *subexpression) {
   append_all_nexts(subexpression, empty, &seen);
   vec_destroy(&seen);
 
-  if (!append_alt(subexpression, empty)) {
-    die("Circular alt chain prevents loop exit.");
-  }
+  if (!append_alt(subexpression, empty))
+    die("Failed to append alt expression");
   return subexpression;
 }
 
@@ -481,12 +479,18 @@ struct factor_symbols {
   symbol_t *tail;
 };
 
-static struct factor_symbols factor_symbol(parser_t *g, factor_t *factor) {
+static bool expression_symbol(parser_t *g, expression_t *expr, symbol_t **out);
+
+static bool factor_symbol(parser_t *g, factor_t *factor, struct factor_symbols *out) {
+  assert(out);
   switch (factor->type) {
     case F_OPTIONAL:
     case F_REPEAT:
     case F_PARENS: {
-      symbol_t *subexpression = expression_symbol(g, &factor->expression);
+      symbol_t *subexpression = NULL;
+      if (!expression_symbol(g, &factor->expression, &subexpression))
+        return false;
+      assert(subexpression);
       if (factor->type == F_REPEAT) {
         subexpression = make_repeatable(g, subexpression);
       } else if (factor->type == F_OPTIONAL) {
@@ -501,37 +505,50 @@ static struct factor_symbols factor_symbol(parser_t *g, factor_t *factor) {
       append_all_nexts(subexpression, tail, &seen);
       vec_destroy(&seen);
 
-      return (struct factor_symbols){.head = subexpression, .tail = tail};
+      out->head = subexpression;
+      out->tail = tail;
+      return true;
     }
     case F_IDENTIFIER: {
       production_t *p = factor->identifier.production;
       if (!p) {
-        die("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
+        error("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
+        return false;
       }
       symbol_t *prod = MKSYM();
       *prod = (symbol_t){.type = nonterminal_symbol, .nonterminal = p};
-      return (struct factor_symbols){prod, prod};
+      out->head = prod;
+      out->tail = prod;
+      return true;
     }
     case F_STRING: {
       symbol_t *s = MKSYM();
       *s = (symbol_t){.type = string_symbol, .string = factor->string};
-      return (struct factor_symbols){s, s};
+      out->head = out->tail = s;
+      return true;
     }
     case F_TOKEN: {
       symbol_t *s = MKSYM();
       *s = (symbol_t){.type = token_symbol, .token = factor->token};
-      return (struct factor_symbols){s, s};
+      out->head = s;
+      out->tail = s;
+      return true;
     }
     default:
-      die("What??\n");
+      return false;
   }
 }
 
-static symbol_t *term_symbol(parser_t *g, term_t *term) {
+static bool term_symbol(parser_t *g, term_t *term, symbol_t **out) {
+  assert(out);
   symbol_t *head, *tail;
   head = tail = NULL;
   v_foreach(factor_t, f, term->factors_vec) {
-    struct factor_symbols factors = factor_symbol(g, f);
+    struct factor_symbols factors = {0};
+    if (!factor_symbol(g, f, &factors))
+      return false;
+    assert(factors.head);
+    assert(factors.tail);
     if (head == NULL) {
       head = factors.head;
     } else {
@@ -539,26 +556,46 @@ static symbol_t *term_symbol(parser_t *g, term_t *term) {
     }
     tail = factors.tail;
   }
-  return head;
+  assert(head);
+  *out = head;
+  return true;
 }
 
-static symbol_t *expression_symbol(parser_t *g, expression_t *expr) {
-  symbol_t *new_expression;
-  new_expression = NULL;
+static bool expression_symbol(parser_t *g, expression_t *expr, symbol_t **out) {
+  assert(out);
+  symbol_t *new_expression = NULL;
   v_foreach(term_t, t, expr->terms_vec) {
-    symbol_t *new_term = term_symbol(g, t);
-    if (!new_expression) {
+    symbol_t *new_term = NULL;
+    if (!term_symbol(g, t, &new_term))
+      return false;
+    assert(new_term);
+    if (new_expression == NULL) {
       new_expression = new_term;
     } else {
       if (!append_alt(new_expression, new_term))
-        die("Circular alt chain.");
+        die("Failed to append alt expression");
     }
   }
-  return new_expression;
+  assert(new_expression);
+  *out = new_expression;
+  return true;
 }
 
 static bool build_parse_table(parser_t *g) {
-  v_foreach(production_t, prod, g->productions_vec) { prod->sym = expression_symbol(g, &prod->expr); }
+  v_foreach(production_t, prod, g->productions_vec) {
+    // Not all productions are guaranteed to be populated.
+    // This is because we want to support addressing tokens by the index
+    // of the production so e.g. a token enum can be constructed.
+    // But using an enum for indexing requires the ability to skip values.
+    // Here we just ad-hoc guess that if the expression has 0 characters, the production is not populated.
+    if (prod->expr.range.n) {
+      symbol_t *sym = NULL;
+      if (!expression_symbol(g, &prod->expr, &sym))
+        return false;
+      assert(sym);
+      prod->sym = sym;
+    }
+  }
   return true;
 }
 

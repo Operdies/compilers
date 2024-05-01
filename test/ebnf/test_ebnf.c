@@ -65,7 +65,6 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum 
       print_ast(a, NULL);
       error("Error parsing program %s: was %s, expected %s\n", test->src, truth[success], truth[test->expected]);
       error_ctx(g->s->ctx);
-      exit(1);
     }
     destroy_ast(a);
   }

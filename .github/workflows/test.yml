@@ -8,27 +8,38 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        CC: [gcc-13, clang]
+    env:
+      CC: ${{ matrix.CC }}
     steps:
       - uses: actions/checkout@v4
       - run: make -j test
-      - run: RELEASE=1 make -j test
+      - run: RELEASE=1 make -j -B incremental-test
       - uses: actions/upload-artifact@v4
         with:
-          name: test-output
+          name: test-output-${{ matrix.CC }}
           path: out
           retention-days: 3
 
   valgrind:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        CC: [gcc-13, clang]
+    env:
+      CC: ${{ matrix.CC }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Valgrind
         run: sudo apt update && sudo apt install -y valgrind
-      - run: make -j valgrind
-      - run: RELEASE=1 make -j valgrind
+      - run: make -j -B incremental-valgrind
+      - run: RELEASE=1 make -j -B incremental-valgrind
       - uses: actions/upload-artifact@v4
+        if: ${{ always() }}
         with:
-          name: valgrind-output
+          name: valgrind-output-${{ matrix.CC }}
           path: out
           retention-days: 3
 

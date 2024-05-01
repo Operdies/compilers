@@ -22,7 +22,6 @@ typedef struct {
   const production_t *owner;
 } conflict;
 
-static bool populate_first_expr(production_t *h, expression_t *e);
 static bool expression_optional(expression_t *expr);
 static bool factor_optional(factor_t *fac);
 static bool expression_optional(expression_t *expr);
@@ -161,9 +160,7 @@ void populate_first(production_t *h) {
     return;
   }
   h->first_vec = v_make(struct follow_t);
-  if (populate_first_expr(h, &h->expr)) {
-    // debug("%.*s is completely optional", h->prod->identifier.n, h->prod->identifier.str);
-  }
+  populate_first_expr(h, &h->expr);
 }
 
 /* follow set
@@ -320,16 +317,16 @@ void populate_follow(const parser_t *g) {
 
 // populate a map of all the symbols that can be reached
 void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec *seen) {
-  if (vec_contains(seen, follow))
+  if (vec_contains(seen, &follow))
     return;
-  vec_push(seen, follow);
+  vec_push(seen, &follow);
 
   switch (follow->type) {
     case FOLLOW_SYMBOL:
       regex_first(follow->regex, reachable);
       break;
     case FOLLOW_FIRST: {
-      v_foreach(struct follow_t, fst, follow->prod->first_vec) expand_first(fst, reachable, seen);
+      v_foreach(struct follow_t, fst, follow->prod->first_vec) { expand_first(fst, reachable, seen); }
     } break;
     case FOLLOW_FOLLOW: {
     } break;
@@ -352,7 +349,7 @@ vec populate_maps(const production_t *owner, vec follows) {
         break;
       case FOLLOW_FOLLOW:
       case FOLLOW_FIRST: {
-        vec seen = v_make(struct follow_t);
+        vec seen = v_make(struct follow_t*);
         r.prod = follow->prod;
         expand_first(follow, r.set, &seen);
         vec_destroy(&seen);
