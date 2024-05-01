@@ -469,7 +469,8 @@ static symbol_t *make_optional(parser_t *g, symbol_t *subexpression) {
   append_all_nexts(subexpression, empty, &seen);
   vec_destroy(&seen);
 
-  assert(append_alt(subexpression, empty));
+  if (!append_alt(subexpression, empty))
+    die("Failed to append alt expression");
   return subexpression;
 }
 
@@ -546,6 +547,8 @@ static bool term_symbol(parser_t *g, term_t *term, symbol_t **out) {
     struct factor_symbols factors = {0};
     if (!factor_symbol(g, f, &factors))
       return false;
+    assert(factors.head);
+    assert(factors.tail);
     if (head == NULL) {
       head = factors.head;
     } else {
@@ -553,6 +556,7 @@ static bool term_symbol(parser_t *g, term_t *term, symbol_t **out) {
     }
     tail = factors.tail;
   }
+  assert(head);
   *out = head;
   return true;
 }
@@ -568,7 +572,8 @@ static bool expression_symbol(parser_t *g, expression_t *expr, symbol_t **out) {
     if (new_expression == NULL) {
       new_expression = new_term;
     } else {
-      assert(append_alt(new_expression, new_term));
+      if (!append_alt(new_expression, new_term))
+        die("Failed to append alt expression");
     }
   }
   assert(new_expression);
