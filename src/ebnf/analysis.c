@@ -329,7 +329,7 @@ void expand_first(struct follow_t *follow, char reachable[static UINT8_MAX], vec
       regex_first(follow->regex, reachable);
       break;
     case FOLLOW_FIRST: {
-      v_foreach(struct follow_t, fst, follow->prod->first_vec) expand_first(fst, reachable, seen);
+      v_foreach(struct follow_t, fst, follow->prod->first_vec) { expand_first(fst, reachable, seen); }
     } break;
     case FOLLOW_FOLLOW: {
     } break;

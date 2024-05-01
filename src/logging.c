@@ -1,11 +1,9 @@
 #include "logging.h"
 
 #include <errno.h>
-#include <execinfo.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -135,38 +133,6 @@ void error(const char *fmt, ...) {
   va_end(ap);
 }
 
-static void print_stacktrace_friendly(void **array, int size, int skip) {
-  const int depth = 5;
-  char **strings;
-  int top, bottom;
-  // skip_end: _start, __libc_start_main, mangled libc symbol
-  int skip_end = 3;
-
-  strings = backtrace_symbols(array, size);
-  for (top = skip; top < size && top < (depth + skip); top++) {
-    char *str = strings[top];
-    str = strrchr(str, '/') + 1;
-    debug("%2d) %s", top - skip, str);
-  }
-
-  bottom = size - depth - skip_end;
-  if (bottom < top) {
-    bottom = top;
-  } else if (bottom - top == 1) {
-    // If exactly one element would be truncated, just print it instead of
-    // truncating
-    bottom -= 1;
-  } else if (top != bottom) {
-    // avoid printing the separator if top and bottom exactly meet
-    debug("    -----");
-  }
-
-  for (; bottom < size - skip_end; bottom++) {
-    char *str = strings[bottom];
-    str = strrchr(str, '/') + 1;
-    debug("%2d) %s", bottom - skip, str);
-  }
-}
 void die(const char *fmt, ...) {
   va_list ap;
 
@@ -178,10 +144,6 @@ void die(const char *fmt, ...) {
     colored_log(stderr, LL_FATAL, strerror(errno), NULL);
   }
 
-  void *array[100];
-  int size = backtrace(array, LENGTH(array));
-  print_stacktrace_friendly(array, size, 0);
-
   if (log)
     fclose(log);
   exit(1);
@@ -190,10 +152,6 @@ void die(const char *fmt, ...) {
 static void handler(int sig) {
   const char *signal = strsignal(sig);
   error(signal);
-
-  void *array[100];
-  int size = backtrace(array, LENGTH(array));
-  print_stacktrace_friendly(array, size, 2);
 
   if (log)
     fclose(log);
