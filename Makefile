@@ -1,4 +1,6 @@
-# TODO: Object dependencies must be manually specified in the source files. A more automatic solution would be nice
+# disable built-in rules
+MAKEFLAGS += --no-builtin-rules
+.SUFFIXES:
 
 # recursive wildcard 
 rwildcard = $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
