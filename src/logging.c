@@ -210,4 +210,5 @@ void error_ctx(parse_context *ctx) { (void)ctx; }
 void warn_ctx(parse_context *ctx) { (void)ctx; }
 void debug_ctx(parse_context *ctx) { (void)ctx; }
 void info_ctx(parse_context *ctx) { (void)ctx; }
+int add(int first, int second) { return first + second; }
 #endif
