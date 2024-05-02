@@ -1,4 +1,6 @@
-# TODO: Object dependencies must be manually specified in the source files. A more automatic solution would be nice
+# disable built-in rules
+MAKEFLAGS += --no-builtin-rules
+.SUFFIXES:
 
 # recursive wildcard 
 rwildcard = $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
@@ -36,7 +38,7 @@ BINARIES = $(TEST_OUT) $(CMD_OUT)
 # This target exists mostly as a hack to make incremental builds that only run tests where the inputs changed
 TEST_RESULT = $(TEST_OUT:=.log)
 VALGRIND_RESULT = $(TEST_OUT:=.valgrind)
-VALGRIND_FLAGS = --error-exitcode=1 -s --leak-check=full --track-origins=yes --show-leak-kinds=all
+VALGRIND_FLAGS = --error-exitcode=1 -s --leak-check=full --track-origins=yes --show-leak-kinds=all --quiet
 
 MMD_FILES = $(OBJECTS:.o=.o.d)
 DIRECTORIES = $(call uniq,$(dir $(OBJECTS)))
@@ -102,18 +104,18 @@ valgrind: clean-valgrind incremental-valgrind
 
 # Run tests if input changed
 $(TEST_OUT_DIR)%.log: $(TEST_OUT_DIR)%
-	@(                                                   \
-		./$< > $@.error 2>&1;                              \
-		RET=$$?;                                           \
-		printf "\033[1;30;44m====== $< ======\033[0m\n";   \
-		cat $@.error;                                      \
-		if test $$RET -eq 0; then                          \
-		printf "\033[1;30;46m====== PASS ======\033[0m\n"; \
-		mv $@.error $@;                                    \
-		else                                               \
-		printf "\033[1;31m====== FAIL ======\033[0m\n";    \
-		exit $$RET;                                        \
-		fi                                                 \
+	@(                                                      \
+		./$< > $@.error 2>&1;                                 \
+		RET=$$?;                                              \
+		printf "\033[1;30;44m====== $< ======\033[0m\n";      \
+		cat $@.error;                                         \
+		if test $$RET -eq 0; then                             \
+		printf "\033[1;30;46m====== PASS ======\033[0m\n";    \
+		mv $@.error $@;                                       \
+		else                                                  \
+		printf "\033[1;30;41m====== FAIL ======\033[0m\n";    \
+		exit $$RET;                                           \
+		fi                                                    \
 		)
 
 # Run tests where input changed
@@ -122,18 +124,18 @@ incremental-test: $(TEST_RESULT)
 
 # Generate valgrind report if input changed
 $(TEST_OUT_DIR)%.valgrind: $(TEST_OUT_DIR)%
-	@(                                                            \
-		valgrind $(VALGRIND_FLAGS) ./$< > $@.error 2>&1;            \
-		RET=$$?;                                                    \
-		printf "\033[1;30;44m====== VALGRIND $< ======\033[0m\n";   \
-		cat $@.error;                                               \
-		if test $$RET -eq 0; then                                   \
-		printf "\033[1;30;46m====== VALGRIND DONE ======\033[0m\n"; \
-		mv $@.error $@;                                             \
-		else                                                        \
-		printf "\033[1;31m====== VALGRIND ERROR ======\033[0m\n";   \
-		exit $$RET;                                                 \
-		fi                                                          \
+	@(                                                               \
+		valgrind $(VALGRIND_FLAGS) ./$< > $@.error 2>&1;               \
+		RET=$$?;                                                       \
+		printf "\033[1;30;44m====== VALGRIND $< ======\033[0m\n";      \
+		cat $@.error;                                                  \
+		if test $$RET -eq 0; then                                      \
+		printf "\033[1;30;46m====== VALGRIND DONE ======\033[0m\n";    \
+		mv $@.error $@;                                                \
+		else                                                           \
+		printf "\033[1;30;41m====== VALGRIND ERROR ======\033[0m\n";   \
+		exit $$RET;                                                    \
+		fi                                                             \
 		)
 
 # Generate all missing valgrind reports
