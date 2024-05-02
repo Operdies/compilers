@@ -6,23 +6,32 @@
 # also needs wasi-sdk for linkage: https://github.com/WebAssembly/wasi-sdk/releases
 
 WASM_DIR      = wasm
-WASM_SRC      = $(call rwildcard,$(WASM_DIR),*.c)
-WASM_OUT      = $(WASM_SRC:.c=.wasm)
-WASM_LIBC     = $(WASM_DIR)/wasi-libc
+WASM_OUT_DIR  = out/wasm
+WASM_LIBC_URL = https://github.com/WebAssembly/wasi-libc.git
+WASM_LIBC_SRC = $(WASM_OUT_DIR)/wasi-src
+# realpath: the sub-make invocation interprets INSTALL_DIR arg as a relative path from its workign directory
+WASM_LIBC     = $(WASM_OUT_DIR)/wasi-libc
 
 WASM_IN = $(OBJ_SRC)
-WASM_MEGA = wasm/mega.wasm
+WASM_MEGA = $(WASM_OUT_DIR)/mega.wasm
 
 WASI_FLAGS += -DWASI --target=wasm32-unknown-wasi --sysroot $(WASM_LIBC) -nostartfiles -Wl,--import-memory -Wl,--no-entry -Wl,--export-all
 
-$(WASM_DIR)/%.wasm : $(WASM_DIR)/%.c | $(WASM_OUT_DIR)
+$(WASM_OUT_DIR):
+	@mkdir -p $@
+
+.PRECIOUS: $(WASM_LIBC_SRC) $(WASM_LIBC)
+$(WASM_LIBC_SRC): | $(WASM_OUT_DIR)
+	git clone $(WASM_LIBC_URL) $@ || true
+
+$(WASM_LIBC): $(WASM_LIBC_SRC)
+	CC=clang $(MAKE) -C $< install INSTALL_DIR=$$(realpath $@)
+
+$(WASM_DIR)/%.wasm : $(WASM_DIR)/%.c | $(WASM_LIBC)
+	clang $(CFLAGS) $(WASI_FLAGS) -o $@ $<
+
+wasm: $(WASM_MEGA)
+
+$(WASM_MEGA): $(WASM_IN) | $(WASM_LIBC)
 	clang $(CFLAGS) $(WASI_FLAGS) -o $@ $^
 
-wasm: $(WASM_OUT)
-
-wasm-clean:
-	rm -f $(WASM_OUT)
-clean:: wasm-clean
-
-$(WASM_MEGA): $(WASM_IN)
-	clang $(CFLAGS) $(WASI_FLAGS) -o $@ $^
