@@ -36,7 +36,7 @@ BINARIES = $(TEST_OUT) $(CMD_OUT)
 # This target exists mostly as a hack to make incremental builds that only run tests where the inputs changed
 TEST_RESULT = $(TEST_OUT:=.log)
 VALGRIND_RESULT = $(TEST_OUT:=.valgrind)
-VALGRIND_FLAGS = --error-exitcode=1 -s --leak-check=full --track-origins=yes --show-leak-kinds=all
+VALGRIND_FLAGS = --error-exitcode=1 -s --leak-check=full --track-origins=yes --show-leak-kinds=all --quiet
 
 MMD_FILES = $(OBJECTS:.o=.o.d)
 DIRECTORIES = $(call uniq,$(dir $(OBJECTS)))
