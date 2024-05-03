@@ -55,10 +55,18 @@ $(DIRECTORIES):
 # The .o file of binary outputs are implicit dependencies and will be removed unless precious
 .PRECIOUS: $(BIN_DIR)%.o
 $(BIN_DIR)%.o: %.c | $(DIRECTORIES)
-	$(CC) $(CFLAGS) $(MMD_FLAGS) -c -o $@ $<
+		$(CC)\
+		$(CFLAGS)\
+		$(MMD_FLAGS)\
+		-c $<\
+		-o $@ 
 
 $(BIN_DIR)%: $(BIN_DIR)%.o | $(DIRECTORIES)
-	$(CC) $(CFLAGS) -o $@ $(filter %.o,$^) $(LDFLAGS)
+		$(CC)\
+		$(CFLAGS)\
+		$(filter %.o,$^)\
+		-o $@\
+		$(LDFLAGS)
 
 # Delete the output logs from tests
 .PHONY: clean-valgrind
