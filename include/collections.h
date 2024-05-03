@@ -108,7 +108,7 @@ void destroy_string(string_t *s);
 string_t string_from_chars(const char *src, int n);
 
 void *ecalloc(size_t nmemb, size_t size);
-void *ereallocarray(void *array, size_t nmemb, size_t size);
+void *erealloc(void *array, size_t nmemb, size_t size);
 int vec_vwrite(vec *v, const char *fmt, va_list ap);
 int vec_write(vec *v, const char *fmt, ...);
 char *string_slice_clone(string_slice s);
