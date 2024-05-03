@@ -2,91 +2,12 @@
 <!-- add.html -->
 <html>
 
+<script src="bindings.js"> </script>
 <head></head>
 
-<body onkeydown="myKeyHandler()">
-  <script>
-    let error = "";
-    (async () => {
-      const things = ['add.wasm', 'add2.wasm', 'mega.wasm', 'mega2.wasm']
-      for (let thing of things) {
-        console.log("Load ", thing);
-        try {
-          const memory = new WebAssembly.Memory({initial: 2});
-          const importObject = {
-            env: {memory},
-            wasi_snapshot_preview1: {
-              args_get: (...args) => {console.log(`args_get(${args})`); return 0;},
-              args_sizes_get: (...args) => {console.log(`args_sizes_get(${args})`); return 0;},
-              environ_get: (...args) => {console.log(`environ_get(${args})`); return 0;},
-              environ_sizes_get: (...args) => {console.log(`environ_sizes_get(${args})`); return 0;},
-              clock_res_get: (...args) => {console.log(`clock_res_get(${args})`); return 0;},
-              clock_time_get: (...args) => {console.log(`clock_time_get(${args})`); return 0;},
-              fd_advise: (...args) => {console.log(`fd_advise(${args})`); return 0;},
-              fd_allocate: (...args) => {console.log(`fd_allocate(${args})`); return 0;},
-              fd_close: (...args) => {console.log(`fd_close(${args})`); return 0;},
-              fd_datasync: (...args) => {console.log(`fd_datasync(${args})`); return 0;},
-              fd_fdstat_get: (...args) => {console.log(`fd_fdstat_get(${args})`); return 0;},
-              fd_fdstat_set_flags: (...args) => {console.log(`fd_fdstat_set_flags(${args})`); return 0;},
-              fd_fdstat_set_rights: (...args) => {console.log(`fd_fdstat_set_rights(${args})`); return 0;},
-              fd_filestat_get: (...args) => {console.log(`fd_filestat_get(${args})`); return 0;},
-              fd_filestat_set_size: (...args) => {console.log(`fd_filestat_set_size(${args})`); return 0;},
-              fd_filestat_set_times: (...args) => {console.log(`fd_filestat_set_times(${args})`); return 0;},
-              fd_pread: (...args) => {console.log(`fd_pread(${args})`); return 0;},
-              fd_prestat_get: (...args) => {console.log(`fd_prestat_get(${args})`); return 0;},
-              fd_prestat_dir_name: (...args) => {console.log(`fd_prestat_dir_name(${args})`); return 0;},
-              fd_pwrite: (...args) => {console.log(`fd_pwrite(${args})`); return 0;},
-              fd_read: (...args) => {console.log(`fd_read(${args})`); return 0;},
-              fd_readdir: (...args) => {console.log(`fd_readdir(${args})`); return 0;},
-              fd_renumber: (...args) => {console.log(`fd_renumber(${args})`); return 0;},
-              fd_seek: (...args) => {console.log(`fd_seek(${args})`); return 0;},
-              fd_sync: (...args) => {console.log(`fd_sync(${args})`); return 0;},
-              fd_tell: (...args) => {console.log(`fd_tell(${args})`); return 0;},
-              fd_write: (...args) => {console.log(`fd_write(${args})`); return 0;},
-              path_create_directory: (...args) => {console.log(`path_create_directory(${args})`); return 0;},
-              path_filestat_get: (...args) => {console.log(`path_filestat_get(${args})`); return 0;},
-              path_filestat_set_times: (...args) => {console.log(`path_filestat_set_times(${args})`); return 0;},
-              path_link: (...args) => {console.log(`path_link(${args})`); return 0;},
-              path_open: (...args) => {console.log(`path_open(${args})`); return 0;},
-              path_readlink: (...args) => {console.log(`path_readlink(${args})`); return 0;},
-              path_remove_directory: (...args) => {console.log(`path_remove_directory(${args})`); return 0;},
-              path_rename: (...args) => {console.log(`path_rename(${args})`); return 0;},
-              path_symlink: (...args) => {console.log(`path_symlink(${args})`); return 0;},
-              path_unlink_file: (...args) => {console.log(`path_unlink_file(${args})`); return 0;},
-              poll_oneoff: (...args) => {console.log(`poll_oneoff(${args})`); return 0;},
-              proc_exit: (...args) => {console.log(`proc_exit(${args})`); return 0;},
-              sched_yield: (...args) => {console.log(`sched_yield(${args})`); return 0;},
-              random_get: (...args) => {console.log(`random_get(${args})`); return 0;},
-              sock_accept: (...args) => {console.log(`sock_accept(${args})`); return 0;},
-              sock_recv: (...args) => {console.log(`sock_recv(${args})`); return 0;},
-              sock_send: (...args) => {console.log(`sock_send(${args})`); return 0;},
-              sock_shutdown: (...args) => {console.log(`sock_shutdown(${args})`); return 0;},
-            }
-          };
-          importObject.wasi_snapshot_preview1.fd_readdir("hello", 1, 2.5)
-          let program = fetch(thing, {cache: 'no-store'});
-          const {instance} = await WebAssembly.instantiateStreaming(program, importObject);
-          console.log(instance)
-          console.log('The answer is: ' + instance.exports.add(3, 2));
-        }
-        catch (ex) {
-          console.log("Failed.")
-          console.log(ex)
-          let reg = /.*'(.*)' is not a Function/
-          let m = reg.exec(ex)
-          if (m && m[1]) {
-            error = m;
-          }
-        }
-      }
-    })();
-    function myKeyHandler(a) {
-      if (error) {
-        navigator.clipboard.writeText(error + ": () => 0,\n")
-        console.log("Copied ", error)
-      }
-    }
-  </script>
+<body>
+    <button onclick="json_format(1)">add stuff</button>
 </body>
+
 
 </html>
