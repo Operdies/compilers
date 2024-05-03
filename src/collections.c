@@ -1,10 +1,10 @@
 #include "collections.h"
 
+#include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 #include "logging.h"
 
@@ -45,7 +45,7 @@ void ensure_capacity(vec *v, int c) {
     }
   }
   if (v->array) {
-    v->array = ereallocarray(v->array, v->c, v->sz);
+    v->array = erealloc(v->array, v->c, v->sz);
   } else {
     v->array = ecalloc(v->c, v->sz);
   }
@@ -212,11 +212,11 @@ void *ecalloc(size_t nmemb, size_t size) {
   return p;
 }
 
-void *ereallocarray(void *array, size_t nmemb, size_t size) {
+void *erealloc(void *array, size_t nmemb, size_t size) {
   void *p;
 
-  if (!(p = reallocarray(array, nmemb, size)))
-    die("reallocarray:");
+  if (!(p = realloc(array, nmemb * size)))
+    die("realloc:");
 
   return p;
 }

@@ -49,11 +49,11 @@ bool set_log_location(const char *filename) {
 static bool add_colors(FILE *fp) {
   // NOTE: it would be cleaner to use isatty() here, but this call returns
   // false in the pseudoterminal I use for develpment.
-  return fp->_fileno == stdout->_fileno || fp->_fileno == stderr->_fileno;
+  return fp == stdout || fp == stderr;
 }
 
 static bool should_log(FILE *fp, enum loglevel level) {
-  if (fp->_fileno == stdout->_fileno || fp->_fileno == stderr->_fileno)
+  if (fp == stdout || fp == stderr)
     return loglevel <= level;
   return true;
 }
