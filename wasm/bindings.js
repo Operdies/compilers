@@ -10,13 +10,25 @@ const stdin = 0;
 const stdout = 1;
 const stderr = 2;
 
+let stdout_stream = ""
+let stderr_stream = ""
 function out(stream, data) {
   if (stream === stdout) {
-    console.log(data)
+    stdout_stream += data;
+    let idx = stdout_stream.indexOf("\n")
+    if (idx >= 0) {
+      console.log(stdout_stream.substring(0, idx))
+      stdout_stream = stdout_stream.substring(idx + 1)
+    }
   }
 
   if (stream === stderr) {
-    console.error(data);
+    stderr_stream += data;
+    let idx = stderr_stream.indexOf("\n")
+    if (idx >= 0) {
+      console.error(stderr_stream.substring(0, idx))
+      stderr_stream = stderr_stream.substring(idx + 1)
+    }
   }
 }
 
@@ -37,7 +49,6 @@ function fd_write(fd, iovs, iovs_len, ret_ptr) {
   // Set the nwritten in ret_ptr
   const bytes_written = new Uint32Array(view.buffer, ret_ptr, 1);
   bytes_written[0] = nwritten;
-  out(fd, `bytes written: ${view[ret_ptr]}`)
 
   return 0;
 }
@@ -150,4 +161,20 @@ function json_format() {
 
   functions.free(pInput);
   functions.free(pOutput);
+}
+
+function c_str(str) {
+  const view = new Uint8Array(memory.buffer);
+  const c = functions.malloc(str.length + 1);
+  encode(view, c, str);
+  return c
+}
+function malloc(str) {
+  s = functions.malloc(str)
+}
+function info_log() {
+  const str = c_str("hello")
+  functions.info(str)
+  functions.error(str)
+  functions.free(str)
 }

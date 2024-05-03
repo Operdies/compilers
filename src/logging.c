@@ -1,10 +1,9 @@
 #include "logging.h"
-#include <stdlib.h>
-#ifndef WASI
+
 #include <errno.h>
-#include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "collections.h"
@@ -47,6 +46,9 @@ bool set_log_location(const char *filename) {
 }
 
 static bool add_colors(FILE *fp) {
+#ifdef WASI
+  return false;
+#endif
   // NOTE: it would be cleaner to use isatty() here, but this call returns
   // false in the pseudoterminal I use for develpment.
   return fp == stdout || fp == stderr;
@@ -149,15 +151,6 @@ void die(const char *fmt, ...) {
   exit(1);
 }
 
-static void handler(int sig) {
-  const char *signal = strsignal(sig);
-  error(signal);
-
-  if (log)
-    fclose(log);
-  exit(sig);
-}
-
 static void print_ctx(logger_sig_fn f, parse_context *ctx) {
   int start, end;
   start = ctx->c;
@@ -183,32 +176,30 @@ void debug_ctx(parse_context *ctx) { print_ctx(debug, ctx); }
 void info_ctx(parse_context *ctx) { print_ctx(info, ctx); }
 
 static bool init = false;
+#ifdef WASI
 void setup_crash_stacktrace_logger(void) {
   if (!init) {
     atexit(destroy_strbuf);
     init = true;
-#ifndef WASI
+  }
+}
+#else
+#include <signal.h>
+static void handler(int sig) {
+  const char *signal = strsignal(sig);
+  error(signal);
+
+  if (log)
+    fclose(log);
+  exit(sig);
+}
+void setup_crash_stacktrace_logger(void) {
+  if (!init) {
+    atexit(destroy_strbuf);
+    init = true;
     int signals[] = {SIGINT, SIGSEGV, SIGTERM, SIGHUP, SIGQUIT};
     for (int i = 0; i < LENGTH(signals); i++)
       sigaction(signals[i], &(struct sigaction){.sa_handler = handler}, NULL);
-#endif
   }
 }
-
-#else
-void debug(const char *fmt, ...) { (void)fmt; }
-void info(const char *fmt, ...) { (void)fmt; }
-void warn(const char *fmt, ...) { (void)fmt; }
-void error(const char *fmt, ...) { (void)fmt; }
-void die(const char *fmt, ...) { (void)fmt; exit(1); }
-enum loglevel set_loglevel(enum loglevel level) { return level; }
-enum loglevel get_loglevel(void) { return 0; }
-enum loglevel log_severity(void) { return 0; }
-void setup_crash_stacktrace_logger(void) {}
-
-void error_ctx(parse_context *ctx) { (void)ctx; }
-void warn_ctx(parse_context *ctx) { (void)ctx; }
-void debug_ctx(parse_context *ctx) { (void)ctx; }
-void info_ctx(parse_context *ctx) { (void)ctx; }
-int add(int first, int second) { return first + second; }
 #endif
