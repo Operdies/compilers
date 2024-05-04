@@ -54,7 +54,7 @@ int next_token(scanner *s, const bool *valid, string_slice *content) {
     return EOF_TOKEN;
 
   v_foreach(token, t, s->tokens) {
-    if (valid == NULL || valid[idx_t]) {
+    if (t->pattern && (valid == NULL || valid[idx_t])) {
       regex_match m = regex_matches(t->pattern, s->ctx);
       if (m.match) {
         if (content)

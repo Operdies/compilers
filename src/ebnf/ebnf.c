@@ -385,128 +385,52 @@ static bool init_productions(parser_t *g) {
 
 #define MKSYM() (symbol_t *)arena_alloc(g->a, 1, sizeof(symbol_t))
 
-symbol_t *tail_alt(symbol_t *s) {
-  symbol_t *slow, *fast;
-  slow = fast = s;
-  for (;;) {
-    if (fast->alt == NULL)
-      return fast;
-    fast = fast->alt;
-    if (fast->alt == NULL)
-      return fast;
-    fast = fast->alt;
-    slow = slow->alt;
-    if (slow == fast)
-      return NULL;
-  }
-}
-
-symbol_t *tail_next(symbol_t *s) {
-  symbol_t *slow, *fast;
-  slow = fast = s;
-  for (;;) {
-    if (fast->next == NULL)
-      return fast;
-    fast = fast->next;
-    if (fast->next == NULL)
-      return fast;
-    fast = fast->next;
-    slow = slow->next;
-    if (slow == fast)
-      return NULL;
-  }
-}
-
-bool append_alt(symbol_t *chain, symbol_t *new_tail) {
-  chain = tail_alt(chain);
-  if (chain)
-    chain->alt = new_tail;
-  return chain ? true : false;
-}
-
-bool append_next(symbol_t *chain, symbol_t *new_tail) {
-  chain = tail_next(chain);
-  if (chain)
-    chain->next = new_tail;
-  return chain ? true : false;
-}
-
-void append_all_nexts(symbol_t *head, symbol_t *tail, vec *seen) {
-  if (vec_contains(seen, head))
-    return;
-  vec_push(seen, head);
-  for (; head && head != tail; head = head->alt) {
-    if (head->next == NULL)
-      head->next = tail;
-    else
-      append_all_nexts(head->next, tail, seen);
-  }
-}
-
-static symbol_t *make_repeatable(parser_t *g, symbol_t *subexpression) {
-  symbol_t *loop = MKSYM();
-  *loop = (symbol_t){.type = empty_symbol};
-
-  // ensure that all nexts of the subexpression can repeat the loop
-  vec seen = v_make(symbol_t);
-  append_all_nexts(subexpression, loop, &seen);
-  vec_destroy(&seen);
-
-  loop->next = subexpression;
-  subexpression = loop;
-  symbol_t *empty = MKSYM();
-  *empty = (symbol_t){.type = empty_symbol};
-  loop->alt = empty;
-  return subexpression;
-}
-
-static symbol_t *make_optional(parser_t *g, symbol_t *subexpression) {
-  symbol_t *empty = MKSYM();
-  *empty = (symbol_t){.type = empty_symbol};
-
-  // ensure that all nexts of the subexpression lead to the thing that follows this optional
-  vec seen = v_make(symbol_t);
-  append_all_nexts(subexpression, empty, &seen);
-  vec_destroy(&seen);
-
-  if (!append_alt(subexpression, empty))
-    die("Failed to append alt expression");
-  return subexpression;
-}
-
-struct factor_symbols {
+struct subgraph {
   symbol_t *head;
   symbol_t *tail;
 };
 
-static bool expression_symbol(parser_t *g, expression_t *expr, symbol_t **out);
+#define assert_invariants(subgraph) \
+  {                                 \
+    assert((subgraph)->head);       \
+    assert((subgraph)->tail);       \
+    assert(!(subgraph)->tail->alt); \
+  }
 
-static bool factor_symbol(parser_t *g, factor_t *factor, struct factor_symbols *out) {
+static void make_optional(parser_t *g, struct subgraph *out, enum factor_switch type) {
+  symbol_t *head = MKSYM();
+  symbol_t *tail = MKSYM();
+  head->type = tail->type = empty_symbol;
+
+  {  // Create a new start state
+    head->next = out->head;
+    out->head = head;
+  }
+
+  // If repeatable, loop back to start. Otherwise, go to exit
+  out->tail->next = type == F_REPEAT ? head : tail;
+
+  {  // Create a new exit state
+    head->alt = tail;
+    out->tail = tail;
+  }
+}
+
+static bool expression_symbol(parser_t *g, expression_t *expr, struct subgraph *out);
+
+static bool factor_symbol(parser_t *g, factor_t *factor, struct subgraph *out) {
   assert(out);
   switch (factor->type) {
     case F_OPTIONAL:
     case F_REPEAT:
     case F_PARENS: {
-      symbol_t *subexpression = NULL;
-      if (!expression_symbol(g, &factor->expression, &subexpression))
+      if (!expression_symbol(g, &factor->expression, out))
         return false;
-      assert(subexpression);
-      if (factor->type == F_REPEAT) {
-        subexpression = make_repeatable(g, subexpression);
-      } else if (factor->type == F_OPTIONAL) {
-        subexpression = make_optional(g, subexpression);
+      assert_invariants(out);
+      if (factor->type == F_REPEAT || factor->type == F_OPTIONAL) {
+        make_optional(g, out, factor->type);
       }
-
-      // Expressions can have many terminating states.
-      // Here we consolidate the terminating states in a single empty symbol.
-      symbol_t *tail = MKSYM();
-      *tail = (symbol_t){.type = empty_symbol};
-      vec seen = v_make(symbol_t);
-      append_all_nexts(subexpression, tail, &seen);
-      vec_destroy(&seen);
-
-      out->head = subexpression;
-      out->tail = tail;
+      assert_invariants(out);
       return true;
     }
     case F_IDENTIFIER: {
@@ -539,45 +463,44 @@ static bool factor_symbol(parser_t *g, factor_t *factor, struct factor_symbols *
   }
 }
 
-static bool term_symbol(parser_t *g, term_t *term, symbol_t **out) {
-  assert(out);
-  symbol_t *head, *tail;
-  head = tail = NULL;
+static bool term_symbol(parser_t *g, term_t *term, struct subgraph *out) {
+  symbol_t **next_loc = &out->head;
   v_foreach(factor_t, f, term->factors_vec) {
-    struct factor_symbols factors = {0};
+    struct subgraph factors = {0};
     if (!factor_symbol(g, f, &factors))
       return false;
-    assert(factors.head);
-    assert(factors.tail);
-    if (head == NULL) {
-      head = factors.head;
-    } else {
-      tail->next = factors.head;
-    }
-    tail = factors.tail;
+    assert_invariants(&factors);
+    *next_loc = factors.head;
+    next_loc = &factors.tail->next;
+    out->tail = factors.tail;
   }
-  assert(head);
-  *out = head;
+  assert_invariants(out);
   return true;
 }
 
-static bool expression_symbol(parser_t *g, expression_t *expr, symbol_t **out) {
+static bool expression_symbol(parser_t *g, expression_t *expr, struct subgraph *out) {
   assert(out);
-  symbol_t *new_expression = NULL;
+  symbol_t *tail = MKSYM();
+  tail->type = empty_symbol;
+  out->tail = tail;
+
+  symbol_t **alt_loc = &out->head;
+
   v_foreach(term_t, t, expr->terms_vec) {
-    symbol_t *new_term = NULL;
-    if (!term_symbol(g, t, &new_term))
+    struct subgraph term = {0};
+    if (!term_symbol(g, t, &term))
       return false;
-    assert(new_term);
-    if (new_expression == NULL) {
-      new_expression = new_term;
-    } else {
-      if (!append_alt(new_expression, new_term))
-        die("Failed to append alt expression");
-    }
+    *alt_loc = term.head;
+    for (alt_loc = &term.head; (*alt_loc)->alt; alt_loc = &(*alt_loc)->alt)
+      ;
+    alt_loc = &term.head->alt;
+    assert_invariants(&term);
+    term.tail->next = tail;
+    term.tail = tail;
+    assert_invariants(&term);
   }
-  assert(new_expression);
-  *out = new_expression;
+
+  assert_invariants(out);
   return true;
 }
 
@@ -589,11 +512,11 @@ static bool build_parse_table(parser_t *g) {
     // But using an enum for indexing requires the ability to skip values.
     // Here we just ad-hoc guess that if the expression has 0 characters, the production is not populated.
     if (prod->expr.range.n) {
-      symbol_t *sym = NULL;
+      struct subgraph sym = {0};
       if (!expression_symbol(g, &prod->expr, &sym))
         return false;
-      assert(sym);
-      prod->sym = sym;
+      assert_invariants(&sym);
+      prod->sym = sym.head;
     }
   }
   return true;
