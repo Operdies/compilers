@@ -397,59 +397,23 @@ struct subgraph {
     assert(!(subgraph)->tail->alt); \
   }
 
-static symbol_t *tail_alt(symbol_t *s) {
-  symbol_t *slow, *fast;
-  slow = fast = s;
-  for (;;) {
-    if (fast->alt == NULL)
-      return fast;
-    fast = fast->alt;
-    if (fast->alt == NULL)
-      return fast;
-    fast = fast->alt;
-    slow = slow->alt;
-    if (slow == fast)
-      return NULL;
+static void make_optional(parser_t *g, struct subgraph *out, enum factor_switch type) {
+  symbol_t *head = MKSYM();
+  symbol_t *tail = MKSYM();
+  head->type = tail->type = empty_symbol;
+
+  {  // Create a new start state
+    head->next = out->head;
+    out->head = head;
   }
-}
 
-static bool append_alt(symbol_t *chain, symbol_t *new_tail) {
-  chain = tail_alt(chain);
-  if (chain)
-    chain->alt = new_tail;
-  return chain ? true : false;
-}
+  // If repeatable, loop back to start. Otherwise, go to exit
+  out->tail->next = type == F_REPEAT ? head : tail;
 
-static void make_repeatable(parser_t *g, struct subgraph *out) {
-  assert_invariants(out);
-
-  symbol_t *loop = MKSYM();
-  *loop = (symbol_t){.type = empty_symbol};
-  symbol_t *empty = MKSYM();
-  *empty = (symbol_t){.type = empty_symbol};
-
-  out->tail->next = loop;
-  loop->next = out->head;
-  out->head = loop;
-  loop->alt = empty;
-  out->tail = empty;
-
-  assert_invariants(out);
-}
-
-static void make_optional(parser_t *g, struct subgraph *out) {
-  symbol_t *empty = MKSYM();
-  *empty = (symbol_t){.type = empty_symbol};
-
-  assert_invariants(out);
-
-  out->tail->next = empty;
-  out->tail = empty;
-
-  if (!append_alt(out->head, empty))
-    die("Failed to append alt expression");
-
-  assert_invariants(out);
+  {  // Create a new exit state
+    head->alt = tail;
+    out->tail = tail;
+  }
 }
 
 static bool expression_symbol(parser_t *g, expression_t *expr, struct subgraph *out);
@@ -460,23 +424,12 @@ static bool factor_symbol(parser_t *g, factor_t *factor, struct subgraph *out) {
     case F_OPTIONAL:
     case F_REPEAT:
     case F_PARENS: {
-      struct subgraph subexpression = {0};
-      if (!expression_symbol(g, &factor->expression, &subexpression))
+      if (!expression_symbol(g, &factor->expression, out))
         return false;
-      assert_invariants(&subexpression);
-
-      if (factor->type == F_REPEAT) {
-        make_repeatable(g, &subexpression);
-      } else if (factor->type == F_OPTIONAL) {
-        make_optional(g, &subexpression);
+      assert_invariants(out);
+      if (factor->type == F_REPEAT || factor->type == F_OPTIONAL) {
+        make_optional(g, out, factor->type);
       }
-
-      // Expressions can have many terminating states.
-      // Here we consolidate the terminating states in a single empty symbol.
-      assert_invariants(&subexpression);
-
-      out->head = subexpression.head;
-      out->tail = subexpression.tail;
       assert_invariants(out);
       return true;
     }
