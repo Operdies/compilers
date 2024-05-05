@@ -64,6 +64,22 @@ int test_vec(void) {
   return 0;
 }
 
+void test_vec_swap(void) {
+  int size = 10000;
+  vec v1 = v_make(int);
+  vec_ensure_capacity(&v1, size);
+
+  for (int i = 0; i < size; i++)
+    vec_push(&v1, &i);
+  for (int i = 0; i < size; i++)
+    assert2(i == *(int *)(vec_nth(v1, i)));
+  vec_reverse(&v1);
+  for (int i = 0; i < size; i++)
+    assert2(i == *(int *)(vec_nth(v1, size - i - 1)));
+
+  vec_destroy(&v1);
+}
+
 void test_vec_write(void) {
   vec v = v_make(char);
   vec_write(&v, "Hello %d %s\n", 1, "guy");
@@ -135,6 +151,7 @@ int main(void) {
   test_vec();
   test_vec_insert();
   test_slice_cmp();
+  test_vec_swap();
   assert2(log_severity() <= LL_INFO);
   return 0;
 }
