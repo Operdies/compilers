@@ -1,5 +1,4 @@
 .cache/clangd/index
 out
 compile_commands.json
-*.wasm
 wasm/wasi-libc

@@ -13,7 +13,7 @@ WASM_LIBC_SRC = $(WASM_OUT_DIR)/wasi-src
 WASM_LIBC     = $(WASM_OUT_DIR)/wasi-libc
 
 WASM_IN = $(OBJ_SRC) $(call rwildcard, $(WASM_DIR), *.c)
-WASM_LIB = $(WASM_DIR)/lib.wasm
+WASM_LIB = $(WASM_OUT_DIR)/lib.wasm
 
 WASI_FLAGS += -DWASI --target=wasm32-unknown-wasi --sysroot $(WASM_LIBC) -nostartfiles -Wl,--import-memory -Wl,--no-entry -Wl,--export-all
 
