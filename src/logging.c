@@ -1,7 +1,6 @@
 #include "logging.h"
 
 #include <errno.h>
-#include <signal.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -47,13 +46,16 @@ bool set_log_location(const char *filename) {
 }
 
 static bool add_colors(FILE *fp) {
+#ifdef WASI
+  return false;
+#endif
   // NOTE: it would be cleaner to use isatty() here, but this call returns
   // false in the pseudoterminal I use for develpment.
-  return fp->_fileno == stdout->_fileno || fp->_fileno == stderr->_fileno;
+  return fp == stdout || fp == stderr;
 }
 
 static bool should_log(FILE *fp, enum loglevel level) {
-  if (fp->_fileno == stdout->_fileno || fp->_fileno == stderr->_fileno)
+  if (fp == stdout || fp == stderr)
     return loglevel <= level;
   return true;
 }
@@ -149,15 +151,6 @@ void die(const char *fmt, ...) {
   exit(1);
 }
 
-static void handler(int sig) {
-  const char *signal = strsignal(sig);
-  error(signal);
-
-  if (log)
-    fclose(log);
-  exit(sig);
-}
-
 static void print_ctx(logger_sig_fn f, parse_context *ctx) {
   int start, end;
   start = ctx->c;
@@ -183,6 +176,23 @@ void debug_ctx(parse_context *ctx) { print_ctx(debug, ctx); }
 void info_ctx(parse_context *ctx) { print_ctx(info, ctx); }
 
 static bool init = false;
+#ifdef WASI
+void setup_crash_stacktrace_logger(void) {
+  if (!init) {
+    atexit(destroy_strbuf);
+    init = true;
+  }
+}
+#else
+#include <signal.h>
+static void handler(int sig) {
+  const char *signal = strsignal(sig);
+  error(signal);
+
+  if (log)
+    fclose(log);
+  exit(sig);
+}
 void setup_crash_stacktrace_logger(void) {
   if (!init) {
     atexit(destroy_strbuf);
@@ -192,3 +202,4 @@ void setup_crash_stacktrace_logger(void) {
       sigaction(signals[i], &(struct sigaction){.sa_handler = handler}, NULL);
   }
 }
+#endif

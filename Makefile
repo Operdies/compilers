@@ -9,10 +9,10 @@ uniq      = $(if $1,$(firstword $1) $(call uniq,$(filter-out $(firstword $1),$1)
 
 # Flags that are conditional on whether or not this is a release
 OFLAGS = $(if $(RELEASE),-O3,-Og -gdwarf-4)
-DEFINES = -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE 
+DEFINES += -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE 
 DEFINES += $(if $(RELEASE),-DNDEBUG,-DDEBUG)
 BIN_DIR = $(if $(RELEASE),out/$(CC)/release/,out/$(CC)/debug/)
-LDFLAGS = $(if $(RELEASE),-s,)
+LDFLAGS += $(if $(RELEASE),-s,)
 
 COMPILE_COMMANDS = compile_commands.json
 INCLUDE_DIR      = include
@@ -47,7 +47,7 @@ CFLAGS += -std=c1x -pedantic -Wall -Wextra -Werror $(DEFINES) -I$(INCLUDE_DIR) $
 MMD_FLAGS = -MMD -MF $@.d
 
 .PHONY: all
-all: $(OBJECTS) $(BINARIES)
+all:: $(OBJECTS) $(BINARIES)
 
 $(DIRECTORIES):
 	@mkdir -p $(DIRECTORIES)
@@ -84,7 +84,7 @@ intermediate-clean: clean-test clean-valgrind
 	rm -f $(OBJECTS) $(MMD_FILES)
 
 .PHONY: clean
-clean: intermediate-clean
+clean:: intermediate-clean
 	rm -f $(BINARIES)
 
 # distclean and mostlyclean don't really make sense yet, but are included for completeness
@@ -184,3 +184,5 @@ clang-valgrind:
 	CC=clang RELEASE=1 $(MAKE) incremental-valgrind
 
 test-all: gcc-test clang-test gcc-valgrind clang-valgrind
+
+-include Makefile.wasm
