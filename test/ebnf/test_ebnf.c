@@ -493,73 +493,121 @@ void test_calculator(void) {
   destroy_parser(&p);
 }
 
+// TODO: update this test.
+// 1. Define tokens for use in a parser
+void test_oberon(void) {
+  enum oberon_tokens {
+    module,
+    selector,
+    factor,
+    term,
+    SimpleExpression,
+    expression,
+    assignment,
+    ProcedureCall,
+    statement,
+    StatementSequence,
+    FieldList,
+    type,
+    FPSection,
+    FormalParameters,
+    ProcedureHeading,
+    ProcedureBody,
+    ProcedureDeclaration,
+    declarations,
+    ident,
+    integer,
+    number,
+    digit,
+    letter,
+    ActualParameters,
+    IfStatement,
+    WhileStatement,
+    RepeatStatement,
+    IdentList,
+    ArrayType,
+    RecordType,
+    Geq,
+    Leq,
+  };
+
+  static token_def tokens[] = {
+      tok(digit, "[0-9]"),
+      tok(integer, "[0-9]+"),
+      tok(letter, "[a-z]"),
+    tok(Geq, ">="),
+    tok(Leq, ">="),
+  };
+  static rule_def rules[] = {
+      tok(module, "'MODULE' ident ';' declarations [ 'BEGIN' StatementSequence ] 'END' ident '.'"),
+      tok(selector, "{ '.' ident | '[' expression ']' }"),
+      tok(factor, "ident selector | number | '(' expression ')' | '~' factor"),
+      tok(term, "factor { ( '*' | 'DIV' | 'MOD' | '&' ) factor } "),
+      tok(SimpleExpression, "[ '+' | '-' ] term { ( '+' | '-' | 'OR' ) term }"),
+      tok(expression, "SimpleExpression [ ( Leq | Geq | '=' | '#' | '>' | '<' ) SimpleExpression ]"),
+      tok(assignment, "ident selector ':=' expression"),
+      tok(ProcedureCall, "ident selector ActualParameters"),
+      tok(statement, "[ assignment | ProcedureCall | IfStatement | WhileStatement | RepeatStatement ]"),
+      tok(StatementSequence, "statement { ';' statement }"),
+      tok(FieldList, "[ IdentList ':' type ]"),
+      tok(type, "RecordType | ArrayType | ident"),
+      tok(FPSection, "[ 'VAR' ] IdentList ':' type"),
+      tok(FormalParameters, "'(' [ FPSection { ';' FPSection } ] ')'"),
+      tok(ProcedureHeading, "'PROCEDURE' ident [ FormalParameters ]"),
+      tok(ProcedureBody, "declarations [ 'BEGIN' StatementSequence ] 'END' ident"),
+      tok(ProcedureDeclaration, "ProcedureHeading ';' ProcedureBody"),
+      tok(declarations,
+          "[ 'CONST' { ident '=' expression ';' } ]"
+          "[ 'TYPE' { ident '=' type ';' } ]"
+          "[ 'VAR' { IdentList ':' type ';' } ]"
+          "{ ProcedureDeclaration ';' } "),
+      tok(ident, "letter { letter | digit }"),
+      tok(number, "integer"),
+      tok(ActualParameters, "'(' [ expression { ',' expression } ] ')'"),
+      tok(IfStatement,
+          "'IF' expression 'THEN' StatementSequence"
+          "{ 'ELSIF' expression 'THEN' StatementSequence }"
+          "[ 'ELSE' StatementSequence ] 'END' "),
+      tok(WhileStatement, "'WHILE' expression 'DO' StatementSequence 'END'"),
+      tok(RepeatStatement, "'REPEAT' StatementSequence 'UNTIL' expression"),
+      tok(IdentList, "ident { ',' ident }"),
+      tok(ArrayType, "'ARRAY' expression 'OF' type"),
+      tok(RecordType, "'RECORD' FieldList { ';' FieldList } 'END'"),
+  };
+
+  parser_t p = mk_parser(mk_rules(rules), mk_tokens(tokens));
+  set_loglevel(LL_DEBUG);
+  (void)p;
+  // if (!is_ll1(&p)) {
+  //   die("Expected Oberon to be ll1");
+  // }
+
+  // parser_t p = mk_parser(grammar);
+  //
+  // if (!is_ll1(&p)) {
+  //   error("Expected ll1: \n%s", grammar);
+  // }
+  //
+  // tokens t = {0};
+  // // parse(&p, "MODULE a; END a.", &t);
+  // print_tokens(t);
+  // vec_destroy(&t.tokens_vec);
+  //
+  destroy_parser(&p);
+}
+
+#undef tok
+
 int main(void) {
-  setup_crash_stacktrace_logger();
-  test_parser();
-  test_calculator();
-  test_lookahead();
-  json_parser();
-  test_oberon2();
-  test_ll1();
-  test_multiple_optionals();
-  // test_oberon();
+  // setup_crash_stacktrace_logger();
+  // test_parser();
+  // test_calculator();
+  // test_lookahead();
+  // json_parser();
+  // test_oberon2();
+  // test_ll1();
+  // test_multiple_optionals();
+  test_oberon();
   assert2(log_severity() <= LL_INFO);
   return 0;
 }
-
-// TODO: update this test.
-// 1. Define tokens for use in a parser
-// void test_oberon(void) {
-//   static char grammar[] = {
-//       "module               = 'MODULE' ident ';' declarations ['BEGIN'
-//       StatementSequence] 'END' ident '\\.' .\n" "selector             =
-//       {'\\.' ident | '\\[' expression '\\]'}.\n" "factor               =
-//       ident selector | number | '\\(' expression '\\)' | '~' factor .\n"
-//       "term                 = factor {('\\*' | 'DIV' | 'MOD' | '&') factor}
-//       .\n" "SimpleExpression     = ['\\+' | '-'] term { ('\\+' | '-' |
-//       'OR') term} .\n" "expression           = SimpleExpression [('=' | '#'
-//       | '<' |
-//       '<=' | '>' | '>=') SimpleExpression] .\n" "assignment           =
-//       ident selector ':=' expression .\n" "ProcedureCall        = ident
-//       selector ActualParameters .\n" "statement            = [assignment |
-//       ProcedureCall | IfStatement | WhileStatement | RepeatStatement].\n"
-//       "StatementSequence    = statement {';' statement }.\n"
-//       "FieldList            = [IdentList ':' type].\n"
-//       "type                 = ident | ArrayType | RecordType.\n"
-//       "FPSection            = ['VAR'] IdentList ':' type .\n"
-//       "FormalParameters     = '\\(' [ FPSection { ';' FPSection } ] '\\)'
-//       .\n" "ProcedureHeading     = 'PROCEDURE' ident [FormalParameters].\n"
-//       "ProcedureBody        = declarations ['BEGIN' StatementSequence]
-//       'END' ident.\n" "ProcedureDeclaration = ProcedureHeading ';'
-//       ProcedureBody
-//       .\n" "declarations         = ['CONST' {ident '=' expression ';'}]" "
-//       ['TYPE' {ident '=' type ';'}]" " ['VAR' {IdentList ':' type ';'}]" "
-//       {ProcedureDeclaration ';'} .\n" "ident                = letter
-//       {letter | digit}.\n" "integer              = digit {digit}.\n"
-//       "number = integer.\n" "digit                = '[0-9]'.\n" "letter =
-//       'ident' .\n" "ActualParameters     = '(' [expression { ',' expression
-//       }] '\\)' .\n" "IfStatement          = 'IF' expression 'THEN'
-//       StatementSequence" " {'ELSIF' expression 'THEN' StatementSequence}" "
-//       ['ELSE' StatementSequence] 'END' .\n" "WhileStatement       = 'WHILE'
-//       expression 'DO' StatementSequence 'END' .\n" "RepeatStatement      =
-//       'REPEAT' StatementSequence 'UNTIL' expression.\n" "IdentList = ident
-//       {',' ident} .\n" "ArrayType            = 'ARRAY' expression 'OF'
-//       type.\n" "RecordType           = 'RECORD' FieldList { ';' FieldList}
-//       'END'.\n"
-//       ""};
-//
-//   parser_t p = mk_parser(grammar);
-//
-//   if (!is_ll1(&p)) {
-//     error("Expected ll1: \n%s", grammar);
-//   }
-//
-//   tokens t = {0};
-//   // parse(&p, "MODULE a; END a.", &t);
-//   print_tokens(t);
-//   vec_destroy(&t.tokens_vec);
-//
-//   destroy_parser(&p);
-// }
-
-#undef tok
