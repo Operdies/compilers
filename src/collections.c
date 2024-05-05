@@ -59,6 +59,27 @@ void vec_push(vec *v, void *elem) {
   v->n++;
 }
 
+void vec_set(vec *v, int n, void *elem) {
+  int offset = n * v->sz;
+  memmove((char *)v->array + offset, elem, v->sz);
+}
+
+void vec_swap(vec *v, int first, int second) {
+  if (first == second)
+    return;
+  unsigned char tmp[v->sz];
+  void *fst = vec_nth(*v, first);
+  void *snd = vec_nth(*v, second);
+  memcpy(tmp, fst, v->sz);
+  memcpy(fst, snd, v->sz);
+  memcpy(snd, tmp, v->sz);
+}
+
+void vec_reverse(vec *v) {
+  for (int i = 0; i < v->n / 2; i++)
+    vec_swap(v, i, v->n - i - 1);
+}
+
 void vec_insert(vec *v, int index, void *elem) {
   if (index < 0 || index > v->n)
     die("vec_insert index out of range.");

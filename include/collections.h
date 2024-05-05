@@ -22,7 +22,7 @@ typedef struct {
   int sz;
 } vslice;
 
-#define vec_nth(vec, n) (void *)((char *)(vec).array + (n * (vec).sz))
+#define vec_nth(vec, n) (void *)((char *)(vec).array + ((n) * (vec).sz))
 
 #define v_foreach(type, var, vec) \
   type *var;                      \
@@ -70,6 +70,9 @@ void mk_vec(vec *v, int elem_size, int initial_capacity);
 void vec_destroy(vec *v);
 void vec_push(vec *v, void *elem);
 bool vec_push_array(vec *destination, int n, const void *data);
+void vec_set(vec *v, int n, void *elem);
+void vec_swap(vec *v, int first, int second);
+void vec_reverse(vec *v);
 void vec_insert(vec *v, int index, void *elem);
 void *vec_pop(vec *v);
 vec vec_clone(const vec *v);
