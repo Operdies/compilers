@@ -170,6 +170,5 @@ bool is_ll1(const parser_t *g);
 void graph_walk(symbol_t *start, vec *all);
 vec populate_maps(const production_t *owner, vec follows);
 void add_symbols(symbol_t *start, int k, vec *follows);
-const char *describe_symbol(symbol_t *s);
 
 #endif  // !EBNF_H

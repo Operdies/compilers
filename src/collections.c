@@ -75,6 +75,10 @@ void vec_swap(vec *v, int first, int second) {
   memcpy(snd, tmp, v->sz);
 }
 
+void vec_sort(vec *v, comparer_t cmp) {
+  qsort(v->array, v->n, v->sz, cmp);
+}
+
 void vec_reverse(vec *v) {
   for (int i = 0; i < v->n / 2; i++)
     vec_swap(v, i, v->n - i - 1);
