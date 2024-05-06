@@ -64,6 +64,10 @@ int test_vec(void) {
   return 0;
 }
 
+int int_comparer(const void *a, const void *b) {
+  return *(int*)a - *(int*)b;
+}
+
 void test_vec_swap(void) {
   int size = 10000;
   vec v1 = v_make(int);
@@ -76,6 +80,11 @@ void test_vec_swap(void) {
   vec_reverse(&v1);
   for (int i = 0; i < size; i++)
     assert2(i == *(int *)(vec_nth(v1, size - i - 1)));
+
+  vec_sort(&v1, int_comparer);
+
+  for (int i = 0; i < size; i++)
+    assert2(i == *(int *)(vec_nth(v1, i)));
 
   vec_destroy(&v1);
 }

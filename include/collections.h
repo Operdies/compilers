@@ -78,7 +78,7 @@ void *vec_pop(vec *v);
 vec vec_clone(const vec *v);
 void vec_clear(vec *v);
 void vec_zero(vec *v);
-void vec_sort(vec *v, comparer_t comp_fn);
+void vec_sort(vec *v, comparer_t cmp);
 void vec_fcopy(vec *v, FILE *f);
 void vec_reverse(vec *v);
 void vec_ensure_capacity(vec *v, int c);
