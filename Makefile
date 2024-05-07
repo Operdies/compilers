@@ -11,7 +11,8 @@ uniq      = $(if $1,$(firstword $1) $(call uniq,$(filter-out $(firstword $1),$1)
 OFLAGS = $(if $(RELEASE),-O3,-Og -gdwarf-4)
 DEFINES = -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE 
 DEFINES += $(if $(RELEASE),-DNDEBUG,-DDEBUG)
-BIN_DIR = $(if $(RELEASE),out/$(CC)/release/,out/$(CC)/debug/)
+BIN_ROOT = out
+BIN_DIR = $(if $(RELEASE),$(BIN_ROOT)/$(CC)/release/,$(BIN_ROOT)/$(CC)/debug/)
 LDFLAGS = $(if $(RELEASE),-s,)
 
 COMPILE_COMMANDS = compile_commands.json
@@ -19,14 +20,21 @@ INCLUDE_DIR      = include
 OBJ_DIR          = src
 TEST_DIR         = test
 CMD_DIR          = cmd
+EMBED_DIR        = embed
 
 OBJ_OUT_DIR  = $(BIN_DIR)$(OBJ_DIR)
 TEST_OUT_DIR = $(BIN_DIR)$(TEST_DIR)
 CMD_OUT_DIR  = $(BIN_DIR)$(CMD_DIR)
+EMBED_OUT_DIR = $(BIN_ROOT)/$(EMBED_DIR)
 
 OBJ_SRC  = $(call rwildcard,$(OBJ_DIR),*.c)
 TEST_SRC = $(call rwildcard,$(TEST_DIR),*.c)
 CMD_SRC  = $(call rwildcard,$(CMD_DIR),*.c)
+
+# Only look for embed files if the embed directory exists
+ifeq ($(wildcard $(EMBED_DIR)),$(EMBED_DIR))
+	EMBED_SRC = $(shell find $(EMBED_DIR) -type f)
+endif
 
 SRC = $(OBJ_SRC) $(TEST_SRC) $(CMD_SRC)
 OBJECTS = $(patsubst %, $(BIN_DIR)%, $(SRC:.c=.o))
@@ -35,15 +43,17 @@ TEST_OUT = $(patsubst $(TEST_DIR)/%, $(TEST_OUT_DIR)/%, $(TEST_SRC:.c=))
 CMD_OUT  = $(patsubst $(CMD_DIR)/%, $(CMD_OUT_DIR)/%, $(CMD_SRC:.c=))
 BINARIES = $(TEST_OUT) $(CMD_OUT)
 
+EMBED_OUT = $(patsubst $(EMBED_DIR)/%, $(EMBED_OUT_DIR)/%, $(EMBED_SRC))
+
 # This target exists mostly as a hack to make incremental builds that only run tests where the inputs changed
 TEST_RESULT = $(TEST_OUT:=.log)
 VALGRIND_RESULT = $(TEST_OUT:=.valgrind)
 VALGRIND_FLAGS = --error-exitcode=1 -s --leak-check=full --track-origins=yes --show-leak-kinds=all --quiet
 
 MMD_FILES = $(OBJECTS:.o=.o.d)
-DIRECTORIES = $(call uniq,$(dir $(OBJECTS)))
+DIRECTORIES = $(call uniq,$(dir $(OBJECTS) $(EMBED_OUT)))
 
-CFLAGS += -std=c1x -pedantic -Wall -Wextra -Werror $(DEFINES) -I$(INCLUDE_DIR) $(OFLAGS)
+CFLAGS += -std=c1x -pedantic -Wall -Wextra -Werror $(DEFINES) -I$(INCLUDE_DIR) -I$(EMBED_OUT_DIR) $(OFLAGS)
 MMD_FLAGS = -MMD -MF $@.d
 
 .PHONY: all
@@ -52,9 +62,13 @@ all: $(OBJECTS) $(BINARIES)
 $(DIRECTORIES):
 	@mkdir -p $(DIRECTORIES)
 
+.PRECIOUS: $(EMBED_OUT)%
+$(EMBED_OUT_DIR)/%: $(EMBED_DIR)/% | $(DIRECTORIES)
+	xxd -i < $< > $@
+
 # The .o file of binary outputs are implicit dependencies and will be removed unless precious
 .PRECIOUS: $(BIN_DIR)%.o
-$(BIN_DIR)%.o: %.c | $(DIRECTORIES)
+$(BIN_DIR)%.o: %.c | $(EMBED_OUT)
 		$(CC)\
 		$(CFLAGS)\
 		$(MMD_FLAGS)\
@@ -81,7 +95,7 @@ clean-test:
 # Delete intermediate files so only the desired build artifacts remain
 .PHONY: intermediate-clean
 intermediate-clean: clean-test clean-valgrind
-	rm -f $(OBJECTS) $(MMD_FILES)
+	rm -f $(EMBED_OUT) $(OBJECTS) $(MMD_FILES)
 
 .PHONY: clean
 clean: intermediate-clean
