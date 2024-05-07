@@ -187,8 +187,8 @@ bool factor(parser_t *g, factor_t *f) {
       string.str = POINT + 1;
 
       if (!match(g, STRING)) {
-        fprintf(stderr, "Expected STRING\n");
-        return 0;
+        error("Expected STRING\n");
+        return false;
       }
       string.n = POINT - string.str - 1;
       f->string = string;
@@ -201,7 +201,7 @@ bool factor(parser_t *g, factor_t *f) {
       if (!expression(g, &f->expression))
         return false;
       if (!match_literal(g, ')')) {
-        fprintf(stderr, "Unmatched ')' in factor\n");
+        error("Unmatched ')' in factor\n");
         return false;
       }
       break;
@@ -211,7 +211,7 @@ bool factor(parser_t *g, factor_t *f) {
       if (!expression(g, &f->expression))
         return false;
       if (!match_literal(g, ']')) {
-        fprintf(stderr, "Unmatched ']' in factor\n");
+        error("Unmatched ']' in factor\n");
         return false;
       }
       break;
@@ -221,7 +221,7 @@ bool factor(parser_t *g, factor_t *f) {
       if (!expression(g, &f->expression))
         return false;
       if (!match_literal(g, '}')) {
-        fprintf(stderr, "Unmatched '}' in factor\n");
+        error("Unmatched '}' in factor\n");
         return false;
       }
       break;
