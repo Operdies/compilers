@@ -14,6 +14,11 @@ int peek_token(scanner *s, const bool *valid, string_slice *content) {
 }
 
 bool match_slice(scanner *s, string_slice slice, string_slice *content) {
+  while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
+    advance(s->ctx);
+  if (finished(s->ctx))
+    return false;
+
   string_slice compare = {.str = s->ctx->src + s->ctx->c, .n = slice.n};
   if (s->ctx->n < s->ctx->c + compare.n)
     return false;
@@ -22,6 +27,8 @@ bool match_slice(scanner *s, string_slice slice, string_slice *content) {
     s->ctx->c += compare.n;
     if (content)
       *content = compare;
+    while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
+      advance(s->ctx);
     return true;
   }
 

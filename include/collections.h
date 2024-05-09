@@ -64,11 +64,13 @@ typedef struct {
   };
 } string_t;
 
+typedef void (*cleanup_func)(void *data);
+void atexit_r(cleanup_func f, void *arg);
 typedef int (*comparer_t)(const void *a, const void *b);
 int slicecmp(string_slice s1, string_slice s2);
 void mk_vec(vec *v, int elem_size, int initial_capacity);
 void vec_destroy(vec *v);
-void vec_push(vec *v, void *elem);
+void vec_push(vec *v, const void *elem);
 bool vec_push_array(vec *destination, int n, const void *data);
 void vec_set(vec *v, int n, void *elem);
 void vec_swap(vec *v, int first, int second);

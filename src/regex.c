@@ -40,7 +40,6 @@
  */
 
 static arena *regex_arena = NULL;
-static void destroy_regex_arena(void) { destroy_arena(regex_arena); }
 
 static nfa *build_automaton(parse_context *ctx, char terminator);
 static bool mk_nfalist(arena *a, nfalist *lst, size_t cap) {
@@ -416,7 +415,7 @@ void destroy_regex(regex *r) { (void)r; }
 regex *mk_regex_from_slice(string_slice slice) {
   if (!regex_arena) {
     regex_arena = mk_arena();
-    atexit(destroy_regex_arena);
+    atexit_r((cleanup_func)destroy_arena, regex_arena);
   }
 
   regex *r = NULL;

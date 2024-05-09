@@ -88,7 +88,7 @@ bool term(parser_t *g, term_t *t);
 bool factor(parser_t *g, factor_t *f);
 bool identifier(parser_t *g, string_slice *s);
 
-void print_ast(AST *root, vec *parents) {
+static void _print_ast(AST *root, vec *parents) {
 #define arr ((char *)vbuf.array)
   static vec vbuf = {.sz = sizeof(char)};
   const char fork[] = "├";
@@ -100,6 +100,10 @@ void print_ast(AST *root, vec *parents) {
     return;
 
   vbuf.n = 0;
+  if (vbuf.array == NULL) {
+    vec_ensure_capacity(&vbuf, 100);
+    atexit_r((cleanup_func)vec_destroy, &vbuf);
+  }
   vec _marker = v_make(AST);
 
   if (!parents)
@@ -141,12 +145,14 @@ void print_ast(AST *root, vec *parents) {
       debug("Nothing?");
     }
     vec_push(parents, root);
-    print_ast(root->first_child, parents);
+    _print_ast(root->first_child, parents);
     vec_pop(parents);
   }
   vec_destroy(&_marker);
 #undef arr
 }
+
+void print_ast(AST *root) { _print_ast(root, NULL); }
 
 void destroy_ast(AST *root) {
   while (root) {

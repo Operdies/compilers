@@ -7,8 +7,38 @@
 #include <string.h>
 
 #include "logging.h"
+#include "macros.h"
 
 static void *identity(void *v) { return v; }
+
+struct cleanup_list {
+  void *arg;
+  cleanup_func f;
+  struct cleanup_list *next;
+};
+
+static struct cleanup_list *cleanup = NULL;
+static void destroy_cleanup_list(void) {
+  while (cleanup) {
+    struct cleanup_list *next = cleanup->next;
+    cleanup->f(cleanup->arg);
+    free(cleanup);
+    cleanup = next;
+  }
+}
+
+void atexit_r(cleanup_func f, void *arg) {
+  if (cleanup == NULL) {
+    atexit(destroy_cleanup_list);
+  }
+  struct cleanup_list *entry = ecalloc(1, sizeof(struct cleanup_list));
+  *entry = (struct cleanup_list){
+      .arg = arg,
+      .f = f,
+      .next = cleanup,
+  };
+  cleanup = entry;
+}
 
 void mk_string(string_t *s, int initial_capacity) { mk_vec(&s->v, 1, initial_capacity); }
 
@@ -52,7 +82,7 @@ void ensure_capacity(vec *v, int c) {
 }
 void vec_ensure_capacity(vec *v, int c) { ensure_capacity(v, c); }
 
-void vec_push(vec *v, void *elem) {
+void vec_push(vec *v, const void *elem) {
   ensure_capacity(v, v->n + 1);
   char *addr = (char *)v->array;
   memmove(addr + v->n * v->sz, elem, v->sz);
@@ -75,9 +105,7 @@ void vec_swap(vec *v, int first, int second) {
   memcpy(snd, tmp, v->sz);
 }
 
-void vec_sort(vec *v, comparer_t cmp) {
-  qsort(v->array, v->n, v->sz, cmp);
-}
+void vec_sort(vec *v, comparer_t cmp) { qsort(v->array, v->n, v->sz, cmp); }
 
 void vec_reverse(vec *v) {
   for (int i = 0; i < v->n / 2; i++)
@@ -246,10 +274,40 @@ void *erealloc(void *array, size_t nmemb, size_t size) {
   return p;
 }
 
+static void translate_fmt(const char *fmt, vec *v) {
+  static char *mappings[] = {['S'] = ".*s"};
+  int n_mappings = LENGTH(mappings);
+  bool inhibit = false;
+  for (const char *ch = fmt; *ch; ch++) {
+    vec_push(v, ch);
+    if (*ch == '%' && !inhibit) {
+      inhibit = true;
+      int fmt = (int)(*(ch + 1));
+      if (fmt < n_mappings && mappings[fmt]) {
+        ch++;
+        for (char *m = mappings[fmt]; *m; m++)
+          vec_push(v, m);
+      }
+    } else {
+      inhibit = false;
+    }
+  }
+  char end = 0;
+  vec_push(v, &end);
+}
+
 int vec_vwrite(vec *v, const char *fmt, va_list ap) {
-  // Unfortunate that this requires an extra allocation
+  static vec fmt_buf = {.sz = sizeof(char)};
+  if (fmt_buf.array == NULL) {
+    ensure_capacity(&fmt_buf, 100);
+    atexit_r((cleanup_func)vec_destroy, &fmt_buf);
+  }
+  fmt_buf.n = 0;
+  translate_fmt(fmt, &fmt_buf);
+  const char *format = fmt_buf.array;
+  // Unfortunate that this requires an extra allocation 
   char *temp;
-  int n = vasprintf(&temp, fmt, ap);
+  int n = vasprintf(&temp, format, ap);
   ensure_capacity(v, v->n + n);
   memcpy((char *)v->array + v->n * v->sz, temp, n);
   free(temp);
