@@ -622,6 +622,11 @@ void destroy_parser(parser_t *g) {
   }
 }
 
+void mark(parser_t *g, parse_context *ctx) {
+  (void)g;
+  (void)ctx;
+}
+
 static bool _parse(production_t *hd, parser_t *g, AST **node) {
   struct parse_frame {
     int source_cursor;
@@ -718,11 +723,20 @@ static bool _parse(production_t *hd, parser_t *g, AST **node) {
 }
 
 bool parse(parser_t *g, parse_context *ctx, AST **root, int start_rule) {
-  if (root == NULL || g == NULL)
+  if (root == NULL || g == NULL) {
+    warn("Root or parser null");
     return false;
+  }
   g->s->ctx = ctx;
   production_t *start = &g->productions[start_rule];
   bool success = _parse(start, g, root);
-  success &= next_token(g->s, NULL, NULL) == EOF_TOKEN;
+  if (success) {
+    parse_context copy = *ctx;
+    success &= next_token(g->s, NULL, NULL) == EOF_TOKEN;
+    if (!success) {
+      warn("Parsing stopped here:");
+      warn_ctx(&copy);
+    }
+  }
   return success;
 }

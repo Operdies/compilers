@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <stdarg.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -158,6 +159,11 @@ bool vec_push_slice(vec *destination, const vslice *source) {
   return true;
 }
 
+static void vec_push_string(vec *v, char *str) {
+  while (str && *str)
+    vec_push(v, str++);
+}
+
 bool vec_push_array(vec *v, int n, const void *data) {
   return vec_push_slice(v, &(vslice){.n = n, .sz = v->sz, .array = (void *)data});
 }
@@ -274,45 +280,213 @@ void *erealloc(void *array, size_t nmemb, size_t size) {
   return p;
 }
 
-static void translate_fmt(const char *fmt, vec *v) {
-  static char *mappings[] = {['S'] = ".*s"};
-  int n_mappings = LENGTH(mappings);
-  bool inhibit = false;
-  for (const char *ch = fmt; *ch; ch++) {
-    vec_push(v, ch);
-    if (*ch == '%' && !inhibit) {
-      inhibit = true;
-      int fmt = (int)(*(ch + 1));
-      if (fmt < n_mappings && mappings[fmt]) {
-        ch++;
-        for (char *m = mappings[fmt]; *m; m++)
-          vec_push(v, m);
-      }
-    } else {
-      inhibit = false;
-    }
-  }
-  char end = 0;
-  vec_push(v, &end);
+static void push_number(vec *v, uint64_t val, int base) {
+  char lookup[] = "0123456789abcdef";
+  int insert_at = v->n;
+  do {
+    int digit = val % base;
+    vec_insert(v, insert_at, lookup + digit);
+    val /= base;
+  } while (val);
 }
 
-int vec_vwrite(vec *v, const char *fmt, va_list ap) {
-  static vec fmt_buf = {.sz = sizeof(char)};
-  if (fmt_buf.array == NULL) {
-    ensure_capacity(&fmt_buf, 100);
-    atexit_r((cleanup_func)vec_destroy, &fmt_buf);
+struct format_specifier {
+  bool left;
+  bool use_precision;
+  int min;
+  int precision;
+  bool sign;
+};
+
+static const char *parseint(const char *ch, int *value) {
+  int r = 0;
+  while (*ch >= '0' && *ch <= '9') {
+    r = r * 10 + (*ch - '0');
+    ch++;
   }
-  fmt_buf.n = 0;
-  translate_fmt(fmt, &fmt_buf);
-  const char *format = fmt_buf.array;
-  // Unfortunate that this requires an extra allocation 
-  char *temp;
-  int n = vasprintf(&temp, format, ap);
-  ensure_capacity(v, v->n + n);
-  memcpy((char *)v->array + v->n * v->sz, temp, n);
-  free(temp);
-  v->n += n;
-  return n;
+  *value = r;
+  return ch;
+}
+
+static const char *next_specifier(struct format_specifier *spec, const char *ch, va_list ap) {
+  bool leftJustify = false;
+  bool forceSign = false;
+  bool usePrecision = false;
+  int minWidth = 0;
+  int maxWidth = 0;
+
+  while (*ch == '-' || *ch == '+') {
+    if (*ch == '-')
+      leftJustify = true;
+    else if (*ch == '+')
+      forceSign = true;
+    ch++;
+  }
+
+  if (*ch >= '0' && *ch <= '9') {
+    ch = parseint(ch, &minWidth);
+  } else if (*ch == '*') {
+    minWidth = va_arg(ap, int);
+    ch++;
+  }
+
+  if (*ch == '.') {
+    usePrecision = true;
+    ch++;
+    if (*ch >= '0' && *ch <= '9') {
+      ch = parseint(ch, &maxWidth);
+    } else if (*ch == '*') {
+      maxWidth = va_arg(ap, int);
+      ch++;
+    }
+  }
+
+  *spec = (struct format_specifier){
+      .left = leftJustify,
+      .min = minWidth,
+      .precision = maxWidth,
+      .sign = forceSign,
+      .use_precision = usePrecision,
+  };
+  return ch;
+}
+
+// Calculate the number of digits a number has in a given base
+static int n_digits(int n, int base) {
+  if (n == 0)
+    return 1;
+  int result = 0;
+  for (; n; n /= base, result++)
+    ;
+  return result;
+}
+
+/** Why does this exist?
+ * I did not want to write %.*s string_slice.n, string_slice.str every time I need to log a string slice.
+ * I realized it would be possible to exploit the memory layout of a string_slice struct and 'cheat' by specifying the
+ * struct once like 'printf("%.*s", string_slice)'. This works (with gcc? in debug builds?), but I realized that it
+ * does not work for printing e.g. vectors by specifying a format character for each struct member. I suspect it
+ * has to do with struct padding, so I concluded it would not be a reliable solution, even if it works now.
+ * Besides, a count mismatch in printf leads to compiler warnings.
+ *
+ * As an alternative solution, I looked into extending printf with custom format handlers, but it seems generally
+ * non-portable and discouraged. So when I realized I would need to do manual format handling in the vec writer, I
+ * thought "this opens up new possibilities", so of course I had to add a custom format argument for vectors. Why
+ * shouldn't my vector writer be able to write nicely formatted vectors?
+ *
+ * To be honest, this has gotten out of hand.
+ *
+ */
+int vec_vwrite(vec *v, const char *fmt, va_list ap) {
+  int start = v->n;
+  // char fmtbuf[50] = {0};
+
+  for (const char *ch = fmt; *ch; ch++) {
+    if (*ch == '%') {
+      if (*(ch + 1) == '%') {
+        vec_push(v, ch);
+        ch++;
+        continue;
+      }
+      ch++;
+
+      int specifier_start = v->n;
+      struct format_specifier spec = {0};
+      ch = next_specifier(&spec, ch, ap);
+
+      bool is_numeric = false;
+
+      switch (*ch) {
+        case 'V': {
+          vec v2 = va_arg(ap, vec);
+          int digits = n_digits(v2.n - 1, 10);
+#define vecprinter(type, fmt)                                                                \
+  vec_push_string(v, "{\n");                                                                 \
+  v_foreach(type, val, v2) {                                                                 \
+    vec_write(v, "  [%d]%*s= " fmt, idx_val, 1 + digits - n_digits(idx_val, 10), " ", *val); \
+    vec_push_string(v, ",\n");                                                               \
+  }                                                                                          \
+  vec_push_string(v, "\n}");                                                                 \
+  ch++;
+
+          switch (*(ch + 1)) {
+            case 'd': {
+              vecprinter(int, "%d");
+            } break;
+            case 'c': {
+              vecprinter(char, "%c");
+            } break;
+            case 's': {
+              vecprinter(char *, "%s");
+            } break;
+            default: {
+              vec_write(v, "{ .n=%d, .sz=%d, .c=%d, .array=%p }", v2.n, v2.sz, v2.c, v2.array);
+            } break;
+          }
+        } break;
+        case 'd': {
+          is_numeric = true;
+          int val = va_arg(ap, int);
+          spec.sign |= val < 0;
+          if (spec.sign) {
+            vec_push(v, val < 0 ? "-" : "+");
+            if (val < 0)
+              val = -val;
+          }
+          push_number(v, val, 10);
+        } break;
+        case 'c': {
+          char val = va_arg(ap, int);
+          vec_push(v, &val);
+        } break;
+        case 'n': {
+          int *ptr = va_arg(ap, int *);
+          *ptr = start - v->n;
+        } break;
+        case 'p': {
+          uint64_t val = va_arg(ap, uint64_t);
+          vec_push_string(v, "0x");
+          push_number(v, val, 16);
+        } break;
+        case 's': {
+          char *str = va_arg(ap, char *);
+          int len = spec.use_precision ? strnlen(str, spec.precision) : strlen(str);
+          vec_push_array(v, len, str);
+        } break;
+        case 'S': {
+          string_slice str = va_arg(ap, string_slice);
+          int n = str.n;
+          if (spec.use_precision && spec.precision < str.n)
+            n = spec.precision;
+          vec_push_array(v, n, str.str);
+        } break;
+        default: {
+          die("Unhandled format specifier: %c", *ch);
+        }
+      }
+
+      int written = v->n - specifier_start;
+      if (spec.use_precision && is_numeric) {
+        for (int i = written; i < spec.precision + spec.sign; i++)
+          vec_insert(v, spec.sign ? specifier_start + 1 : specifier_start, "0");
+        written = v->n - specifier_start;
+      }
+      while (written < spec.min) {
+        if (spec.left)
+          vec_push(v, " ");
+        else
+          vec_insert(v, specifier_start, " ");
+        written++;
+      }
+    } else {
+      vec_push(v, ch);
+    }
+  }
+
+  // Ensure the string is null terminated but don't include it in the length
+  vec_push(v, &(char){0});
+  v->n--;
+  return v->n - start;
 }
 
 int vec_write(vec *v, const char *fmt, ...) {
@@ -321,7 +495,6 @@ int vec_write(vec *v, const char *fmt, ...) {
   int written = vec_vwrite(v, fmt, ap);
   va_end(ap);
   return written;
-#undef wrt
 }
 
 void vec_fcopy(vec *v, FILE *f) {
