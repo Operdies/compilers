@@ -66,5 +66,6 @@ int main(void) {
   }
   assert2(success);
   assert2(log_severity() <= LL_INFO);
+  destroy_parser(&p);
   return 0;
 }
