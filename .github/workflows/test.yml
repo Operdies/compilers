@@ -49,7 +49,8 @@ jobs:
       RELEASE: 1
     steps:
     - uses: actions/checkout@v4
-    - run: make -j release
+    - run: make all -j
+    - run: make intermediate-clean
     - uses: actions/upload-artifact@v4
       with:
         name: release
