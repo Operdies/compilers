@@ -58,9 +58,12 @@ static bool should_log(FILE *fp, enum loglevel level) {
   return true;
 }
 
-static vec strbuf = {.sz = sizeof(char)};
-static void destroy_strbuf(void) { vec_destroy(&strbuf); }
 void colored_log(FILE *fp, enum loglevel level, const char *fmt, va_list ap) {
+  static vec strbuf = {.sz = sizeof(char)};
+  if (strbuf.array == NULL) {
+    vec_ensure_capacity(&strbuf, 100);
+    atexit_r((cleanup_func)vec_destroy, &strbuf);
+  }
   strbuf.n = 0;
   setup_crash_stacktrace_logger();
   if (!fp)
@@ -161,17 +164,17 @@ static void handler(int sig) {
 static void print_ctx(logger_sig_fn f, parse_context *ctx) {
   int start, end;
   start = ctx->c;
-  while (start > 0 && ctx->src[start] != '\n')
+  while (start > 0 && ctx->view.str[start] != '\n')
     start--;
-  if (ctx->src[start] == '\n')
+  if (ctx->view.str[start] == '\n')
     start++;
 
   end = ctx->c;
-  while (end < ctx->n && ctx->src[end] != '\n')
+  while (end < ctx->view.n && ctx->view.str[end] != '\n')
     end++;
   f("%.*s\n"
     "%*s",
-    end - start, ctx->src + start, ctx->c - start + 1, "^");
+    end - start, ctx->view.str + start, ctx->c - start + 1, "^");
 }
 
 void error_ctx(parse_context *ctx) { print_ctx(error, ctx); }
@@ -185,7 +188,6 @@ void info_ctx(parse_context *ctx) { print_ctx(info, ctx); }
 static bool init = false;
 void setup_crash_stacktrace_logger(void) {
   if (!init) {
-    atexit(destroy_strbuf);
     init = true;
     int signals[] = {SIGINT, SIGSEGV, SIGTERM, SIGHUP, SIGQUIT};
     for (int i = 0; i < LENGTH(signals); i++)

@@ -62,7 +62,7 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum 
     char *truth[] = {"false", "true"};
     bool success = parse(g, &mk_ctx(test->src), &a, start_rule);
     if (success != test->expected) {
-      print_ast(a, NULL);
+      print_ast(a);
       error("Error parsing program %s: was %s, expected %s\n", test->src, truth[success], truth[test->expected]);
       error_ctx(g->s->ctx);
     }
@@ -90,7 +90,7 @@ void test_multiple_optionals(void) {
         {"abb", false},
     };
 
-    test_parser2(&p, LENGTH(testcases), testcases, LL_WARN, 0);
+    test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, 0);
 
     destroy_parser(&p);
   }
@@ -112,7 +112,7 @@ void test_multiple_optionals(void) {
         {"abcd", true },
     };
 
-    test_parser2(&p, LENGTH(testcases), testcases, LL_WARN, 0);
+    test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, 0);
 
     destroy_parser(&p);
   }
@@ -143,7 +143,28 @@ void test_parser(void) {
   };
   scanner s = {0};
   parser_t p = mk_parser_raw(grammar, &s);
-  test_parser2(&p, LENGTH(testcases), testcases, LL_WARN, 0);
+  test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, 0);
+  destroy_parser(&p);
+}
+
+void test_repeat(void) {
+  enum rules { A, B };
+  const rule_def rules[] = {
+      tok(A, "B { B }"),
+      tok(B, "'a' | 'c'"),
+  };
+  parser_t p = mk_parser(mk_rules(rules), (scanner_tokens){0});
+  struct testcase testcases[] = {
+      {"a",   true },
+      {"",    false},
+      {"aa",  true },
+      {"b",   false},
+      {"ab",  false},
+      {"aba", false},
+      {"aaa", true },
+      {"aab", false},
+  };
+  test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, A);
   destroy_parser(&p);
 }
 
@@ -208,7 +229,7 @@ void json_parser(void) {
   {
     AST *a;
     if (!parse(&p, &mk_ctx(" 1 "), &a, object)) {
-      die("Failed to parse %.*s as object", p.s->ctx->n, p.s->ctx->src);
+      die("Failed to parse %S as object", p.s->ctx->view);
     }
     assert2(a->node_id == object);
     assert2(!a->next);
@@ -223,7 +244,7 @@ void json_parser(void) {
   {
     AST *a;
     if (!parse(&p, &mk_ctx("\"a\":\"b\""), &a, keyvalue)) {
-      die("Failed to parse %.*s as keyvalue", p.s->ctx->n, p.s->ctx->src);
+      die("Failed to parse %S as keyvalue", p.s->ctx->view);
     }
     assert2(a->node_id == keyvalue);
     assert2(!a->next);
@@ -250,7 +271,7 @@ void test_ll12(bool expected, grammar_rules rules, scanner_tokens tokens) {
   parser_t p = mk_parser(rules, tokens);
   int ll = 0;
   if (!expected)
-    ll = set_loglevel(LL_WARN);
+    ll = set_loglevel(LL_ERROR);
   if (is_ll1(&p) != expected) {
     error("Expected %sll1", expected ? " " : "not ");
   }
@@ -455,7 +476,7 @@ void test_oberon2(void) {
 
   scanner s = {0};
   parser_t p = mk_parser_raw(grammar, &s);
-  test_parser2(&p, LENGTH(testcases), testcases, LL_WARN, 0);
+  test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, 0);
   destroy_parser(&p);
 }
 
@@ -489,7 +510,7 @@ void test_calculator(void) {
     die("Grammar is not ll1.");
   }
 
-  test_parser2(&p, LENGTH(testcases), testcases, LL_WARN, 0);
+  test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, 0);
   destroy_parser(&p);
 }
 
@@ -532,11 +553,7 @@ void test_oberon(void) {
   };
 
   static token_def tokens[] = {
-      tok(digit, "[0-9]"),
-      tok(integer, "[0-9]+"),
-      tok(letter, "[a-z]"),
-    tok(Geq, ">="),
-    tok(Leq, ">="),
+      tok(digit, "[0-9]"), tok(integer, "[0-9]+"), tok(letter, "[a-z]"), tok(Geq, ">="), tok(Leq, ">="),
   };
   static rule_def rules[] = {
       tok(module, "'MODULE' ident ';' declarations [ 'BEGIN' StatementSequence ] 'END' ident '.'"),
@@ -599,14 +616,15 @@ void test_oberon(void) {
 #undef tok
 
 int main(void) {
-  // setup_crash_stacktrace_logger();
-  // test_parser();
-  // test_calculator();
-  // test_lookahead();
-  // json_parser();
-  // test_oberon2();
-  // test_ll1();
-  // test_multiple_optionals();
+  setup_crash_stacktrace_logger();
+  test_parser();
+  test_calculator();
+  test_lookahead();
+  test_repeat();
+  json_parser();
+  test_oberon2();
+  test_ll1();
+  test_multiple_optionals();
   test_oberon();
   assert2(log_severity() <= LL_INFO);
   return 0;

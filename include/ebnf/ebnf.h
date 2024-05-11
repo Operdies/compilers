@@ -136,7 +136,7 @@ parser_t mk_parser_raw(const char *grammar, scanner *s);
 void destroy_parser(parser_t *g);
 bool parse(parser_t *g, parse_context *ctx, AST **root, int start);
 position_t get_position(const char *source, string_slice place);
-void print_ast(AST *root, vec *parents);
+void print_ast(AST *root);
 void destroy_ast(AST *root);
 
 typedef struct {

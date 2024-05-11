@@ -1,10 +1,12 @@
 // link: collections.o logging.o
+#include <assert.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "collections.h"
 #include "logging.h"
 #include "macros.h"
+#include "regex.h"
 #include "unittest.h"
 
 int *negate(int *v) {
@@ -64,9 +66,7 @@ int test_vec(void) {
   return 0;
 }
 
-int int_comparer(const void *a, const void *b) {
-  return *(int*)a - *(int*)b;
-}
+int int_comparer(const void *a, const void *b) { return *(int *)a - *(int *)b; }
 
 void test_vec_swap(void) {
   int size = 10000;
@@ -87,16 +87,6 @@ void test_vec_swap(void) {
     assert2(i == *(int *)(vec_nth(v1, i)));
 
   vec_destroy(&v1);
-}
-
-void test_vec_write(void) {
-  vec v = v_make(char);
-  vec_write(&v, "Hello %d %s\n", 1, "guy");
-  vec_write(&v, "Hello %d %s\n", 2, "bro");
-  vec_push(&v, &(char){0});
-  if (strcmp("Hello 1 guy\nHello 2 bro\n", v.array) != 0)
-    die("vec write broken");
-  vec_destroy(&v);
 }
 
 void test_push_string(void) {
@@ -153,14 +143,48 @@ void test_vec_insert(void) {
   vec_destroy(&v);
 }
 
+void test_vec_format(void) {
+  char buf1[200];
+  char buf2[200];
+  int n1;
+  int n2;
+
+#define aresame(fmt, ...)                                                                                    \
+  n1 = sprintf(buf1, fmt, __VA_ARGS__);                                                                      \
+  n2 = vec_write(&(vec){.n = 0, .sz = sizeof(buf2[0]), .c = LENGTH(buf2), .array = buf2}, fmt, __VA_ARGS__); \
+  if (n1 != n2 || strncmp(buf1, buf2, n1) != 0)                                                              \
+    die("Strings differ:\nExpected: '%s'\nActual:   '%s'", buf1, buf2);
+
+  aresame("%+-3d", 5);
+  aresame("%+-3d", -5);
+
+  aresame("%%+-3d %d", 3);
+  aresame("%+-3d %d", 3, -3);
+  aresame("%+-3d %d", -3, 3);
+  aresame("%-3s", "H");
+  aresame("%-3s", "Hahahaha");
+  aresame("%-3.*s", 4, "Hahahaha");
+  aresame("%-3.*s %s", 20, "Hahahaha", "funmy");
+  aresame("%3s", "H");
+  aresame("%p", (void *)buf1);
+
+  aresame("%.0s", "a string");
+  aresame("%%3.3d %d", 1);
+
+  aresame("%+5.3d", -3);
+  aresame("%-2.30d", 123456);
+  aresame("%-8.3d", -3);
+  aresame("%3c", 'x');
+}
+
 int main(void) {
   setup_crash_stacktrace_logger();
   test_push_string();
-  test_vec_write();
   test_vec();
   test_vec_insert();
   test_slice_cmp();
   test_vec_swap();
+  test_vec_format();
   assert2(log_severity() <= LL_INFO);
   return 0;
 }

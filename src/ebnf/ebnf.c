@@ -33,7 +33,7 @@ enum nonterminals {
 };
 
 // char pointer to the cursor in the parse context
-#define POINT (g->ctx.src + g->ctx.c)
+#define POINT (g->ctx.view.str + g->ctx.c)
 
 #define LETTERS "a-zA-Z"
 #define DIGITS "0-9"
@@ -88,7 +88,7 @@ bool term(parser_t *g, term_t *t);
 bool factor(parser_t *g, factor_t *f);
 bool identifier(parser_t *g, string_slice *s);
 
-void print_ast(AST *root, vec *parents) {
+static void _print_ast(AST *root, vec *parents) {
 #define arr ((char *)vbuf.array)
   static vec vbuf = {.sz = sizeof(char)};
   const char fork[] = "├";
@@ -100,6 +100,10 @@ void print_ast(AST *root, vec *parents) {
     return;
 
   vbuf.n = 0;
+  if (vbuf.array == NULL) {
+    vec_ensure_capacity(&vbuf, 100);
+    atexit_r((cleanup_func)vec_destroy, &vbuf);
+  }
   vec _marker = v_make(AST);
 
   if (!parents)
@@ -141,12 +145,14 @@ void print_ast(AST *root, vec *parents) {
       debug("Nothing?");
     }
     vec_push(parents, root);
-    print_ast(root->first_child, parents);
+    _print_ast(root->first_child, parents);
     vec_pop(parents);
   }
   vec_destroy(&_marker);
 #undef arr
 }
+
+void print_ast(AST *root) { _print_ast(root, NULL); }
 
 void destroy_ast(AST *root) {
   while (root) {
@@ -162,7 +168,7 @@ void destroy_ast(AST *root) {
 static bool match_literal(parser_t *g, char literal) {
   if (finished(&g->ctx))
     return false;
-  if (g->ctx.src[g->ctx.c] == literal) {
+  if (g->ctx.view.str[g->ctx.c] == literal) {
     g->ctx.c++;
     return true;
   }
@@ -616,6 +622,11 @@ void destroy_parser(parser_t *g) {
   }
 }
 
+void mark(parser_t *g, parse_context *ctx) {
+  (void)g;
+  (void)ctx;
+}
+
 static bool _parse(production_t *hd, parser_t *g, AST **node) {
   struct parse_frame {
     int source_cursor;
@@ -669,7 +680,7 @@ static bool _parse(production_t *hd, parser_t *g, AST **node) {
           next_child = mk_ast();
           next_child->node_id = -1;
           next_child->name = x->string;
-          next_child->range = (string_slice){.n = x->string.n, .str = ctx->src + g->s->ctx->c};
+          next_child->range = (string_slice){.n = x->string.n, .str = ctx->view.str + g->s->ctx->c};
         }
       } break;
     }
@@ -699,7 +710,7 @@ static bool _parse(production_t *hd, parser_t *g, AST **node) {
   }
 
   int len = ctx->c - start;
-  string_slice range = {.str = ctx->src + start, .n = len};
+  string_slice range = {.str = ctx->view.str + start, .n = len};
   if (match) {
     (*node)->range = range;
     (*node)->name = name;
@@ -712,11 +723,20 @@ static bool _parse(production_t *hd, parser_t *g, AST **node) {
 }
 
 bool parse(parser_t *g, parse_context *ctx, AST **root, int start_rule) {
-  if (root == NULL || g == NULL)
+  if (root == NULL || g == NULL) {
+    warn("Root or parser null");
     return false;
+  }
   g->s->ctx = ctx;
   production_t *start = &g->productions[start_rule];
   bool success = _parse(start, g, root);
-  success &= next_token(g->s, NULL, NULL) == EOF_TOKEN;
+  if (success) {
+    parse_context copy = *ctx;
+    success &= next_token(g->s, NULL, NULL) == EOF_TOKEN;
+    if (!success) {
+      warn("Parsing stopped here:");
+      warn_ctx(&copy);
+    }
+  }
   return success;
 }

@@ -39,7 +39,7 @@ typedef struct {
 
 typedef parse_context match_context;
 #define mk_ctx(string) \
-  (parse_context) { .src = string, .n = strlen(string) }
+  (parse_context) { .view = (string_slice){ .str = string, .n = strlen(string) } }
 
 typedef struct {
   parse_context ctx;

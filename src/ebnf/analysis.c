@@ -136,7 +136,7 @@ bool populate_first_term(production_t *h, term_t *t) {
         regex *r = fac->token->pattern;
         struct follow_t fst = {.type = FOLLOW_SYMBOL, .regex = r};
         vec_push(&h->first_vec, &fst);
-        regex_match m = regex_matches(r, &(match_context){.n = 0, .src = ""});
+        regex_match m = regex_matches(r, &mk_ctx(""));
         if (m.match)
           continue;
         return false;
@@ -349,7 +349,7 @@ vec populate_maps(const production_t *owner, vec follows) {
         break;
       case FOLLOW_FOLLOW:
       case FOLLOW_FIRST: {
-        vec seen = v_make(struct follow_t*);
+        vec seen = v_make(struct follow_t *);
         r.prod = follow->prod;
         expand_first(follow, r.set, &seen);
         vec_destroy(&seen);
@@ -440,7 +440,7 @@ bool get_conflicts(const production_t *h, conflict *c) {
         } else if (fac->type == F_STRING) {  // F_STRING
           optional = false;
         } else if (fac->type == F_TOKEN) {  // F_STRING
-          if (regex_matches(fac->token->pattern, &(match_context){.src = ""}).match) {
+          if (regex_matches(fac->token->pattern, &mk_ctx("")).match) {
             optional = true;
             struct follow_t tmpf = {.prod = h, .regex = fac->token->pattern, .type = FOLLOW_SYMBOL};
             vec map1 = populate_maps(h, (vec){.sz = sizeof(tmpf), .n = 1, .array = &tmpf});
@@ -485,10 +485,10 @@ bool is_ll1(const parser_t *g) {
       string_slice id2 = c.B->identifier;
       string_slice id3 = c.owner->identifier;
       debug(
-          "Productions '%.*s' and '%.*s' are in conflict.\n"
+          "Productions '%S' and '%S' are in conflict.\n"
           "Both allow char '%c'\n"
-          "In '%s' set of '%.*s'",
-          id1.n, id1.str, id2.n, id2.str, c.ch, c.first ? "first" : "follow", id3.n, id3.str);
+          "In '%s' set of '%S'",
+          id1, id2, c.ch, c.first ? "first" : "follow", id3);
       isll1 = false;
     }
   }
