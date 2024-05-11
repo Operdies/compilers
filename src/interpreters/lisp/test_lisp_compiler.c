@@ -55,8 +55,8 @@ struct lispObject lisp_eval(const char *expression) {
     atexit_r((cleanup_func)destroy_parser, parser);
     atexit_r(free, parser);
   }
+
   struct lispObject o = {0};
-  (void)expression;
   return o;
   AST *program;
   parse_context ctx = mk_ctx(expression);

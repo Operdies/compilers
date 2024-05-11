@@ -18,27 +18,34 @@ struct cleanup_list {
   struct cleanup_list *next;
 };
 
-static struct cleanup_list *cleanup = NULL;
+static struct cleanup_list *cleanup_head = NULL;
 static void destroy_cleanup_list(void) {
-  while (cleanup) {
-    struct cleanup_list *next = cleanup->next;
-    cleanup->f(cleanup->arg);
-    free(cleanup);
-    cleanup = next;
+  while (cleanup_head) {
+    struct cleanup_list *next = cleanup_head->next;
+    cleanup_head->f(cleanup_head->arg);
+    free(cleanup_head);
+    cleanup_head = next;
   }
 }
 
 void atexit_r(cleanup_func f, void *arg) {
-  if (cleanup == NULL) {
+  static struct cleanup_list *cleanup_tail = NULL;
+  struct cleanup_list **insert_at = NULL;
+
+  if (cleanup_tail) {
+    insert_at = &cleanup_tail->next;
+  } else {
     atexit(destroy_cleanup_list);
+    insert_at = &cleanup_head;
   }
+
   struct cleanup_list *entry = ecalloc(1, sizeof(struct cleanup_list));
   *entry = (struct cleanup_list){
       .arg = arg,
       .f = f,
-      .next = cleanup,
+      .next = NULL,
   };
-  cleanup = entry;
+  *insert_at = cleanup_tail = entry;
 }
 
 void mk_string(string_t *s, int initial_capacity) { mk_vec(&s->v, 1, initial_capacity); }
