@@ -379,7 +379,6 @@ static int n_digits(int n, int base) {
  */
 int vec_vwrite(vec *v, const char *fmt, va_list ap) {
   int start = v->n;
-  // char fmtbuf[50] = {0};
 
   for (const char *ch = fmt; *ch; ch++) {
     if (*ch == '%') {

@@ -107,7 +107,9 @@ void _format(parse_context *ctx) {
 void format(FILE *f) {
   vec buf = v_make(char);
   vec_fcopy(&buf, f);
-  parse_context ctx = {.src = buf.array, .n = buf.n};
+  parse_context ctx = {
+      .view = {.str = buf.array, .n = buf.n}
+  };
   _format(&ctx);
   vec_destroy(&buf);
 }

@@ -19,8 +19,8 @@ bool match_slice(scanner *s, string_slice slice, string_slice *content) {
   if (finished(s->ctx))
     return false;
 
-  string_slice compare = {.str = s->ctx->src + s->ctx->c, .n = slice.n};
-  if (s->ctx->n < s->ctx->c + compare.n)
+  string_slice compare = {.str = s->ctx->view.str + s->ctx->c, .n = slice.n};
+  if (s->ctx->view.n < s->ctx->c + compare.n)
     return false;
 
   if (slicecmp(slice, compare) == 0) {
@@ -76,17 +76,17 @@ int next_token(scanner *s, const bool *valid, string_slice *content) {
   return tok;
 }
 
-void rewind_scanner(scanner *s, string_slice point) { s->ctx->c = point.str - s->ctx->src; }
+void rewind_scanner(scanner *s, string_slice point) { s->ctx->c = point.str - s->ctx->view.str; }
 
 static bool _tokenize(scanner *s, parse_context *ctx, vec *tokens) {
   while (!finished(ctx)) {
     bool found = false;
-    string_slice value = {.str = ctx->src + ctx->c};
+    string_slice value = {.str = ctx->view.str + ctx->c};
     v_foreach(token, t, s->tokens) {
       regex_match m = regex_matches(t->pattern, ctx);
       if (m.match) {
         found = true;
-        value.n = (ctx->src + ctx->c) - value.str;
+        value.n = (ctx->view.str + ctx->c) - value.str;
         token_t tok = {.id = t->id, .value = value};
         vec_push(tokens, &tok);
         break;
@@ -99,7 +99,7 @@ static bool _tokenize(scanner *s, parse_context *ctx, vec *tokens) {
 }
 
 void tokenize(scanner *s, const char *body, vec *tokens) {
-  parse_context ctx = {.src = body, .n = strlen(body)};
+  parse_context ctx = mk_ctx(body);
   if (!_tokenize(s, &ctx, tokens))
     die("No match");
 }

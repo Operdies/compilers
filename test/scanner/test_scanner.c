@@ -87,7 +87,7 @@ void test_regex_scanner(void) {
     }
     int l = strlen(content);
     if (strncmp(content, matched.str, l) != 0) {
-      error("Token %d value mismatch. Expected %s, got %.*s", i, content, matched.n, matched.str);
+      error("Token %d value mismatch. Expected %s, got %S", i, content, matched);
     }
   }
   if (next_token(&s, valid, NULL) != EOF_TOKEN)

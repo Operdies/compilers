@@ -33,7 +33,7 @@ enum nonterminals {
 };
 
 // char pointer to the cursor in the parse context
-#define POINT (g->ctx.src + g->ctx.c)
+#define POINT (g->ctx.view.str + g->ctx.c)
 
 #define LETTERS "a-zA-Z"
 #define DIGITS "0-9"
@@ -168,7 +168,7 @@ void destroy_ast(AST *root) {
 static bool match_literal(parser_t *g, char literal) {
   if (finished(&g->ctx))
     return false;
-  if (g->ctx.src[g->ctx.c] == literal) {
+  if (g->ctx.view.str[g->ctx.c] == literal) {
     g->ctx.c++;
     return true;
   }
@@ -680,7 +680,7 @@ static bool _parse(production_t *hd, parser_t *g, AST **node) {
           next_child = mk_ast();
           next_child->node_id = -1;
           next_child->name = x->string;
-          next_child->range = (string_slice){.n = x->string.n, .str = ctx->src + g->s->ctx->c};
+          next_child->range = (string_slice){.n = x->string.n, .str = ctx->view.str + g->s->ctx->c};
         }
       } break;
     }
@@ -710,7 +710,7 @@ static bool _parse(production_t *hd, parser_t *g, AST **node) {
   }
 
   int len = ctx->c - start;
-  string_slice range = {.str = ctx->src + start, .n = len};
+  string_slice range = {.str = ctx->view.str + start, .n = len};
   if (match) {
     (*node)->range = range;
     (*node)->name = name;

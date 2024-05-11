@@ -229,7 +229,7 @@ void json_parser(void) {
   {
     AST *a;
     if (!parse(&p, &mk_ctx(" 1 "), &a, object)) {
-      die("Failed to parse %.*s as object", p.s->ctx->n, p.s->ctx->src);
+      die("Failed to parse %S as object", p.s->ctx->view);
     }
     assert2(a->node_id == object);
     assert2(!a->next);
@@ -244,7 +244,7 @@ void json_parser(void) {
   {
     AST *a;
     if (!parse(&p, &mk_ctx("\"a\":\"b\""), &a, keyvalue)) {
-      die("Failed to parse %.*s as keyvalue", p.s->ctx->n, p.s->ctx->src);
+      die("Failed to parse %S as keyvalue", p.s->ctx->view);
     }
     assert2(a->node_id == keyvalue);
     assert2(!a->next);

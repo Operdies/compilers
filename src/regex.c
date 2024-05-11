@@ -425,11 +425,13 @@ regex *mk_regex_from_slice(string_slice slice) {
     char *copy = arena_alloc(regex_arena, slice.n + 1, 1);
     memcpy(copy, slice.str, slice.n);
     r = arena_alloc(regex_arena, 1, sizeof(regex));
-    r->ctx = (parse_context){.n = slice.n, .c = 0, .src = copy};
+    r->ctx = (parse_context){
+        .view = {.n = slice.n, .str = copy}
+    };
     r->start = build_automaton(&r->ctx, 0);
     reset(r->start);
     if (!finished(&r->ctx)) {
-      debug("Invalid regex '%.*s'", slice.n, slice.str);
+      debug("Invalid regex '%S'", slice);
       destroy_regex(r);
       return NULL;
     }
@@ -449,7 +451,9 @@ regex_match regex_pos(regex *r, const char *string, int len) {
     return result;
   if (len <= 0)
     len = strlen(string);
-  match_context m = {.n = len, .c = 0, .src = string};
+  match_context m = {
+      .view = {.n = len, .str = string}
+  };
   reset(r->start);
   bool match = partial_match(r->start, &m);
   if (match) {
@@ -468,7 +472,7 @@ regex_match regex_matches(regex *r, match_context *ctx) {
   if (match) {
     regex_match result = {0};
     result.match = true;
-    result.matched = (string_slice){.n = ctx->c - pos, .str = ctx->src + pos};
+    result.matched = (string_slice){.n = ctx->c - pos, .str = ctx->view.str + pos};
     return result;
   } else {
     regex_match no_match = {0};
@@ -478,19 +482,19 @@ regex_match regex_matches(regex *r, match_context *ctx) {
 }
 
 bool regex_matches_strict(regex *r, const char *string) {
-  match_context m = {.n = strlen(string), .c = 0, .src = string};
+  match_context m = mk_ctx(string);
   reset(r->start);
   return match_nfa(r->start, &m);
 }
 
 regex_match regex_find(regex *r, const char *string) {
-  match_context m = {.n = strlen(string), .c = 0, .src = string};
-  for (int i = 0; i < m.n; i++) {
+  match_context m = mk_ctx(string);
+  for (int i = 0; i < m.view.n; i++) {
     reset(r->start);
     m.c = i;
     if (partial_match(r->start, &m)) {
       return (regex_match){
-          .matched = {.n = m.c - i, .str = m.src + i},
+          .matched = {.n = m.c - i, .str = m.view.str + i},
           .match = true,
       };
     }

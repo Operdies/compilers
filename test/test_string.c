@@ -6,6 +6,7 @@
 #include "collections.h"
 #include "logging.h"
 #include "macros.h"
+#include "regex.h"
 #include "unittest.h"
 
 int *negate(int *v) {
