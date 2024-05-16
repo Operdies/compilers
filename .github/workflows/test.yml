@@ -33,8 +33,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Valgrind
-        run: sudo apt update && sudo apt install -y valgrind gcc clang
-      - run: make -j -B incremental-valgrind
+        run: sudo apt update && sudo apt install -y valgrind
+      # Ubuntu valgrind is too old to support the default dwarf format used by clang..
+      - run: OFLAGS='-O0 -gdwarf-4' make -j -B incremental-valgrind
       - run: RELEASE=1 make -j -B incremental-valgrind
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}
