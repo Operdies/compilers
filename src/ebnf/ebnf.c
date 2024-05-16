@@ -426,6 +426,7 @@ static bool expression_symbol(parser_t *g, expression_t *expr, struct subgraph *
 
 static bool factor_symbol(parser_t *g, factor_t *factor, struct subgraph *out) {
   assert(out);
+  symbol_t s = { 0 };
   switch (factor->type) {
     case F_OPTIONAL:
     case F_REPEAT:
@@ -445,28 +446,27 @@ static bool factor_symbol(parser_t *g, factor_t *factor, struct subgraph *out) {
         error("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
         return false;
       }
-      symbol_t *prod = MKSYM();
-      *prod = (symbol_t){.type = nonterminal_symbol, .nonterminal = p};
-      out->head = prod;
-      out->tail = prod;
-      return true;
+      s.type = nonterminal_symbol;
+      s.nonterminal = p;
+      break;
     }
     case F_STRING: {
-      symbol_t *s = MKSYM();
-      *s = (symbol_t){.type = string_symbol, .string = factor->string};
-      out->head = out->tail = s;
-      return true;
+      s.type = string_symbol;
+      s.string = factor->string;
+      break;
     }
     case F_TOKEN: {
-      symbol_t *s = MKSYM();
-      *s = (symbol_t){.type = token_symbol, .token = factor->token};
-      out->head = s;
-      out->tail = s;
-      return true;
+      s.type = token_symbol;
+      s.token = factor->token;
+      break;
     }
     default:
       return false;
   }
+  symbol_t *new = MKSYM();
+  *new = s;
+  out->head = out->tail = new;
+  return true;
 }
 
 static bool term_symbol(parser_t *g, term_t *term, struct subgraph *out) {
