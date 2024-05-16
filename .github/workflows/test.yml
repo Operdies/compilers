@@ -33,7 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install Valgrind
-        run: sudo apt update && sudo apt install -y valgrind
+        run: sudo apt update && sudo apt install -y valgrind gcc clang
       - run: make -j -B incremental-valgrind
       - run: RELEASE=1 make -j -B incremental-valgrind
       - uses: actions/upload-artifact@v4
