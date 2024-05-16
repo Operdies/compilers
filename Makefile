@@ -8,7 +8,7 @@ rwildcard = $(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subs
 uniq      = $(if $1,$(firstword $1) $(call uniq,$(filter-out $(firstword $1),$1)))
 
 # Flags that are conditional on whether or not this is a release
-OFLAGS = $(if $(RELEASE),-O3,-Og -gdwarf-4)
+OFLAGS ?= $(if $(RELEASE),-O3,-O0 -g)
 DEFINES = -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE 
 DEFINES += $(if $(RELEASE),-DNDEBUG,-DDEBUG)
 BIN_ROOT = out

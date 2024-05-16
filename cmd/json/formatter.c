@@ -46,6 +46,8 @@ const rule_def rules[] = {
 };
 
 static bool pretty = true;
+static bool recursive = false;
+
 void visit(AST *a, int indent) {
 #define print(a) printf("%.*s", a->range.n, a->range.str)
 #define pprint(...)      \
@@ -94,6 +96,7 @@ void visit(AST *a, int indent) {
 
 void _format(parse_context *ctx) {
   parser_t p = mk_parser(mk_rules(rules), mk_tokens(json_tokens));
+  p.recursive = recursive;
   AST *a;
   if (parse(&p, ctx, &a, object)) {
     visit(a, 0);
@@ -120,6 +123,11 @@ int main(int argc, char **argv) {
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-c") == 0)
       pretty = false;
+    else if (strcmp(argv[i], "-r") == 0 || strcmp(argv[i], "--recursive") == 0) {
+      char *recstr = argv[i+1];
+      recursive = strcmp(recstr, "true") == 0;
+      i++;
+    }
     else {
       f = fopen(argv[i], "r");
       if (!f)

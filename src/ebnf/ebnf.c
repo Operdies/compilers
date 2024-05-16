@@ -426,6 +426,7 @@ static bool expression_symbol(parser_t *g, expression_t *expr, struct subgraph *
 
 static bool factor_symbol(parser_t *g, factor_t *factor, struct subgraph *out) {
   assert(out);
+  symbol_t s = { 0 };
   switch (factor->type) {
     case F_OPTIONAL:
     case F_REPEAT:
@@ -445,28 +446,27 @@ static bool factor_symbol(parser_t *g, factor_t *factor, struct subgraph *out) {
         error("Error: unknown terminal %.*s\n", factor->identifier.name.n, factor->identifier.name.str);
         return false;
       }
-      symbol_t *prod = MKSYM();
-      *prod = (symbol_t){.type = nonterminal_symbol, .nonterminal = p};
-      out->head = prod;
-      out->tail = prod;
-      return true;
+      s.type = nonterminal_symbol;
+      s.nonterminal = p;
+      break;
     }
     case F_STRING: {
-      symbol_t *s = MKSYM();
-      *s = (symbol_t){.type = string_symbol, .string = factor->string};
-      out->head = out->tail = s;
-      return true;
+      s.type = string_symbol;
+      s.string = factor->string;
+      break;
     }
     case F_TOKEN: {
-      symbol_t *s = MKSYM();
-      *s = (symbol_t){.type = token_symbol, .token = factor->token};
-      out->head = s;
-      out->tail = s;
-      return true;
+      s.type = token_symbol;
+      s.token = factor->token;
+      break;
     }
     default:
       return false;
   }
+  symbol_t *new = MKSYM();
+  *new = s;
+  out->head = out->tail = new;
+  return true;
 }
 
 static bool term_symbol(parser_t *g, term_t *term, struct subgraph *out) {
@@ -577,11 +577,11 @@ parser_t mk_parser(grammar_rules rules, scanner_tokens tokens) {
   return g;
 }
 
-parser_t mk_parser_raw(const char *text, scanner *s) {
+parser_t mk_parser_raw(const char *text, scanner s) {
   parser_t g = {0};
   if (!text)
     return g;
-  init_parser(&g, *s);
+  init_parser(&g, s);
 
   g.ctx = mk_ctx(text);
   bool success = syntax(&g);
@@ -627,7 +627,165 @@ void mark(parser_t *g, parse_context *ctx) {
   (void)ctx;
 }
 
-static bool _parse(production_t *hd, parser_t *g, AST **node) {
+// TODO: Convert the recursive calls to an emulated stack using growable vecs
+// This should allow parsing very deeply nested statements
+// 1. Create stack_frame struct. Something like { ret_symbol, cursor_start, production, **first_child }
+// 2. At the end of the loop, if `x` is null, pop the call stack.
+// 2.a x = matched ? ret_symbol->next : ret_symbol->alt
+// 2.b restore previous stack_frame
+bool stack_parse(production_t *hd, parser_t *g, AST **result) {
+  struct stack_frame { AST *node;
+    AST **next_child;
+    production_t *prod;
+    symbol_t *ret;
+    int cursor_start;
+    int alt_cursor;
+  };
+
+  struct parse_frame {
+    int source_cursor;
+    int token_cursor;
+    symbol_t *symbol;
+  };
+
+  symbol_t *x;
+  bool match = false;
+  parse_context *ctx = g->s->ctx;
+
+  vec call_stack = v_make(struct stack_frame);
+  vec alt_stack = v_make(struct parse_frame);
+
+  vec_ensure_capacity(&call_stack, 100);
+  struct stack_frame stack_frame = {.next_child = result};
+
+  // Put a dummy symbol at the root so the while loop will immediately create the first call stack frame
+  x = &(symbol_t){
+      .nonterminal = hd,
+      .type = nonterminal_symbol,
+  };
+
+  while (x) {
+    AST *next_child = NULL;
+    struct parse_frame frame = {.source_cursor = ctx->c};
+
+    switch (x->type) {
+      case error_symbol:
+        die("Error symbol ??");
+      case empty_symbol:
+        match = true;
+        break;
+      case nonterminal_symbol: {
+        // Resume from the current symbol when the new frame is finished
+        stack_frame.ret = x;
+        vec_push(&call_stack, &stack_frame);
+        AST *subtree = mk_ast();
+        stack_frame = (struct stack_frame){
+            .prod = x->nonterminal,
+            .ret = NULL,
+            .node = subtree,
+            .next_child = &subtree->first_child,
+            .alt_cursor = alt_stack.n,
+            .cursor_start = ctx->c,
+        };
+        x = x->nonterminal->sym;
+        continue;
+      } break;
+      case token_symbol: {
+        string_slice content = {0};
+        match = match_token(g->s, x->token->id, &content);
+        if (match) {
+          next_child = mk_ast();
+          next_child->name = x->token->name;
+          next_child->node_id = x->token->id;
+          next_child->range = content;
+        }
+      } break;
+      case string_symbol: {
+        string_slice content = {0};
+        match = match_slice(g->s, x->string, &content);
+        if (match) {
+          next_child = mk_ast();
+          next_child->node_id = -1;
+          next_child->name = x->string;
+          next_child->range = (string_slice){.n = x->string.n, .str = ctx->view.str + g->s->ctx->c};
+        }
+      } break;
+    }
+
+    if (match && next_child) {
+      *stack_frame.next_child = next_child;
+      stack_frame.next_child = &next_child->next;
+    }
+
+    {  // pick next state, and potentially store the alt option for later
+      symbol_t *next = x->next;
+      symbol_t *alt = x->alt;
+      // If the 'next' option is used, push a frame so the alt option can be tried instead.
+      if (alt && match) {
+        frame.symbol = alt;
+        vec_push(&alt_stack, &frame);
+      }
+      x = match ? next : alt;
+    }
+
+    // If an end symbol was reached without a match, check if a suitable frame can be restored
+    if (x == NULL && match == false && alt_stack.n > stack_frame.alt_cursor) {
+      struct parse_frame *f = vec_pop(&alt_stack);
+      if (f && f->source_cursor == ctx->c)
+        x = f->symbol;
+    }
+
+    // If x is still null, we are done with this frame.
+    // Pop the frame and continue
+    while (!x && call_stack.n) {
+      struct stack_frame current = stack_frame;
+      stack_frame = *(struct stack_frame *)vec_pop(&call_stack);
+
+      int len = ctx->c - current.cursor_start;
+      string_slice range = {.str = ctx->view.str + current.cursor_start, .n = len};
+      if (match) {
+        current.node->node_id = current.prod->id;
+        current.node->range = range;
+        current.node->name = current.prod->identifier;
+        *stack_frame.next_child = current.node;
+        stack_frame.next_child = &current.node->next;
+      } else {
+        destroy_ast(current.node);
+      }
+      alt_stack.n = current.alt_cursor;
+
+      if (stack_frame.ret) {
+        if (match) {
+          x = stack_frame.ret->next;
+        } else {
+          x = stack_frame.ret->alt;
+          // If an end symbol was reached without a match, check if a suitable frame can be restored
+          if (!x && alt_stack.n > stack_frame.alt_cursor) {
+            struct parse_frame *f = vec_pop(&alt_stack);
+            if (f && f->source_cursor == ctx->c)
+              x = f->symbol;
+          }
+        }
+      }
+    }
+  }
+
+  if (match) {
+    result = stack_frame.next_child;
+  } else {
+    destroy_ast(stack_frame.node);
+    while (call_stack.n) {
+      struct stack_frame *f = vec_pop(&call_stack);
+      destroy_ast(f->node);
+    }
+  }
+
+  vec_destroy(&alt_stack);
+  vec_destroy(&call_stack);
+  return match;
+}
+
+bool rec_parse(production_t *hd, parser_t *g, AST **node) {
   struct parse_frame {
     int source_cursor;
     int token_cursor;
@@ -661,7 +819,7 @@ static bool _parse(production_t *hd, parser_t *g, AST **node) {
         match = true;
         break;
       case nonterminal_symbol:
-        match = _parse(x->nonterminal, g, &next_child);
+        match = rec_parse(x->nonterminal, g, &next_child);
         break;
       case token_symbol: {
         string_slice content = {0};
@@ -729,13 +887,15 @@ bool parse(parser_t *g, parse_context *ctx, AST **root, int start_rule) {
   }
   g->s->ctx = ctx;
   production_t *start = &g->productions[start_rule];
-  bool success = _parse(start, g, root);
+  bool success = g->recursive ? rec_parse(start, g, root) : stack_parse(start, g, root);
   if (success) {
     parse_context copy = *ctx;
     success &= next_token(g->s, NULL, NULL) == EOF_TOKEN;
     if (!success) {
       warn("Parsing stopped here:");
       warn_ctx(&copy);
+      destroy_ast(*root);
+      *root = NULL;
     }
   }
   return success;

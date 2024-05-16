@@ -74,6 +74,7 @@ struct parser_t {
     };
   };
   scanner *s;
+  bool recursive;
 };
 
 enum symbol_type {
@@ -132,7 +133,7 @@ typedef struct {
   (grammar_rules) { .n = LENGTH(r), .rules = r }
 
 parser_t mk_parser(grammar_rules rules, scanner_tokens tokens);
-parser_t mk_parser_raw(const char *grammar, scanner *s);
+parser_t mk_parser_raw(const char *grammar, scanner s);
 void destroy_parser(parser_t *g);
 bool parse(parser_t *g, parse_context *ctx, AST **root, int start);
 position_t get_position(const char *source, string_slice place);

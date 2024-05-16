@@ -3,14 +3,14 @@ name: Test
 on: push
 env:
   # The gcc version from ubuntu-latest segfaults when trying to compile my beautiful code
-  CC: gcc-13 
+  CC: gcc
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        CC: [gcc-13, clang]
+        CC: [gcc, clang]
     env:
       CC: ${{ matrix.CC }}
     steps:
@@ -27,14 +27,15 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        CC: [gcc-13, clang]
+        CC: [gcc, clang]
     env:
       CC: ${{ matrix.CC }}
     steps:
       - uses: actions/checkout@v4
       - name: Install Valgrind
         run: sudo apt update && sudo apt install -y valgrind
-      - run: make -j -B incremental-valgrind
+      # Ubuntu valgrind is too old to support the default dwarf format used by clang..
+      - run: OFLAGS='-O0 -gdwarf-4' make -j -B incremental-valgrind
       - run: RELEASE=1 make -j -B incremental-valgrind
       - uses: actions/upload-artifact@v4
         if: ${{ always() }}

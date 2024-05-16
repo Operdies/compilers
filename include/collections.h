@@ -39,7 +39,6 @@ typedef struct {
 typedef struct {
   union {
     vslice slice;
-    string_slice string;
     struct {
       // number of elements
       int n;
@@ -70,7 +69,8 @@ typedef int (*comparer_t)(const void *a, const void *b);
 int slicecmp(string_slice s1, string_slice s2);
 void mk_vec(vec *v, int elem_size, int initial_capacity);
 void vec_destroy(vec *v);
-void vec_push(vec *v, const void *elem);
+// Push an element to the array and return a pointer to the new element
+void *vec_push(vec *v, const void *elem);
 bool vec_push_array(vec *destination, int n, const void *data);
 void vec_set(vec *v, int n, void *elem);
 void vec_swap(vec *v, int first, int second);
