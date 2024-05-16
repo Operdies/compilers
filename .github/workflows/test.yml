@@ -3,14 +3,14 @@ name: Test
 on: push
 env:
   # The gcc version from ubuntu-latest segfaults when trying to compile my beautiful code
-  CC: gcc-13 
+  CC: gcc
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        CC: [gcc-13, clang]
+        CC: [gcc, clang]
     env:
       CC: ${{ matrix.CC }}
     steps:
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        CC: [gcc-13, clang]
+        CC: [gcc, clang]
     env:
       CC: ${{ matrix.CC }}
     steps:
