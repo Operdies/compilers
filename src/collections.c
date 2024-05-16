@@ -90,11 +90,15 @@ void ensure_capacity(vec *v, int c) {
 }
 void vec_ensure_capacity(vec *v, int c) { ensure_capacity(v, c); }
 
-void vec_push(vec *v, const void *elem) {
+void *vec_push(vec *v, const void *elem) {
   ensure_capacity(v, v->n + 1);
-  char *addr = (char *)v->array;
-  memmove(addr + v->n * v->sz, elem, v->sz);
+  char *addr = (char *)v->array + v->n * v->sz;
+  if (elem)
+    memmove(addr, elem, v->sz);
+  else
+    memset(addr, 0, v->sz);
   v->n++;
+  return addr;
 }
 
 void vec_set(vec *v, int n, void *elem) {

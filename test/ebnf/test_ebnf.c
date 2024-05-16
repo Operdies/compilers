@@ -18,6 +18,9 @@ struct testcase {
   bool expected;
 };
 
+static const scanner no_scanner = {0};
+static const scanner_tokens no_tokens = {0};
+
 void test_lookahead(void) {
   struct testcase {
     char *grammar;
@@ -39,12 +42,11 @@ void test_lookahead(void) {
 
   for (int i = 0; i < LENGTH(testcases); i++) {
     struct testcase *test = &testcases[i];
-    scanner s = {0};
-    parser_t p = mk_parser_raw(test->grammar, &s);
+    parser_t p = mk_parser_raw(test->grammar, no_scanner);
     AST *a;
     if (!parse(&p, &mk_ctx("bc"), &a, 0)) {
       printf("Error parsing program %s:\n", "bc");
-      error_ctx(s.ctx);
+      error_ctx(p.s->ctx);
       printf("With grammar %s\n", test->grammar);
     }
     destroy_ast(a);
@@ -55,27 +57,71 @@ void test_lookahead(void) {
 void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum loglevel l, int start_rule) {
   int ll = set_loglevel(l);
   // this is a bit spammy for failing grammars
-  for (int i = 0; i < n; i++) {
-    struct testcase *test = &testcases[i];
-    AST *a;
+  // TODO: move diagnostic output into error list / AST so parsers can give specialized errors
+  for (int recursive = 0; recursive <= 1; recursive++) {
+    g->recursive = recursive == 0 ? false : true;
+    for (int i = 0; i < n; i++) {
+      struct testcase *test = &testcases[i];
+      AST *a;
 
-    char *truth[] = {"false", "true"};
-    bool success = parse(g, &mk_ctx(test->src), &a, start_rule);
-    if (success != test->expected) {
-      print_ast(a);
-      error("Error parsing program %s: was %s, expected %s\n", test->src, truth[success], truth[test->expected]);
-      error_ctx(g->s->ctx);
+      char *truth[] = {"false", "true"};
+      bool success = parse(g, &mk_ctx(test->src), &a, start_rule);
+      if (success != test->expected) {
+        error("Error parsing program %s: was %s, expected %s\n", test->src, truth[success], truth[test->expected]);
+        error_ctx(g->s->ctx);
+      }
+      if (success)
+        destroy_ast(a);
     }
-    destroy_ast(a);
   }
   set_loglevel(ll);
+}
+
+void test_simplest(void) {
+  enum tokens { A, B };
+
+  {
+    rule_def rules[] = {tok(A, "'a'")};
+    parser_t p = mk_parser(mk_rules(rules), no_tokens);
+    struct testcase testcases[] = {
+        {"",   false},
+        {"a",  true },
+        {"aa", false},
+    };
+    test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, 0);
+    destroy_parser(&p);
+  }
+
+  {
+    rule_def rules[] = {tok(A, "'a' { B } 'a'"), tok(B, "'b'")};
+    parser_t p = mk_parser(mk_rules(rules), no_tokens);
+    struct testcase testcases[] = {
+        {"abba", true },
+        {"abb",  false},
+        {"",     false},
+        {"aa",   true },
+    };
+    test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, 0);
+    destroy_parser(&p);
+  }
+
+  {
+    rule_def rules[] = {tok(A, "'a' B 'a'"), tok(B, "'b' 'b'")};
+    parser_t p = mk_parser(mk_rules(rules), no_tokens);
+    struct testcase testcases[] = {
+        {"",     false},
+        {"aa",   false},
+        {"abba", true },
+    };
+    test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, 0);
+    destroy_parser(&p);
+  }
 }
 
 void test_multiple_optionals(void) {
   {  // Successive Optionals
     const char grammar[] = {"A = [ 'a' ] [ 'b' ] .\n"};
-    scanner s = {0};
-    parser_t p = mk_parser_raw(grammar, &s);
+    parser_t p = mk_parser_raw(grammar, no_scanner);
 
     struct testcase testcases[] = {
         {"",    true },
@@ -96,8 +142,7 @@ void test_multiple_optionals(void) {
   }
   {  // Nested optionals
     const char grammar[] = {"A = [ 'a' ] [ 'b' [ 'c' ] [ 'd' ] ] .\n"};
-    scanner s = {0};
-    parser_t p = mk_parser_raw(grammar, &s);
+    parser_t p = mk_parser_raw(grammar, no_scanner);
 
     struct testcase testcases[] = {
         {"abb",  false},
@@ -117,6 +162,7 @@ void test_multiple_optionals(void) {
     destroy_parser(&p);
   }
 }
+
 void test_parser(void) {
   const char grammar[] = {
       "expression = term {('+' | '-' ) term } .\n"
@@ -130,6 +176,7 @@ void test_parser(void) {
       ""};
 
   struct testcase testcases[] = {
+      {"(1+1)",  true },
       {"12?!#1", true },
       {"1?",     false},
       {"",       false},
@@ -139,10 +186,8 @@ void test_parser(void) {
       {"45*67",  true },
       {"1?1",    true },
       {"1+1",    true },
-      {"(1+1)",  true },
   };
-  scanner s = {0};
-  parser_t p = mk_parser_raw(grammar, &s);
+  parser_t p = mk_parser_raw(grammar, no_scanner);
   test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, 0);
   destroy_parser(&p);
 }
@@ -153,7 +198,7 @@ void test_repeat(void) {
       tok(A, "B { B }"),
       tok(B, "'a' | 'c'"),
   };
-  parser_t p = mk_parser(mk_rules(rules), (scanner_tokens){0});
+  parser_t p = mk_parser(mk_rules(rules), no_tokens);
   struct testcase testcases[] = {
       {"a",   true },
       {"",    false},
@@ -281,7 +326,6 @@ void test_ll12(bool expected, grammar_rules rules, scanner_tokens tokens) {
 }
 
 void test_ll1(void) {
-  scanner_tokens no_tokens = {0};
   enum { A, B, C };
   {
     enum { dong, string, strong, alpha };
@@ -475,7 +519,7 @@ void test_oberon2(void) {
   };
 
   scanner s = {0};
-  parser_t p = mk_parser_raw(grammar, &s);
+  parser_t p = mk_parser_raw(grammar, s);
   test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, 0);
   destroy_parser(&p);
 }
@@ -618,6 +662,7 @@ void test_oberon(void) {
 int main(void) {
   setup_crash_stacktrace_logger();
   test_parser();
+  test_simplest();
   test_calculator();
   test_lookahead();
   test_repeat();
