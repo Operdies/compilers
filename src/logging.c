@@ -62,7 +62,7 @@ void colored_log(FILE *fp, enum loglevel level, const char *fmt, va_list ap) {
   static vec strbuf = {.sz = sizeof(char)};
   if (strbuf.array == NULL) {
     vec_ensure_capacity(&strbuf, 100);
-    atexit_r((cleanup_func)vec_destroy, &strbuf);
+    atexit_r(vec_destroy, &strbuf);
   }
   strbuf.n = 0;
   setup_crash_stacktrace_logger();

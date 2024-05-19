@@ -415,7 +415,7 @@ void destroy_regex(regex *r) { (void)r; }
 regex *mk_regex_from_slice(string_slice slice) {
   if (!regex_arena) {
     regex_arena = mk_arena();
-    atexit_r((cleanup_func)destroy_arena, regex_arena);
+    atexit_r(destroy_arena, regex_arena);
   }
 
   regex *r = NULL;

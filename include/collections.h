@@ -65,6 +65,7 @@ typedef struct {
 
 typedef void (*cleanup_func)(void *data);
 void atexit_r(cleanup_func f, void *arg);
+#define atexit_r(f, a) atexit_r((cleanup_func)(f), (void*)(a))
 typedef int (*comparer_t)(const void *a, const void *b);
 int slicecmp(string_slice s1, string_slice s2);
 void mk_vec(vec *v, int elem_size, int initial_capacity);

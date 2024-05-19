@@ -102,7 +102,7 @@ static void _print_ast(AST *root, vec *parents) {
   vbuf.n = 0;
   if (vbuf.array == NULL) {
     vec_ensure_capacity(&vbuf, 100);
-    atexit_r((cleanup_func)vec_destroy, &vbuf);
+    atexit_r(vec_destroy, &vbuf);
   }
   vec _marker = v_make(AST);
 
@@ -426,7 +426,7 @@ static bool expression_symbol(parser_t *g, expression_t *expr, struct subgraph *
 
 static bool factor_symbol(parser_t *g, factor_t *factor, struct subgraph *out) {
   assert(out);
-  symbol_t s = { 0 };
+  symbol_t s = {0};
   switch (factor->type) {
     case F_OPTIONAL:
     case F_REPEAT:
@@ -633,8 +633,9 @@ void mark(parser_t *g, parse_context *ctx) {
 // 2. At the end of the loop, if `x` is null, pop the call stack.
 // 2.a x = matched ? ret_symbol->next : ret_symbol->alt
 // 2.b restore previous stack_frame
-bool stack_parse(production_t *hd, parser_t *g, AST **result) {
-  struct stack_frame { AST *node;
+static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
+  struct stack_frame {
+    AST *node;
     AST **next_child;
     production_t *prod;
     symbol_t *ret;
@@ -718,14 +719,12 @@ bool stack_parse(production_t *hd, parser_t *g, AST **result) {
     }
 
     {  // pick next state, and potentially store the alt option for later
-      symbol_t *next = x->next;
-      symbol_t *alt = x->alt;
       // If the 'next' option is used, push a frame so the alt option can be tried instead.
-      if (alt && match) {
-        frame.symbol = alt;
+      if (x->alt && match) {
+        frame.symbol = x->alt;
         vec_push(&alt_stack, &frame);
       }
-      x = match ? next : alt;
+      x = match ? x->next : x->alt;
     }
 
     // If an end symbol was reached without a match, check if a suitable frame can be restored
@@ -785,7 +784,7 @@ bool stack_parse(production_t *hd, parser_t *g, AST **result) {
   return match;
 }
 
-bool rec_parse(production_t *hd, parser_t *g, AST **node) {
+static bool rec_parse(production_t *hd, parser_t *g, AST **node) {
   struct parse_frame {
     int source_cursor;
     int token_cursor;

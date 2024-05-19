@@ -28,7 +28,7 @@ static void destroy_cleanup_list(void) {
   }
 }
 
-void atexit_r(cleanup_func f, void *arg) {
+void (atexit_r)(cleanup_func f, void *arg) {
   static struct cleanup_list *cleanup_tail = NULL;
   struct cleanup_list **insert_at = NULL;
 
@@ -90,7 +90,7 @@ void ensure_capacity(vec *v, int c) {
 }
 void vec_ensure_capacity(vec *v, int c) { ensure_capacity(v, c); }
 
-void *vec_push(vec *v, const void *elem) {
+inline void *vec_push(vec *v, const void *elem) {
   ensure_capacity(v, v->n + 1);
   char *addr = (char *)v->array + v->n * v->sz;
   if (elem)
@@ -139,7 +139,14 @@ void vec_insert(vec *v, int index, void *elem) {
   v->n++;
 }
 
-void *vec_pop(vec *v) {
+void *vec_top(vec *v) {
+  if (v->n <= 0)
+    return NULL;
+  int offset = (v->n-1) * v->sz;
+  return (char *)v->array + offset;
+}
+
+inline void *vec_pop(vec *v) {
   if (v->n <= 0)
     return NULL;
   v->n -= 1;

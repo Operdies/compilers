@@ -52,7 +52,7 @@ static void mk_lisp_parser(void) {
 struct lispObject lisp_eval(const char *expression) {
   if (parser == NULL) {
     mk_lisp_parser();
-    atexit_r((cleanup_func)destroy_parser, parser);
+    atexit_r(destroy_parser, parser);
     atexit_r(free, parser);
   }
 
