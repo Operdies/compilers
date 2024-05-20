@@ -23,6 +23,7 @@ typedef struct {
 
 typedef struct {
   vec tokens;
+  regex *comment;
   parse_context *ctx;
 } scanner;
 
@@ -39,7 +40,7 @@ bool match_slice(scanner *s, string_slice slice, string_slice *content);
 bool match_token(scanner *s, int kind, string_slice *content);
 void tokenize(scanner *s, const char *body, vec *tokens);
 void add_token(scanner *s, const char *expression, const char *name);
-scanner mk_scanner(const scanner_tokens tokens);
+scanner mk_scanner(const scanner_tokens tokens, const char *comment);
 void rewind_scanner(scanner *s, string_slice point);
 void destroy_scanner(scanner *s);
 

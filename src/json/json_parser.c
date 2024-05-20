@@ -100,7 +100,7 @@ static void format(struct json_formatter *p, parse_context *ctx, FILE *out) {
 
 struct json_formatter mk_json_formatter(void) {
   struct json_formatter p = {0};
-  p.parser = mk_parser(mk_rules(rules), mk_tokens(json_tokens));
+  p.parser = mk_parser(mk_rules(rules), mk_tokens(json_tokens), NULL);
   return p;
 }
 

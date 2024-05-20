@@ -46,7 +46,7 @@ void test_regex_scanner(void) {
   static char program[] = {
       "303* (404+2) ",
   };
-  scanner s = mk_scanner(mk_tokens(token_definition));
+  scanner s = mk_scanner(mk_tokens(token_definition), NULL);
   s.ctx = &mk_ctx(program);
   bool valid[LENGTH(token_definition)] = {0};
   if (next_token(&s, valid, NULL) != ERROR_TOKEN)

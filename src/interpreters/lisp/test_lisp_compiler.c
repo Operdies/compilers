@@ -44,7 +44,7 @@ static void mk_lisp_parser(void) {
   };
 #undef tok
 
-  parser_t p = mk_parser(mk_rules(rules), mk_tokens(tokens));
+  parser_t p = mk_parser(mk_rules(rules), mk_tokens(tokens), ";[^\n]*");
   parser = ecalloc(1, sizeof(parser_t));
   *parser = p;
 }

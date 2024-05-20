@@ -551,8 +551,8 @@ static bool finalize_parser(parser_t *g) {
   return build_parse_table(g);
 }
 
-parser_t mk_parser(grammar_rules rules, scanner_tokens tokens) {
-  scanner s = mk_scanner(tokens);
+parser_t mk_parser(grammar_rules rules, scanner_tokens tokens, const char *comment) {
+  scanner s = mk_scanner(tokens, comment);
   parser_t g = {0};
   init_parser(&g, s);
   g.productions_vec = v_make(production_t);

@@ -5,6 +5,7 @@
 
 #include "collections.h"
 #include "logging.h"
+#include "regex.h"
 
 int peek_token(scanner *s, const bool *valid, string_slice *content) {
   int here = s->ctx->c;
@@ -13,9 +14,28 @@ int peek_token(scanner *s, const bool *valid, string_slice *content) {
   return token;
 }
 
+void fastforward(scanner *s) {
+  static regex *whitespace = NULL;
+  if (!whitespace) {
+    whitespace = mk_regex("[ \t\n]+");
+    atexit_r(destroy_regex, whitespace);
+  }
+
+  if (!s->comment) {
+    regex_matches(whitespace, s->ctx);
+    return;
+  }
+
+  bool match = true;
+  while (match) {
+    regex_match ws = regex_matches(whitespace, s->ctx);
+    regex_match comment = regex_matches(s->comment, s->ctx);
+    match = ws.match || comment.match;
+  }
+}
+
 bool match_slice(scanner *s, string_slice slice, string_slice *content) {
-  while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
-    advance(s->ctx);
+  fastforward(s);
   if (finished(s->ctx))
     return false;
 
@@ -27,8 +47,7 @@ bool match_slice(scanner *s, string_slice slice, string_slice *content) {
     s->ctx->c += compare.n;
     if (content)
       *content = compare;
-    while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
-      advance(s->ctx);
+    fastforward(s);
     return true;
   }
 
@@ -36,8 +55,7 @@ bool match_slice(scanner *s, string_slice slice, string_slice *content) {
 }
 
 bool match_token(scanner *s, int kind, string_slice *content) {
-  while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
-    advance(s->ctx);
+  fastforward(s);
   if (finished(s->ctx))
     return false;
 
@@ -47,8 +65,7 @@ bool match_token(scanner *s, int kind, string_slice *content) {
   if (m.match && content)
     *content = m.matched;
 
-  while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
-    advance(s->ctx);
+  fastforward(s);
   return m.match;
 }
 
@@ -104,7 +121,7 @@ void tokenize(scanner *s, const char *body, vec *tokens) {
     die("No match");
 }
 
-scanner mk_scanner(const scanner_tokens tokens) {
+scanner mk_scanner(const scanner_tokens tokens, const char *comment) {
   scanner s = {0};
   s.tokens = v_make(token);
   for (int i = 0; i < tokens.n; i++) {
@@ -118,9 +135,13 @@ scanner mk_scanner(const scanner_tokens tokens) {
     }
     vec_push(&s.tokens, &n);
   }
+  if (comment) {
+    s.comment = mk_regex(comment);
+  }
   return s;
 }
 void destroy_scanner(scanner *s) {
+  destroy_regex(s->comment);
   v_foreach(token, t, s->tokens) { destroy_regex(t->pattern); }
   vec_destroy(&s->tokens);
 }
