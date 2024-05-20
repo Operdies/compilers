@@ -82,7 +82,7 @@ void test_simplest(void) {
 
   {
     rule_def rules[] = {tok(A, "'a'")};
-    parser_t p = mk_parser(mk_rules(rules), no_tokens);
+    parser_t p = mk_parser(mk_rules(rules), no_tokens, NULL);
     struct testcase testcases[] = {
         {"",   false},
         {"a",  true },
@@ -94,7 +94,7 @@ void test_simplest(void) {
 
   {
     rule_def rules[] = {tok(A, "'a' { B } 'a'"), tok(B, "'b'")};
-    parser_t p = mk_parser(mk_rules(rules), no_tokens);
+    parser_t p = mk_parser(mk_rules(rules), no_tokens, NULL);
     struct testcase testcases[] = {
         {"abba", true },
         {"abb",  false},
@@ -107,7 +107,7 @@ void test_simplest(void) {
 
   {
     rule_def rules[] = {tok(A, "'a' B 'a'"), tok(B, "'b' 'b'")};
-    parser_t p = mk_parser(mk_rules(rules), no_tokens);
+    parser_t p = mk_parser(mk_rules(rules), no_tokens, NULL);
     struct testcase testcases[] = {
         {"",     false},
         {"aa",   false},
@@ -198,7 +198,7 @@ void test_repeat(void) {
       tok(A, "B { B }"),
       tok(B, "'a' | 'c'"),
   };
-  parser_t p = mk_parser(mk_rules(rules), no_tokens);
+  parser_t p = mk_parser(mk_rules(rules), no_tokens, NULL);
   struct testcase testcases[] = {
       {"a",   true },
       {"",    false},
@@ -250,7 +250,7 @@ void json_parser(void) {
       tok(keyvalue, "string colon object"),
   };
 
-  parser_t p = mk_parser(mk_rules(rules), mk_tokens(json_tokens));
+  parser_t p = mk_parser(mk_rules(rules), mk_tokens(json_tokens), NULL);
 
   if (!is_ll1(&p)) {
     die("Expected json to be ll1");
@@ -313,7 +313,7 @@ void json_parser(void) {
 }
 
 void test_ll12(bool expected, grammar_rules rules, scanner_tokens tokens) {
-  parser_t p = mk_parser(rules, tokens);
+  parser_t p = mk_parser(rules, tokens, NULL);
   int ll = 0;
   if (!expected)
     ll = set_loglevel(LL_ERROR);
@@ -544,7 +544,7 @@ void test_calculator(void) {
       tok(digits, "number"),
   };
 
-  parser_t p = mk_parser(mk_rules(rules), mk_tokens(tokens));
+  parser_t p = mk_parser(mk_rules(rules), mk_tokens(tokens), NULL);
   struct testcase testcases[] = {
       {"1+2*3",   true},
       {"(1+2)*3", true},
@@ -636,7 +636,7 @@ void test_oberon(void) {
       tok(RecordType, "'RECORD' FieldList { ';' FieldList } 'END'"),
   };
 
-  parser_t p = mk_parser(mk_rules(rules), mk_tokens(tokens));
+  parser_t p = mk_parser(mk_rules(rules), mk_tokens(tokens), NULL);
   set_loglevel(LL_DEBUG);
   (void)p;
   // if (!is_ll1(&p)) {

@@ -132,7 +132,7 @@ typedef struct {
 #define mk_rules(r) \
   (grammar_rules) { .n = LENGTH(r), .rules = r }
 
-parser_t mk_parser(grammar_rules rules, scanner_tokens tokens);
+parser_t mk_parser(grammar_rules rules, scanner_tokens tokens, const char *comment);
 parser_t mk_parser_raw(const char *grammar, scanner s);
 void destroy_parser(parser_t *g);
 bool parse(parser_t *g, parse_context *ctx, AST **root, int start);
