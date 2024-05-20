@@ -26,12 +26,12 @@ void fastforward(scanner *s) {
     return;
   }
 
-  bool match = true;
-  while (match) {
+  bool match;
+  do {
     regex_match ws = regex_matches(whitespace, s->ctx);
     regex_match comment = regex_matches(s->comment, s->ctx);
     match = ws.match || comment.match;
-  }
+  } while (match);
 }
 
 bool match_slice(scanner *s, string_slice slice, string_slice *content) {

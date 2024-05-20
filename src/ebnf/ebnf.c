@@ -729,7 +729,7 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
     // If an end symbol was reached without a match, check if a suitable frame can be restored
     if (x == NULL && match == false && alt_stack.n > stack_frame.alt_cursor) {
       struct parse_frame *f = vec_pop(&alt_stack);
-#ifdef REWIND
+#ifndef NOREWIND
       if (f) {
         x = f->symbol;
         ctx->c = f->source_cursor;
@@ -768,7 +768,7 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
           // If an end symbol was reached without a match, check if a suitable frame can be restored
           if (!x && alt_stack.n > stack_frame.alt_cursor) {
             struct parse_frame *f = vec_pop(&alt_stack);
-#ifdef REWIND
+#ifndef NOREWIND
             if (f) {
               x = f->symbol;
               ctx->c = f->source_cursor;
