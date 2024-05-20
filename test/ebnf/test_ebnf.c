@@ -58,21 +58,18 @@ void test_parser2(parser_t *g, int n, struct testcase testcases[static n], enum 
   int ll = set_loglevel(l);
   // this is a bit spammy for failing grammars
   // TODO: move diagnostic output into error list / AST so parsers can give specialized errors
-  for (int recursive = 0; recursive <= 1; recursive++) {
-    g->recursive = recursive == 0 ? false : true;
-    for (int i = 0; i < n; i++) {
-      struct testcase *test = &testcases[i];
-      AST *a;
+  for (int i = 0; i < n; i++) {
+    struct testcase *test = &testcases[i];
+    AST *a;
 
-      char *truth[] = {"false", "true"};
-      bool success = parse(g, &mk_ctx(test->src), &a, start_rule);
-      if (success != test->expected) {
-        error("Error parsing program %s: was %s, expected %s\n", test->src, truth[success], truth[test->expected]);
-        error_ctx(g->s->ctx);
-      }
-      if (success)
-        destroy_ast(a);
+    char *truth[] = {"false", "true"};
+    bool success = parse(g, &mk_ctx(test->src), &a, start_rule);
+    if (success != test->expected) {
+      error("Error parsing program %s: was %s, expected %s\n", test->src, truth[success], truth[test->expected]);
+      error_ctx(g->s->ctx);
     }
+    if (success)
+      destroy_ast(a);
   }
   set_loglevel(ll);
 }
@@ -583,8 +580,6 @@ void test_oberon(void) {
     ident,
     integer,
     number,
-    digit,
-    letter,
     ActualParameters,
     IfStatement,
     WhileStatement,
@@ -597,7 +592,10 @@ void test_oberon(void) {
   };
 
   static token_def tokens[] = {
-      tok(digit, "[0-9]"), tok(integer, "[0-9]+"), tok(letter, "[a-z]"), tok(Geq, ">="), tok(Leq, ">="),
+      tok(integer, "[0-9]+"),
+      tok(ident, "[a-zA-Z][a-zA-Z0-9\\-_]*"),
+      tok(Geq, ">="),
+      tok(Leq, ">="),
   };
   static rule_def rules[] = {
       tok(module, "'MODULE' ident ';' declarations [ 'BEGIN' StatementSequence ] 'END' ident '.'"),
@@ -622,7 +620,6 @@ void test_oberon(void) {
           "[ 'TYPE' { ident '=' type ';' } ]"
           "[ 'VAR' { IdentList ':' type ';' } ]"
           "{ ProcedureDeclaration ';' } "),
-      tok(ident, "letter { letter | digit }"),
       tok(number, "integer"),
       tok(ActualParameters, "'(' [ expression { ',' expression } ] ')'"),
       tok(IfStatement,
@@ -638,19 +635,20 @@ void test_oberon(void) {
 
   parser_t p = mk_parser(mk_rules(rules), mk_tokens(tokens), NULL);
   set_loglevel(LL_DEBUG);
-  (void)p;
-  // if (!is_ll1(&p)) {
-  //   die("Expected Oberon to be ll1");
-  // }
 
-  // parser_t p = mk_parser(grammar);
-  //
-  // if (!is_ll1(&p)) {
-  //   error("Expected ll1: \n%s", grammar);
-  // }
-  //
-  // tokens t = {0};
-  // // parse(&p, "MODULE a; END a.", &t);
+  AST *a;
+  static const char oberon_program[] = {
+#include "oberon.ob"
+  };
+  bool success = parse(&p,
+                       &(parse_context){
+                           .view = {.n = LENGTH(oberon_program), .str = oberon_program}
+  },
+                       &a, 0);
+  assert2(success);
+  print_ast(a);
+  destroy_ast(a);
+
   // print_tokens(t);
   // vec_destroy(&t.tokens_vec);
   //

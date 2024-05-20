@@ -74,7 +74,6 @@ struct parser_t {
     };
   };
   scanner *s;
-  bool recursive;
 };
 
 enum symbol_type {

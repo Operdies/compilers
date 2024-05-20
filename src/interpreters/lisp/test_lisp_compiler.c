@@ -1,4 +1,5 @@
 #include "interpreters/lisp/test_lisp_compiler.h"
+
 #include <stdlib.h>
 
 #include "ebnf/ebnf.h"
@@ -27,19 +28,17 @@ static void mk_lisp_parser(void) {
     digit,
     number,
     dot,
-    comment,
     string,
   };
 
   const token_def tokens[] = {
       tok(letter, "[a-zA-Z]"), tok(identifier, "[a-zA-Z][a-zA-Z_\\.:]*"), tok(digit, "[0-9]"),
       tok(number, "[0-9]+"),   tok(symbol, "'[a-zA-Z0-9_\\-]+"),          tok(string, "\"([^\"\\\\]|\\\\.)*\""),
-      tok(comment, ";[^\n]*"),
   };
 
   const rule_def rules[] = {
       tok(slist, "sexpr { sexpr }"),
-      tok(sexpr, "comment | identifier | '+' | '-' | number | symbol | string | '(' slist ')'"),
+      tok(sexpr, "identifier | '+' | '-' | number | symbol | string | '(' slist ')'"),
       tok(function, "identifier | '+' | '-'"),
   };
 #undef tok

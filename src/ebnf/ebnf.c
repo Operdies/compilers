@@ -645,7 +645,6 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
 
   struct parse_frame {
     int source_cursor;
-    int token_cursor;
     symbol_t *symbol;
   };
 
@@ -708,7 +707,7 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
           next_child = mk_ast();
           next_child->node_id = -1;
           next_child->name = x->string;
-          next_child->range = (string_slice){.n = x->string.n, .str = ctx->view.str + g->s->ctx->c};
+          next_child->range = content;
         }
       } break;
     }
@@ -730,8 +729,16 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
     // If an end symbol was reached without a match, check if a suitable frame can be restored
     if (x == NULL && match == false && alt_stack.n > stack_frame.alt_cursor) {
       struct parse_frame *f = vec_pop(&alt_stack);
-      if (f && f->source_cursor == ctx->c)
+#ifdef REWIND
+      if (f) {
         x = f->symbol;
+        ctx->c = f->source_cursor;
+      }
+#else
+      if (f && f->source_cursor == ctx->c) {
+        x = f->symbol;
+      }
+#endif
     }
 
     // If x is still null, we are done with this frame.
@@ -761,8 +768,16 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
           // If an end symbol was reached without a match, check if a suitable frame can be restored
           if (!x && alt_stack.n > stack_frame.alt_cursor) {
             struct parse_frame *f = vec_pop(&alt_stack);
-            if (f && f->source_cursor == ctx->c)
+#ifdef REWIND
+            if (f) {
               x = f->symbol;
+              ctx->c = f->source_cursor;
+            }
+#else
+            if (f && f->source_cursor == ctx->c) {
+              x = f->symbol;
+            }
+#endif
           }
         }
       }
@@ -789,101 +804,6 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
   return match;
 }
 
-static bool rec_parse(production_t *hd, parser_t *g, AST **node) {
-  struct parse_frame {
-    int source_cursor;
-    int token_cursor;
-    symbol_t *symbol;
-  };
-
-  AST **insert_child;
-  int start;
-  string_slice name;
-  vec alt_stack;
-  symbol_t *x;
-  bool match = false;
-  parse_context *ctx = g->s->ctx;
-  start = ctx->c;
-
-  alt_stack = v_make(struct parse_frame);
-  name = hd->identifier;
-  *node = mk_ast();
-  (*node)->node_id = hd->id;
-  insert_child = &(*node)->first_child;
-
-  x = hd->sym;
-  while (x) {
-    AST *next_child = NULL;
-    struct parse_frame frame = {.source_cursor = ctx->c};
-
-    switch (x->type) {
-      case error_symbol:
-        die("Error symbol ??");
-      case empty_symbol:
-        match = true;
-        break;
-      case nonterminal_symbol:
-        match = rec_parse(x->nonterminal, g, &next_child);
-        break;
-      case token_symbol: {
-        string_slice content = {0};
-        match = match_token(g->s, x->token->id, &content);
-        if (match) {
-          next_child = mk_ast();
-          next_child->name = x->token->name;
-          next_child->node_id = x->token->id;
-          next_child->range = content;
-        }
-      } break;
-      case string_symbol: {
-        string_slice content = {0};
-        match = match_slice(g->s, x->string, &content);
-        if (match) {
-          next_child = mk_ast();
-          next_child->node_id = -1;
-          next_child->name = x->string;
-          next_child->range = (string_slice){.n = x->string.n, .str = ctx->view.str + g->s->ctx->c};
-        }
-      } break;
-    }
-
-    if (match && x->type != empty_symbol) {
-      *insert_child = next_child;
-      insert_child = &next_child->next;
-    }
-
-    {  // pick next state, and potentially store the alt option for later
-      symbol_t *next = x->next;
-      symbol_t *alt = x->alt;
-      // If the 'next' option is used, push a frame so the alt option can be tried instead.
-      if (alt && match) {
-        frame.symbol = alt;
-        vec_push(&alt_stack, &frame);
-      }
-      x = match ? next : alt;
-    }
-
-    // If an end symbol was reached without a match, check if a suitable frame can be restored
-    if (x == NULL && match == false) {
-      struct parse_frame *f = vec_pop(&alt_stack);
-      if (f && f->source_cursor == ctx->c)
-        x = f->symbol;
-    }
-  }
-
-  int len = ctx->c - start;
-  string_slice range = {.str = ctx->view.str + start, .n = len};
-  if (match) {
-    (*node)->range = range;
-    (*node)->name = name;
-  } else {
-    destroy_ast(*node);
-    *node = NULL;
-  }
-  vec_destroy(&alt_stack);
-  return match;
-}
-
 bool parse(parser_t *g, parse_context *ctx, AST **root, int start_rule) {
   if (root == NULL || g == NULL) {
     warn("Root or parser null");
@@ -891,7 +811,7 @@ bool parse(parser_t *g, parse_context *ctx, AST **root, int start_rule) {
   }
   g->s->ctx = ctx;
   production_t *start = &g->productions[start_rule];
-  bool success = g->recursive ? rec_parse(start, g, root) : stack_parse(start, g, root);
+  bool success = stack_parse(start, g, root);
   if (success) {
     parse_context copy = *ctx;
     success &= next_token(g->s, NULL, NULL) == EOF_TOKEN;
@@ -901,6 +821,9 @@ bool parse(parser_t *g, parse_context *ctx, AST **root, int start_rule) {
       destroy_ast(*root);
       *root = NULL;
     }
+  } else {
+    warn("Parsing stopped here:");
+    warn_ctx(ctx);
   }
   return success;
 }

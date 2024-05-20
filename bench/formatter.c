@@ -12,7 +12,6 @@ static const char input[] = {
 int main(void) {
   struct json_formatter p = mk_json_formatter();
   p.pretty = true;
-  p.parser.recursive = false;
   format_buffer(&p, LENGTH(input), input, stdout);
   destroy_parser(&p.parser);
   return 0;
