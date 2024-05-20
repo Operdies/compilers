@@ -269,7 +269,7 @@ void json_parser(void) {
        "}",           true },
   };
 
-  test_parser2(&p, LENGTH(testcases), testcases, LL_DEBUG, object);
+  test_parser2(&p, LENGTH(testcases), testcases, LL_ERROR, object);
 
   {
     AST *a;

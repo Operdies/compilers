@@ -35,7 +35,7 @@ enum nonterminals {
 // char pointer to the cursor in the parse context
 #define POINT (g->ctx.view.str + g->ctx.c)
 
-#define LETTERS "a-zA-Z"
+#define LETTERS "a-zA-Z_\\-"
 #define DIGITS "0-9"
 #define SPACES " \n\t"
 #define CLASS(x) "[" x "]"
@@ -777,6 +777,11 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
       struct stack_frame *f = vec_pop(&call_stack);
       destroy_ast(f->node);
     }
+  }
+
+  if (!match && finished(ctx)) {
+    debug("Unexpected end of input!");
+    debug_ctx(ctx);
   }
 
   vec_destroy(&alt_stack);
