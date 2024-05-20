@@ -9,6 +9,7 @@
 
 #include "collections.h"
 #include "macros.h"
+#include "text.h"
 
 #define RESET_COLOR "\033[0m"
 
@@ -161,20 +162,59 @@ static void handler(int sig) {
   exit(sig);
 }
 
-static void print_ctx(logger_sig_fn f, parse_context *ctx) {
-  int start, end;
-  start = ctx->c;
-  while (start > 0 && ctx->view.str[start] != '\n')
-    start--;
-  if (ctx->view.str[start] == '\n')
-    start++;
+struct context_line_info {
+  string_slice surrounding[3];
+  int line_number;
+  int cursor_offset;
+};
 
-  end = ctx->c;
-  while (end < ctx->view.n && ctx->view.str[end] != '\n')
-    end++;
-  f("%.*s\n"
-    "%*s",
-    end - start, ctx->view.str + start, ctx->c - start + 1, "^");
+struct context_line_info count_context_lines(parse_context *ctx) {
+  struct context_line_info l = {0};
+  string_slice exact = {.str = ctx->view.str};
+  string_slice minus_one = {0};
+  int i;
+  for (i = 0; i < ctx->c; i++) {
+    if (ctx->view.str[i] == '\n') {
+      const char *new_str = ctx->view.str + i + 1;
+      minus_one = (string_slice){.str = exact.str, .n = new_str - exact.str};
+      exact.str = new_str;
+      l.cursor_offset = ctx->c - i;
+      l.line_number++;
+    }
+  }
+  string_slice plus_one = {0};
+
+  for (; i < ctx->view.n; i++) {
+    if (ctx->view.str[i] == '\n') {
+      plus_one.str = ctx->view.str + i + 1;
+      int k;
+      for (k = i + 1; k < ctx->view.n; k++)
+        if (ctx->view.str[i] == '\n')
+          break;
+      plus_one.n = k - i + 1;
+      break;
+    }
+  }
+  exact.n = (ctx->view.str + i) - exact.str;
+
+  l.surrounding[0] = minus_one;
+  l.surrounding[1] = exact;
+  l.surrounding[2] = plus_one;
+  return l;
+}
+
+static void print_ctx(logger_sig_fn f, parse_context *ctx) {
+  struct context_line_info c = count_context_lines(ctx);
+  if (c.surrounding[0].str) {
+    f("line %3d: %S", c.line_number - 1, c.surrounding[0]);
+  }
+  if (c.surrounding[1].str) {
+    f("line %3d: %S", c.line_number, c.surrounding[1]);
+    f("          %*s", c.cursor_offset, "^");
+  }
+  if (c.surrounding[2].str) {
+    f("line %3d: %S", c.line_number + 1, c.surrounding[2]);
+  }
 }
 
 void error_ctx(parse_context *ctx) { print_ctx(error, ctx); }
