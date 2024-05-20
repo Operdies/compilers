@@ -115,8 +115,8 @@ maintainer-clean: clean
 $(COMPILE_COMMANDS): Makefile $(OBJECTS) $(BINARIES)
 	bear -- $(MAKE) all -j$(nproc) -B
 
-tags: $(OBJECTS) $(BINARIES)
-	fd -u -e d | xargs -I{} -- awk '{for(i=1;i<=NF;i++) {if($$i ~ /.*h$$/) print $$i}}' {} | xargs ctags -R --map-C=+.h --languages=c --c++-kinds=+p --fields=+iaS --extras=+q --sort=foldcase
+tags: all
+	fd . $(BIN_DIR) -e d | xargs -I{} -- awk '{for(i=1;i<=NF;i++) {if($$i ~ /.*h$$/) print $$i}}' {} | xargs ctags -R --map-C=+.h --languages=c --c++-kinds=+p --fields=+iaS --extras=+q --sort=foldcase
 
 # Run all tests
 .PHONY: test
