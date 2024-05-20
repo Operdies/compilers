@@ -59,7 +59,7 @@ MMD_FILES = $(OBJECTS:.o=.o.d)
 DIRECTORIES = $(call uniq,$(dir $(OBJECTS) $(EMBED_OUT) $(BENCH_OUT)))
 
 CFLAGS += -std=c2x -pedantic -Wall -Wextra -Werror -pipe $(DEFINES) -I$(INCLUDE_DIR) -I$(EMBED_OUT_DIR) $(OFLAGS)
-MMD_FLAGS = -MMD -MF $@.d
+MMD_FLAGS = -MD -MF $@.d
 
 .PHONY: all
 all: $(OBJECTS) $(BINARIES)
@@ -114,6 +114,9 @@ maintainer-clean: clean
 
 $(COMPILE_COMMANDS): Makefile $(OBJECTS) $(BINARIES)
 	bear -- $(MAKE) all -j$(nproc) -B
+
+tags: $(OBJECTS) $(BINARIES)
+	fd -u -e d | xargs -I{} -- awk '{for(i=1;i<=NF;i++) {if($$i ~ /.*h$$/) print $$i}}' {} | xargs ctags -R --map-C=+.h --languages=c --c++-kinds=+p --fields=+iaS --extras=+q --sort=foldcase
 
 # Run all tests
 .PHONY: test
