@@ -638,20 +638,44 @@ void test_oberon(void) {
 
   AST *a;
   static const char oberon_program[] = {
-#include "oberon.ob"
-  };
-  bool success = parse(&p,
-                       &(parse_context){
-                           .view = {.n = LENGTH(oberon_program), .str = oberon_program}
-  },
-                       &a, 0);
+      "MODULE Samples;\n"
+      "TYPE a = integer;\n"
+      "END Samples.\n"};
+  bool success = parse(&p, &mk_ctx(oberon_program), &a, 0);
   assert2(success);
-  print_ast(a);
+  int expected[] = {
+      -1,     // MODULE
+      ident,  // Samples
+      -1,     // ;
+      declarations,
+      -1,     // END
+      ident,  // SAMPLES
+      -1,     // .
+  };
+  AST *testast = a->first_child;
+  for (int i = 0; i < LENGTH(expected); i++) {
+    int ex = expected[i];
+    assert2(testast->node_id == ex);
+    if (ex == declarations) {
+      int expected2[] = {
+          -1,     // 'TYPE'
+          ident,  // a
+          -1,     // =
+          type,   // -> ident integer
+          -1,     // ;
+      };
+      AST *subast = testast->first_child;
+      for (int i = 0; i < LENGTH(expected2); i++) {
+        int ex2 = expected2[i];
+        assert2(subast->node_id == ex2);
+        subast = subast->next;
+      }
+      assert2(subast == NULL);
+    }
+    testast = testast->next;
+  }
+  assert2(testast == NULL);
   destroy_ast(a);
-
-  // print_tokens(t);
-  // vec_destroy(&t.tokens_vec);
-  //
   destroy_parser(&p);
 }
 

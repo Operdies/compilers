@@ -71,8 +71,7 @@ bool match_token(scanner *s, int kind, string_slice *content) {
 
 int next_token(scanner *s, const bool *valid, string_slice *content) {
   int tok = ERROR_TOKEN;
-  while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
-    advance(s->ctx);
+  fastforward(s);
 
   if (finished(s->ctx))
     return EOF_TOKEN;
@@ -88,8 +87,7 @@ int next_token(scanner *s, const bool *valid, string_slice *content) {
       }
     }
   }
-  while (peek(s->ctx) == ' ' || peek(s->ctx) == '\n' || peek(s->ctx) == '\t')
-    advance(s->ctx);
+  fastforward(s);
   return tok;
 }
 

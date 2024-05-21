@@ -114,6 +114,7 @@ struct AST {
   string_slice range;
   string_slice name;
   int node_id;
+  AST *parent;
   AST *next;
   AST *first_child;
 };

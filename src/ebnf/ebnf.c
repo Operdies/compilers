@@ -646,6 +646,7 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
   struct parse_frame {
     int source_cursor;
     symbol_t *symbol;
+    AST **node;
   };
 
   symbol_t *x;
@@ -666,7 +667,7 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
 
   while (x) {
     AST *next_child = NULL;
-    struct parse_frame frame = {.source_cursor = ctx->c};
+    struct parse_frame frame = {.source_cursor = ctx->c, .node = stack_frame.next_child};
 
     switch (x->type) {
       case error_symbol:
@@ -727,18 +728,15 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
     }
 
     // If an end symbol was reached without a match, check if a suitable frame can be restored
-    if (x == NULL && match == false && alt_stack.n > stack_frame.alt_cursor) {
+    if (!x && !match && alt_stack.n > stack_frame.alt_cursor) {
       struct parse_frame *f = vec_pop(&alt_stack);
-#ifndef NOREWIND
       if (f) {
         x = f->symbol;
         ctx->c = f->source_cursor;
-      }
-#else
-      if (f && f->source_cursor == ctx->c) {
-        x = f->symbol;
-      }
-#endif
+        destroy_ast(*f->node);
+        *f->node = ((void *)0);
+        stack_frame.next_child = f->node;
+      };
     }
 
     // If x is still null, we are done with this frame.
@@ -753,10 +751,12 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
         current.node->node_id = current.prod->id;
         current.node->range = range;
         current.node->name = current.prod->identifier;
+        current.node->parent = stack_frame.node;
         *stack_frame.next_child = current.node;
         stack_frame.next_child = &current.node->next;
       } else {
         destroy_ast(current.node);
+        current.node = NULL;
       }
       alt_stack.n = current.alt_cursor;
 
@@ -766,18 +766,12 @@ static bool stack_parse(production_t *hd, parser_t *g, AST **result) {
         } else {
           x = stack_frame.ret->alt;
           // If an end symbol was reached without a match, check if a suitable frame can be restored
-          if (!x && alt_stack.n > stack_frame.alt_cursor) {
+          if (!x && !match && alt_stack.n > stack_frame.alt_cursor) {
             struct parse_frame *f = vec_pop(&alt_stack);
-#ifndef NOREWIND
             if (f) {
               x = f->symbol;
               ctx->c = f->source_cursor;
-            }
-#else
-            if (f && f->source_cursor == ctx->c) {
-              x = f->symbol;
-            }
-#endif
+            };
           }
         }
       }
