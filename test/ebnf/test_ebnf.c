@@ -20,6 +20,7 @@ struct testcase {
 
 static const scanner no_scanner = {0};
 static const scanner_tokens no_tokens = {0};
+static void AstCmp(AST *left, AST *right);
 
 void test_lookahead(void) {
   struct testcase {
@@ -675,8 +676,33 @@ void test_oberon(void) {
     testast = testast->next;
   }
   assert2(testast == NULL);
+  {
+#define N(id, n) &(AST){.node_id = id, .next = n}
+#define NC(id, fc, n) &(AST){.node_id = id, .next = n, .first_child = fc}
+    AST *declarationAst = N(-1, N(ident, N(-1, NC(type, N(ident, NULL), N(-1, NULL)))));
+    AST *moduleAst = N(-1, N(ident, N(-1, NC(declarations, declarationAst, N(-1, N(ident, N(-1, NULL)))))));
+    AST *expectedAst = NC(module, moduleAst, NULL);
+    AstCmp(a, expectedAst);
+#undef N
+#undef NC
+  }
   destroy_ast(a);
   destroy_parser(&p);
+}
+static void AstCmp(AST *left, AST *right) {
+  while (left || right) {
+    if ((!!left) != (!!right)) {
+      if (!left)
+        die("Left is null, but not right");
+      if (!right)
+        die("Right is null, but not left");
+    }
+    assert2(left && right);
+    assert2(left->node_id == right->node_id);
+    AstCmp(left->first_child, right->first_child);
+    left = left->next;
+    right = right->next;
+  }
 }
 
 #undef tok
